@@ -3,8 +3,6 @@
 The 'energysystem' branch is the current master branch of
 Temoa.  The four subdirectories are:
 
-# Test -- To be removed shortly
-
 1. `temoa_model/`
 Contains the core Temoa model code.
 
