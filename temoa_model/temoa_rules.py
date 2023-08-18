@@ -1446,9 +1446,9 @@ def ReserveMargin_Constraint(M, r, p, s, d):
     r"""
 
 During each period :math:`p`, the sum of the available capacity of all reserve
-technologies :math:`\sum_{t \in T^{res}} \textbf{CAPAVL}_{r,p,t}`, which are
-defined in the set :math:`\textbf{T}^{res}`, should exceed the peak load by
-:math:`PRM`, the region-specific planning reserve margin. Note that the reserve
+technologies :math:`\sum_{t \in T^{e}} \textbf{CAPAVL}_{r,p,t}`, which are
+defined in the set :math:`\textbf{T}^{r,e}`, should exceed the peak load by
+:math:`PRM`, the regional reserve margin. Note that the reserve
 margin is expressed in percentage of the peak load. Generally speaking, in
 a database we may not know the peak demand before running the model, therefore,
 we write this equation for all the time-slices defined in the database in each region.
@@ -1456,20 +1456,38 @@ we write this equation for all the time-slices defined in the database in each r
 .. math::
    :label: reserve_margin
 
-       \sum_{t \in T^{res}} {
+       \sum_{t \in T^{res} \setminus T^{e}} {
        CC_{t,r} \cdot
        \textbf{CAPAVL}_{p,t} \cdot
-       SEG_{s^*,d^*} \cdot C2A_{r,t} }
+       SEG_{s^*,d^*} \cdot C2A_{r,t} } +
+       \sum_{t \in T^{res} \cap T^{e}} {
+       CC_{t,r_i-r} \cdot
+       \textbf{CAPAVL}_{p,t} \cdot
+       SEG_{s^*,d^*} \cdot C2A_{r_i-r,t} } -
+       \sum_{t \in T^{res} \cap T^{e}} {
+       CC_{t,r-r_i} \cdot
+       \textbf{CAPAVL}_{p,t} \cdot
+       SEG_{s^*,d^*} \cdot C2A_{r_i-r,t} }
        \geq
-       \sum_{ t \in T^{r,e},V,I,O } {
-           \textbf{FO}_{r, p, s, d, i, t, v, o}  \cdot (1 + PRM_r)
+       {
+       \sum_{ t \in T^{res} \setminus T^{e},V,I,O }
+           \textbf{FO}_{r, p, s, d, i, t, v, o}  +
+       \sum_{ t \in T^{res} \cap T^{e},V,I,O }
+           \textbf{FO}_{r_i-r, p, s, d, i, t, v, o}  -
+        \sum_{ t \in T^{res} \cap T^{e},V,I,O }
+            \textbf{FI}_{r-r_i, p, s, d, i, t, v, o} -
+        \sum_{ t \in T^{res} \cap T^{s},V,I,O }
+            \textbf{FI}_{r, p, s, d, i, t, v, o}
+        }
+           \cdot (1 + PRM_r)
        }
 
        \\
        \forall \{r, p, s, d\} \in \Theta_{\text{ReserveMargin}}
+       \text{and} \forall r_i \in R
 
 """
-    if (not M.tech_reserve) or ((r,p) not in M.processReservePeriods.keys()):  # If reserve set empty or if r,p not in M.processReservePeriod.keys(), skip the constraint
+    if (not M.tech_reserve) or ((r, p) not in M.processReservePeriods.keys()):  # If reserve set empty or if r,p not in M.processReservePeriod.keys(), skip the constraint
         return Constraint.Skip
 
     cap_avail = sum(
@@ -1482,22 +1500,90 @@ we write this equation for all the time-slices defined in the database in each r
         if (r, p, t) in M.processVintages.keys()
         for v in M.processVintages[r, p, t]
         # Make sure (r,p,t,v) combinations are defined
-        if (r,p,t,v) in M.activeCapacityAvailable_rptv
-
-
+        if (r, p, t, v) in M.activeCapacityAvailable_rptv
     )
 
+    # The above code does not consider exchange techs, e.g. electricity
+    # transmission between two distinct regions.
+    # We take exchange takes into account below.
+    # Note that a single exchange tech linking regions Ri and Rj is twice
+    # defined: once for region "Ri-Rj" and once for region "Rj-Ri".
+
+    # First, determine the amount of firm capacity each exchange tech
+    # contributes.
+    for r1r2 in M.RegionalIndices:
+        if '-' not in r1r2:
+            continue
+        r1, r2 = r1r2.split("-")
+
+        # Only consider the capacity of technologies that import to
+        # the region in question -- i.e. for cases where r2 == r.
+        if r2 != r:
+            continue
+
+        # add the available capacity of the exchange tech.
+        cap_avail += sum(
+            value(M.CapacityCredit[r1r2, p, t, v])
+            * M.ProcessLifeFrac[r1r2, p, t, v]
+            * M.V_Capacity[r1r2, t, v]
+            * value(M.CapacityToActivity[r1r2, t])
+            * value(M.SegFrac[s, d])
+            for t in M.tech_reserve
+            if (r1r2, p, t) in M.processVintages.keys()
+            for v in M.processVintages[r1r2, p, t]
+            # Make sure (r,p,t,v) combinations are defined
+            if (r1r2, p, t, v) in M.activeCapacityAvailable_rptv
+        )
+
     # In most Temoa input databases, demand is endogenous, so we use electricity
-    # generation instead.
+    # generation instead as a proxy for electricity demand.
     total_generation = sum(
         M.V_FlowOut[r, p, s, d, S_i, t, S_v, S_o]
-        for (t,S_v) in M.processReservePeriods[r, p]
+        for (t, S_v) in M.processReservePeriods[r, p]
         for S_i in M.processInputs[r, p, t, S_v]
         for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
     )
 
-    cap_target = total_generation * (1 + value(M.PlanningReserveMargin[r]))
+    # We must take into account flows into storage technologies.
+    # Flows into storage technologies need to be subtracted from the
+    # load calculation.
+    total_generation -= sum(
+        M.V_FlowIn[r, p, s, d, S_i, t, S_v, S_o]
+        for (t, S_v) in M.processReservePeriods[r, p]
+        if t in M.tech_storage
+        for S_i in M.processInputs[r, p, t, S_v]
+        for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+    )
 
+    # Electricity imports and exports via exchange techs are accounted
+    # for below:
+    for r1r2 in M.RegionalIndices:  # ensure the region is of the form r1-r2
+        if '-' not in r1r2:
+            continue
+        if (r1r2, p) not in M.processReservePeriods:  # ensure the technology in question exists
+            continue
+        r1, r2 = r1r2.split("-")
+        # First, determine the exports, and subtract this value from the
+        # total generation.
+        if r1 == r:
+            total_generation -= sum(
+                M.V_FlowOut[r1r2, p, s, d, S_i, t, S_v, S_o] / value(M.Efficiency[r1r2, S_i, t, S_v, S_o])
+                for (t, S_v) in M.processReservePeriods[r1r2, p]
+                for S_i in M.processInputs[r1r2, p, t, S_v]
+                for S_o in M.ProcessOutputsByInput[r1r2, p, t, S_v, S_i]
+            )
+        # Second, determine the imports, and add this value from the
+        # total generation.
+        elif r2 == r:
+            total_generation += sum(
+                M.V_FlowOut[r1r2, p, s, d, S_i, t, S_v, S_o]
+                for (t, S_v) in M.processReservePeriods[r1r2, p]
+                for S_i in M.processInputs[r1r2, p, t, S_v]
+                for S_o in M.ProcessOutputsByInput[r1r2, p, t, S_v, S_i]
+                if (t, S_v) in M.processReservePeriods[r1r2, p]
+            )
+
+    cap_target = total_generation * (1 + value(M.PlanningReserveMargin[r]))
     return cap_avail >= cap_target
 
 
