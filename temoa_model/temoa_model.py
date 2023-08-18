@@ -225,6 +225,8 @@ def temoa_create_model(name="Temoa"):
     M.EmissionActivity = Param(M.EmissionActivity_reitvo)
     M.MinActivityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
     M.MaxActivityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MinCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MaxCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
     M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions)
 
     # Define parameters associated with electric sector operation
@@ -479,18 +481,25 @@ def temoa_create_model(name="Temoa"):
         M.MaxNewCapacityConstraint_rpt, rule=MaxNewCapacity_Constraint
     )
 
+    M.MaxCapacityGroupConstraint_rpg = Set(
+        dimen=3, initialize=lambda M: M.MaxCapacityGroup.sparse_iterkeys()
+    )
+    M.MaxCapacityGroupConstraint = Constraint(
+        M.MaxCapacityGroupConstraint_rpg, rule=MaxCapacityGroup_Constraint
+    )
+
+    M.MinCapacityGroupConstraint_rpg = Set(
+        dimen=3, initialize=lambda M: M.MinCapacityGroup.sparse_iterkeys()
+    )
+    M.MinCapacityGroupConstraint = Constraint(
+        M.MinCapacityGroupConstraint_rpg, rule=MinCapacityGroup_Constraint
+    )
+
     M.MaxResourceConstraint_rt = Set(
         dimen=2, initialize=lambda M: M.MaxResource.sparse_iterkeys()
     )
     M.MaxResourceConstraint = Constraint(
         M.MaxResourceConstraint_rt, rule=MaxResource_Constraint
-    )
-
-    M.MaxCapacitySetConstraint_rp = Set(
-        dimen=2, initialize=lambda M: M.MaxCapacitySum.sparse_iterkeys()
-    )
-    M.MaxCapacitySetConstraint = Constraint(
-        M.MaxCapacitySetConstraint_rp, rule=MaxCapacitySet_Constraint
     )
 
     M.MinCapacityConstraint_rpt = Set(
@@ -505,13 +514,6 @@ def temoa_create_model(name="Temoa"):
     )
     M.MinNewCapacityConstraint = Constraint(
         M.MinNewCapacityConstraint_rpt, rule=MinNewCapacity_Constraint
-    )
-
-    M.MinCapacitySetConstraint_rp = Set(
-        dimen=2, initialize=lambda M: M.MinCapacitySum.sparse_iterkeys()
-    )
-    M.MinCapacitySetConstraint = Constraint(
-        M.MinCapacitySetConstraint_rp, rule=MinCapacitySet_Constraint
     )
 
     M.MinAnnualCapacityFactorConstraint_rpto = Set(
