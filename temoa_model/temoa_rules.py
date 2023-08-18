@@ -259,8 +259,8 @@ the global discount rate and loan period. Third, the new lump sum is amortized
 at the global discount rate and technology lifetime. Fourth, loan payments beyond
 the model time horizon are removed and the lump sum recalculated. The terms used
 in Steps 3-4 are :math:`\frac{ GDR }{ 1-(1+GDR)^{-LTP_{r,t,v} } }\cdot
-\frac{ 1-(1+GDR)^{-LPA_{t,v}} }{ GDR }`. The product simplifies to 
-:math:`\frac{ 1-(1+GDR)^{-LPA_{r,t,v}} }{ 1-(1+GDR)^{-LTP_{r,t,v}} }`, where 
+\frac{ 1-(1+GDR)^{-LPA_{t,v}} }{ GDR }`. The product simplifies to
+:math:`\frac{ 1-(1+GDR)^{-LPA_{r,t,v}} }{ 1-(1+GDR)^{-LTP_{r,t,v}} }`, where
 :math:`LPA_{r,t,v}` represents the active lifetime of process t in region r :math:`(r,t,v)`
 before the end of the model horizon, and :math:`LTP_{r,t,v}` represents the full
 lifetime of a regional process :math:`(r,t,v)`. Fifth, the lump sum is discounted back to the
@@ -539,9 +539,9 @@ covers both.
 
 This constraint also accounts for imports and exports between regions
 when solving multi-regional systems. The import (:math:`\textbf{FIM}`) and export
-(:math:`\textbf{FEX}`) variables are created on-the-fly by summing the 
+(:math:`\textbf{FEX}`) variables are created on-the-fly by summing the
 :math:`\textbf{FO}` variables over the appropriate import and export regions,
-respectively, which are defined in :code:`temoa_initialize.py` by parsing the 
+respectively, which are defined in :code:`temoa_initialize.py` by parsing the
 :code:`tech_exchange` processes.
 
 Finally, for commodities that are exclusively produced at a constant annual rate, the
@@ -1533,7 +1533,7 @@ output in separate terms.
 
      # r can be an individual region (r='US'), or a combination of regions separated by a + (r='Mexico+US+Canada'), or 'global'.
      # Note that regions!=M.regions. We iterate over regions to find actual_emissions and actual_emissions_annual.
-    
+
 
     # if r == 'global', the constraint is system-wide
 
@@ -1812,6 +1812,19 @@ refers to the :code:`MinGenGroupTarget` parameter.
     return expr
 
 
+def MaxNewCapacity_Constraint(M, r, p, t):
+    r"""
+The MaxNewCapacity constraint sets a limit on the maximum newly installed capacity of a
+given technology in a given year. Note that the indices for these constraints are region,
+period and tech.
+.. math::
+   :label: MaxNewCapacity
+   \textbf{CAP}_{r, t, p} \le MAX_{r, p, t}
+"""
+    max_cap = value(M.MaxNewCapacity[r, p, t])
+    expr = M.V_Capacity[r, t, p] <= max_cap
+    return expr
+
 def MaxCapacity_Constraint(M, r, p, t):
     r"""
 
@@ -1884,6 +1897,19 @@ specified in the :code:`tech_capacity_max` subset.
     expr = aggcap <= max_cap
     return expr
 
+def MinNewCapacity_Constraint(M, r, p, t):
+    r"""
+The MinNewCapacity constraint sets a limit on the minimum newly installed capacity of a
+given technology in a given year. Note that the indices for these constraints are region,
+period, and tech.
+.. math::
+   :label: MaxMinCapacity
+   \textbf{CAP}_{r, t, p} \ge MIN_{r, p, t}
+"""
+    min_cap = value(M.MinNewCapacity[r, p, t])
+    expr = M.V_Capacity[r, t, p] >= min_cap
+    return expr
+
 
 def MinCapacity_Constraint(M, r, p, t):
     r"""
@@ -1916,6 +1942,100 @@ specified in the :code:`tech_capacity_min` subset.
     )
     expr = aggcap >= min_cap
     return expr
+
+def MinAnnualCapacityFactor_Constraint(M, r, p, t, o):
+    r"""
+The MinAnnualCapacityFactor sets a lower bound on the annual capacity factor
+from a specific technology. The first portion of the constraint pertains to
+technologies with variable output at the time slice level, and the second portion
+pertains to technologies with constant annual output belonging to the
+:code:`tech_annual` set.
+.. math::
+   :label: MinAnnualCapacityFactor
+   \sum_{S,D,I,V,O} \textbf{FO}_{r, p, s, d, i, t, v, o} \ge MINCF_{r, p, t} * \textbf{CAPAVL}_{r, p, t} * \text{C2A}_{r, t}
+   \forall \{r, p, t, o\} \in \Theta_{\text{MinAnnualCapacityFactor}}
+   \sum_{I,V,O} \textbf{FOA}_{r, p, i, t, v, o} \ge MINCF_{r, p, t} * \textbf{CAPAVL}_{r, p, t} * \text{C2A}_{r, t}
+   \forall \{r, p, t, o \in T^{a}\} \in \Theta_{\text{MinAnnualCapacityFactor}}
+"""
+    # r can be an individual region (r='US'), or a combination of regions separated by comma (r='Mexico,US,Canada'), or 'global'.
+    # if r == 'global', the constraint is system-wide
+    if r == 'global':
+      reg = M.regions
+    else:
+      reg = [r]
+
+    try:
+        activity_rpt = sum(
+            M.V_FlowOut[r, p, s, d, S_i, t, S_v, o]
+            for r in reg if ',' not in r
+            for S_v in M.processVintages[r, p, t]
+            for S_i in M.processInputs[r, p, t, S_v]
+            for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+            for s in M.time_season
+            for d in M.time_of_day
+        )
+    except:
+        activity_rpt = sum(
+            M.V_FlowOutAnnual[r, p, S_i, t, S_v, o]
+            for r in reg if ',' not in r
+            for S_v in M.processVintages[r, p, t]
+            for S_i in M.processInputs[r, p, t, S_v]
+            for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+        )
+
+    max_possible_activity_rpt = M.V_CapacityAvailableByPeriodAndTech[r, p, t] * M.CapacityToActivity[r, t]
+    min_annual_cf = value(M.MinAnnualCapacityFactor[r, p, t, o])
+    expr = activity_rpt >= min_annual_cf * max_possible_activity_rpt
+    return expr
+
+
+def MaxAnnualCapacityFactor_Constraint(M, r, p, t, o):
+        r"""
+    The MaxAnnualCapacityFactor sets an upper bound on the annual capacity factor
+    from a specific technology. The first portion of the constraint pertains to
+    technologies with variable output at the time slice level, and the second portion
+    pertains to technologies with constant annual output belonging to the
+    :code:`tech_annual` set.
+    .. math::
+       :label: MaxAnnualCapacityFactor
+       \sum_{S,D,I,V,O} \textbf{FO}_{r, p, s, d, i, t, v, o} \le MAXCF_{r, p, t} * \textbf{CAPAVL}_{r, p, t} * \text{C2A}_{r, t}
+       \forall \{r, p, t, o\} \in \Theta_{\text{MaxAnnualCapacityFactor}}
+       \sum_{I,V,O} \textbf{FOA}_{r, p, i, t, v, o} \ge MAXCF_{r, p, t} * \textbf{CAPAVL}_{r, p, t} * \text{C2A}_{r, t}
+       \forall \{r, p, t, o \in T^{a}\} \in \Theta_{\text{MaxAnnualCapacityFactor}}
+    """
+        # r can be an individual region (r='US'), or a combination of regions separated by comma (r='Mexico,US,Canada'), or 'global'.
+        # if r == 'global', the constraint is system-wide
+        if r == 'global':
+          reg = M.regions
+        else:
+          reg = [r]
+
+        try:
+            activity_rpt = sum(
+                M.V_FlowOut[r, p, s, d, S_i, t, S_v, o]
+                for r in reg if ',' not in r
+                for S_v in M.processVintages[r, p, t]
+                for S_i in M.processInputs[r, p, t, S_v]
+                for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+                for s in M.time_season
+                for d in M.time_of_day
+            )
+        except:
+            activity_rpt = sum(
+                M.V_FlowOutAnnual[r, p, S_i, t, S_v, o]
+                for r in reg if ',' not in r
+                for S_v in M.processVintages[r, p, t]
+                for S_i in M.processInputs[r, p, t, S_v]
+                for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+            )
+
+        max_possible_activity_rpt = M.V_CapacityAvailableByPeriodAndTech[r, p, t] * M.CapacityToActivity[r, t]
+        max_annual_cf = value(M.MaxAnnualCapacityFactor[r, p, t, o])
+        expr = activity_rpt <= max_annual_cf * max_possible_activity_rpt
+        return expr
+
+
+
 
 
 def TechInputSplit_Constraint(M, r, p, s, d, i, t, v):
@@ -1968,8 +2088,8 @@ Allows users to specify fixed or minimum shares of commodity inputs to a process
 producing a single output. Under this constraint, only the technologies with variable
 output at the timeslice level (i.e., NOT in the :code:`tech_annual` set) are considered.
 This constraint differs from TechInputSplit as it specifies shares on an annual basis,
-so even though it applies to technologies with variable output at the timeslice level, 
-the constraint only fixes the input shares over the course of a year. 
+so even though it applies to technologies with variable output at the timeslice level,
+the constraint only fixes the input shares over the course of a year.
 """
 
     inp = sum(
@@ -1989,7 +2109,7 @@ the constraint only fixes the input shares over the course of a year.
 
 
     expr = inp >= M.TechInputSplitAverage[r, p, i, t] * total_inp
-    return expr 
+    return expr
 
 def TechOutputSplit_Constraint(M, r, p, s, d, t, v, o):
     r"""
@@ -2151,7 +2271,7 @@ The relationship between the primary and linked technologies is given
 in the :code:`LinkedTechs` table. Note that the primary and linked
 technologies cannot be part of the :code:`tech_annual` set. It is implicit that
 the primary region corresponds to the linked technology as well. The lifetimes
-of the primary and linked technologies should be specified and identical. 
+of the primary and linked technologies should be specified and identical.
 """
     linked_t = M.LinkedTechs[r, t, e]
     if (r,t,v) in M.LifetimeProcess.keys() and M.LifetimeProcess[r, linked_t,v] != M.LifetimeProcess[r, t,v]:
@@ -2177,4 +2297,3 @@ of the primary and linked technologies should be specified and identical.
 
     expr = -primary_flow == linked_flow
     return expr
-
