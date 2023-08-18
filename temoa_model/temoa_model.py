@@ -76,7 +76,7 @@ def temoa_create_model(name="Temoa"):
     M.tech_flex = Set(within=M.tech_all)
     M.tech_exchange = Set(within=M.tech_all)
     M.groups = Set(dimen=1) # Define groups for technologies
-    M.tech_groups = Set(within=M.tech_all) # Define techs used in groups
+    M.tech_groups = Set(within=M.RegionalIndices * M.groups * M.tech_all)
     M.tech_annual = Set(within=M.tech_all) # Define techs with constant output
     M.tech_variable = Set(within=M.tech_all) # Define techs for use with TechInputSplitAverage constraint, where techs have variable annual output but the user wishes to constrain them annually
 
@@ -223,8 +223,19 @@ def temoa_create_model(name="Temoa"):
     M.EmissionLimit = Param(M.RegionalGlobalIndices, M.time_optimize, M.commodity_emissions)
     M.EmissionActivity_reitvo = Set(dimen=6, initialize=EmissionActivityIndices)
     M.EmissionActivity = Param(M.EmissionActivity_reitvo)
-    M.MinGenGroupWeight = Param(M.RegionalIndices, M.tech_groups, M.groups, default = 0)
-    M.MinGenGroupTarget = Param(M.time_optimize, M.groups)
+    M.MinActivityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MaxActivityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MinCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MaxCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MinNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MaxNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MinCapShare_rptg = Set(dimen=4, initialize=MinCapShareIndices)
+    M.MinCapacityShare = Param(M.MinCapShare_rptg)
+    M.MaxCapacityShare = Param(M.MinCapShare_rptg)
+    M.MinActivityShare = Param(M.MinCapShare_rptg) # MinMaxActivityShare parameter has the same index as the MinCapacityShare
+    M.MaxActivityShare = Param(M.MinCapShare_rptg)
+    M.MinNewCapacityShare = Param(M.MinCapShare_rptg)
+    M.MaxNewCapacityShare = Param(M.MinCapShare_rptg)
     M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions)
 
     # Define parameters associated with electric sector operation
@@ -451,11 +462,18 @@ def temoa_create_model(name="Temoa"):
         M.MinActivityConstraint_rpt, rule=MinActivity_Constraint
     )
 
-    M.MinActivityGroup_pg = Set(
-        dimen=2, initialize=lambda M: M.MinGenGroupTarget.sparse_iterkeys()
+    M.MinActivityGroup_rpg = Set(
+        dimen=3, initialize=lambda M: M.MinActivityGroup.sparse_iterkeys()
     )
-    M.MinActivityGroup = Constraint(
-        M.MinActivityGroup_pg, rule=MinActivityGroup_Constraint
+    M.MinActivityGroupConstraint = Constraint(
+        M.MinActivityGroup_rpg, rule=MinActivityGroup_Constraint
+    )
+
+    M.MaxActivityGroup_rpg = Set(
+        dimen=3, initialize=lambda M: M.MaxActivityGroup.sparse_iterkeys()
+    )
+    M.MaxActivityGroupConstraint = Constraint(
+        M.MaxActivityGroup_rpg, rule=MaxActivityGroup_Constraint
     )
 
     M.MaxCapacityConstraint_rpt = Set(
@@ -472,18 +490,81 @@ def temoa_create_model(name="Temoa"):
         M.MaxNewCapacityConstraint_rpt, rule=MaxNewCapacity_Constraint
     )
 
+    M.MaxCapacityGroupConstraint_rpg = Set(
+        dimen=3, initialize=lambda M: M.MaxCapacityGroup.sparse_iterkeys()
+    )
+    M.MaxCapacityGroupConstraint = Constraint(
+        M.MaxCapacityGroupConstraint_rpg, rule=MaxCapacityGroup_Constraint
+    )
+
+    M.MinCapacityGroupConstraint_rpg = Set(
+        dimen=3, initialize=lambda M: M.MinCapacityGroup.sparse_iterkeys()
+    )
+    M.MinCapacityGroupConstraint = Constraint(
+        M.MinCapacityGroupConstraint_rpg, rule=MinCapacityGroup_Constraint
+    )
+
+    M.MinNewCapacityGroupConstraint_rpg = Set(
+        dimen=3, initialize=lambda M: M.MinNewCapacityGroup.sparse_iterkeys()
+    )
+    M.MinNewCapacityGroupConstraint = Constraint(
+        M.MinNewCapacityGroupConstraint_rpg, rule=MinNewCapacityGroup_Constraint
+    )
+
+    M.MaxNewCapacityGroupConstraint_rpg = Set(
+        dimen=3, initialize=lambda M: M.MaxNewCapacityGroup.sparse_iterkeys()
+    )
+    M.MaxNewCapacityGroupConstraint = Constraint(
+        M.MinNewCapacityGroupConstraint_rpg, rule=MaxNewCapacityGroup_Constraint
+    )
+
+    M.MinCapacityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MinCapacityShare.sparse_iterkeys()
+    )
+    M.MinCapacityShareConstraint = Constraint(
+        M.MinCapacityShareConstraint_rptg, rule=MinCapacityShare_Constraint
+    )
+
+    M.MaxCapacityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MaxCapacityShare.sparse_iterkeys()
+    )
+    M.MaxCapacityShareConstraint = Constraint(
+        M.MaxCapacityShareConstraint_rptg, rule=MaxCapacityShare_Constraint
+    )
+
+    M.MinActivityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MinActivityShare.sparse_iterkeys()
+    )
+    M.MinActivityShareConstraint = Constraint(
+        M.MinActivityShareConstraint_rptg, rule=MinActivityShare_Constraint
+    )
+
+    M.MaxActivityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MaxActivityShare.sparse_iterkeys()
+    )
+    M.MaxActivityShareConstraint = Constraint(
+        M.MaxActivityShareConstraint_rptg, rule=MaxActivityShare_Constraint
+    )
+
+    M.MinNewCapacityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MinNewCapacityShare.sparse_iterkeys()
+    )
+    M.MinNewCapacityShareConstraint = Constraint(
+        M.MinNewCapacityShareConstraint_rptg, rule=MinNewCapacityShare_Constraint
+    )
+
+    M.MaxNewCapacityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MaxNewCapacityShare.sparse_iterkeys()
+    )
+    M.MaxNewCapacityShareConstraint = Constraint(
+        M.MaxNewCapacityShareConstraint_rptg, rule=MaxNewCapacityShare_Constraint
+    )
+
     M.MaxResourceConstraint_rt = Set(
         dimen=2, initialize=lambda M: M.MaxResource.sparse_iterkeys()
     )
     M.MaxResourceConstraint = Constraint(
         M.MaxResourceConstraint_rt, rule=MaxResource_Constraint
-    )
-
-    M.MaxCapacitySetConstraint_rp = Set(
-        dimen=2, initialize=lambda M: M.MaxCapacitySum.sparse_iterkeys()
-    )
-    M.MaxCapacitySetConstraint = Constraint(
-        M.MaxCapacitySetConstraint_rp, rule=MaxCapacitySet_Constraint
     )
 
     M.MinCapacityConstraint_rpt = Set(
@@ -498,13 +579,6 @@ def temoa_create_model(name="Temoa"):
     )
     M.MinNewCapacityConstraint = Constraint(
         M.MinNewCapacityConstraint_rpt, rule=MinNewCapacity_Constraint
-    )
-
-    M.MinCapacitySetConstraint_rp = Set(
-        dimen=2, initialize=lambda M: M.MinCapacitySum.sparse_iterkeys()
-    )
-    M.MinCapacitySetConstraint = Constraint(
-        M.MinCapacitySetConstraint_rp, rule=MinCapacitySet_Constraint
     )
 
     M.MinAnnualCapacityFactorConstraint_rpto = Set(
