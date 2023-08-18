@@ -441,6 +441,28 @@ CREATE TABLE IF NOT EXISTS "MaxCapacityGroup" (
 	FOREIGN KEY("t_periods") REFERENCES "time_periods"("t_periods"),
 	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
 );
+CREATE TABLE IF NOT EXISTS "MinNewCapacityGroup" (
+	"regions"	text,
+	"periods"	integer,
+	"group_name"	text,
+	"minnewcap"	real,
+	"minnewcap_units"	text,
+	"minnewcap_notes"	text,
+	PRIMARY KEY("regions","periods","group_name"),
+	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
+CREATE TABLE IF NOT EXISTS "MaxNewCapacityGroup" (
+	"regions"	text,
+	"periods"	integer,
+	"group_name"	text,
+	"maxnewcap"	real,
+	"maxnewcap_units"	text,
+	"maxnewcap_notes"	text,
+	PRIMARY KEY("regions","periods","group_name"),
+	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
 CREATE TABLE IF NOT EXISTS "MinCapacityShare" (
 	"regions"	text,
 	"periods"	integer,
