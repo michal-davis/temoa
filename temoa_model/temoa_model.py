@@ -379,6 +379,10 @@ def temoa_create_model(name="Temoa"):
         M.StorageConstraints_rpsdtv, rule=StorageEnergy_Constraint
     )
 
+    # We make use of this following set in some of the storage constraints.
+    # Pre-computing it is considerably faster.
+    M.SegFracPerSeason = Param(M.time_season, initialize=SegFracPerSeason_rule)
+
     M.StorageEnergyUpperBoundConstraint = Constraint(
         M.StorageConstraints_rpsdtv, rule=StorageEnergyUpperBound_Constraint
     )

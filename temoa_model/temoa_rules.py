@@ -985,7 +985,7 @@ scale the storage duration to account for the number of days in each season.
         M.V_Capacity[r, t, v]
         * M.CapacityToActivity[r, t]
         * (M.StorageDuration[r, t] / 8760)
-        * sum(M.SegFrac[s,S_d] for S_d in M.time_of_day) * 365
+        * M.SegFracPerSeason[s] * 365
         * value(M.ProcessLifeFrac[r, p, t, v])
     )
     expr = M.V_StorageLevel[r, p, s, d, t, v] <= energy_capacity
@@ -2596,7 +2596,8 @@ def ParamLoanAnnualize_rule(M, r, t, v):
 
     return annualized_rate
 
-
+def SegFracPerSeason_rule(M, s):
+    return sum(M.SegFrac[s, S_d] for S_d in M.time_of_day)
 
 def LinkedEmissionsTech_Constraint(M, r, p, s, d, t, v, e):
     r"""
