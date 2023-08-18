@@ -481,6 +481,30 @@ CREATE TABLE IF NOT EXISTS "MaxCapacityShare" (
 	FOREIGN KEY("tech") REFERENCES "technologies"("tech")
 	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
 );
+CREATE TABLE IF NOT EXISTS "MaxNewCapacityShare" (
+	"regions"	text,
+	"periods"	integer,
+	"tech"	text,
+	"group_name" text,
+	"maxcapshare"	real,
+	"maxcapshare_notes"	text,
+	PRIMARY KEY("regions","periods","tech","group_name"),
+	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("tech") REFERENCES "technologies"("tech")
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
+CREATE TABLE IF NOT EXISTS "MinNewCapacityShare" (
+	"regions"	text,
+	"periods"	integer,
+	"tech"	text,
+	"group_name" text,
+	"maxcapshare"	real,
+	"maxcapshare_notes"	text,
+	PRIMARY KEY("regions","periods","tech","group_name"),
+	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("tech") REFERENCES "technologies"("tech")
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
 CREATE TABLE "LifetimeTech" (
 	"regions"	text,
 	"tech"	text,
