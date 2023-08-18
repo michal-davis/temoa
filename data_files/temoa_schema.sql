@@ -437,6 +437,26 @@ CREATE TABLE IF NOT EXISTS "MaxActivityGroup" (
 	FOREIGN KEY("t_periods") REFERENCES "time_periods"("t_periods"),
 	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
 );
+CREATE TABLE IF NOT EXISTS "MinCapacityGroup" (
+	"regions"	text,
+	"t_periods"	integer,
+	"group_name"	text,
+	"min_cap_g"	real,
+	"notes"	text,
+	PRIMARY KEY("regions","t_periods","group_name"),
+	FOREIGN KEY("t_periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
+CREATE TABLE IF NOT EXISTS "MaxCapacityGroup" (
+	"regions"	text,
+	"t_periods"	integer,
+	"group_name"	text,
+	"max_cap_g"	real,
+	"notes"	text,
+	PRIMARY KEY("regions","t_periods","group_name"),
+	FOREIGN KEY("t_periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
 CREATE TABLE "LifetimeTech" (
 	"regions"	text,
 	"tech"	text,
