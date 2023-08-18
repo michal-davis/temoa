@@ -603,7 +603,7 @@ reduces computational burden.
       interregional_exports = 0
       if (r, p, c) in M.exportRegions:
         interregional_exports = sum(
-          M.V_FlowOut[r+"-"+reg, p, s, d, c, S_t, S_v, S_o]
+          M.V_FlowOut[r+"-"+reg, p, s, d, c, S_t, S_v, S_o] / value(M.Efficiency[r+"-"+reg, c, S_t, S_v, S_o])
           for reg, S_t, S_v, S_o in M.exportRegions[r, p, c]
           )
 
@@ -696,7 +696,7 @@ While the commodity :math:`c` can only be produced by technologies in the
     interregional_exports = 0
     if (r, p, c) in M.exportRegions:
       interregional_exports = sum(
-        M.V_FlowOutAnnual[str(r)+"-"+str(reg), p, c, S_t, S_v, S_o]
+        M.V_FlowOutAnnual[str(r)+"-"+str(reg), p, c, S_t, S_v, S_o] / value(M.Efficiency[str(r)+"-"+str(reg), c, S_t, S_v, S_o])
         for reg, S_t, S_v, S_o in M.exportRegions[r, p, c]
         )
 
