@@ -227,6 +227,9 @@ def temoa_create_model(name="Temoa"):
     M.MaxActivityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
     M.MinCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
     M.MaxCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+    M.MinCapShare_rptg = Set(dimen=4, initialize=MinCapShareIndices)
+    M.MinCapacityShare = Param(M.MinCapShare_rptg)
+    M.MaxCapacityShare = Param(M.MinCapShare_rptg)
     M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions)
 
     # Define parameters associated with electric sector operation
@@ -493,6 +496,20 @@ def temoa_create_model(name="Temoa"):
     )
     M.MinCapacityGroupConstraint = Constraint(
         M.MinCapacityGroupConstraint_rpg, rule=MinCapacityGroup_Constraint
+    )
+
+    M.MinCapacityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MinCapacityShare.sparse_iterkeys()
+    )
+    M.MinCapacityShareConstraint = Constraint(
+        M.MinCapacityShareConstraint_rptg, rule=MinCapacityShare_Constraint
+    )
+
+    M.MaxCapacityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MaxCapacityShare.sparse_iterkeys()
+    )
+    M.MaxCapacityShareConstraint = Constraint(
+        M.MaxCapacityShareConstraint_rptg, rule=MaxCapacityShare_Constraint
     )
 
     M.MaxResourceConstraint_rt = Set(
