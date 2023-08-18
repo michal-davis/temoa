@@ -297,7 +297,7 @@ CREATE TABLE "Output_CapacityByPeriodAndTech" (
 );
 CREATE TABLE "MyopicBaseyear" (
 	"year"	real
-	"notes"	text	
+	"notes"	text
 );
 CREATE TABLE "MinGenGroupWeight" (
 	"regions"	text,
@@ -326,6 +326,17 @@ CREATE TABLE "MinCapacity" (
 	FOREIGN KEY("tech") REFERENCES "technologies"("tech"),
 	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods")
 );
+CREATE TABLE "MinNewCapacity" (
+	"regions"	text,
+	"periods"	integer,
+	"tech"	text,
+	"mincap"	real,
+	"mincap_units"	text,
+	"mincap_notes"	text,
+	PRIMARY KEY("regions","periods","tech"),
+	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("tech") REFERENCES "technologies"("tech")
+);
 CREATE TABLE "MinActivity" (
 	"regions"	text,
 	"periods"	integer,
@@ -338,6 +349,17 @@ CREATE TABLE "MinActivity" (
 	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods")
 );
 CREATE TABLE "MaxCapacity" (
+	"regions"	text,
+	"periods"	integer,
+	"tech"	text,
+	"maxcap"	real,
+	"maxcap_units"	text,
+	"maxcap_notes"	text,
+	PRIMARY KEY("regions","periods","tech"),
+	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("tech") REFERENCES "technologies"("tech")
+);
+CREATE TABLE "MaxNewCapacity" (
 	"regions"	text,
 	"periods"	integer,
 	"tech"	text,
@@ -582,7 +604,7 @@ CREATE TABLE "MaxResource" (
 CREATE TABLE "LinkedTechs" (
 	"primary_region"	text,
 	"primary_tech"	text,
-	"emis_comm" text, 
+	"emis_comm" text,
  	"linked_tech"	text,
 	"tech_linked_notes"	text,
 	FOREIGN KEY("primary_tech") REFERENCES "technologies"("tech"),
