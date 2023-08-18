@@ -67,6 +67,16 @@ CREATE TABLE "tech_annual" (
 	PRIMARY KEY("tech"),
 	FOREIGN KEY("tech") REFERENCES "technologies"("tech")
 );
+CREATE TABLE IF NOT EXISTS "tech_groups" (
+	"region" text,
+	"group_name" text,
+	"tech"	text,
+	"notes"	TEXT,
+	PRIMARY KEY("region", "group_name", "tech"),
+	FOREIGN KEY("region") REFERENCES "regions"("regions"),
+	FOREIGN KEY("tech") REFERENCES "technologies"("tech"),
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
 CREATE TABLE "sector_labels" (
 	"sector"	text,
 	PRIMARY KEY("sector")
@@ -406,6 +416,26 @@ CREATE TABLE IF NOT EXISTS "MaxAnnualCapacityFactor" (
 	FOREIGN KEY("periods") REFERENCES "time_periods"("t_periods"),
 	FOREIGN KEY("tech") REFERENCES "technologies"("tech"),
 	FOREIGN KEY("output_comm") REFERENCES "commodities"("comm_name")
+);
+CREATE TABLE IF NOT EXISTS "MinActivityGroup" (
+	"regions"	text,
+	"t_periods"	integer,
+	"group_name"	text,
+	"min_act_g"	real,
+	"notes"	text,
+	PRIMARY KEY("regions","t_periods","group_name"),
+	FOREIGN KEY("t_periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
+);
+CREATE TABLE IF NOT EXISTS "MaxActivityGroup" (
+	"regions"	text,
+	"t_periods"	integer,
+	"group_name"	text,
+	"max_act_g"	real,
+	"notes"	text,
+	PRIMARY KEY("regions","t_periods","group_name"),
+	FOREIGN KEY("t_periods") REFERENCES "time_periods"("t_periods"),
+	FOREIGN KEY("group_name") REFERENCES "groups"("group_name")
 );
 CREATE TABLE "LifetimeTech" (
 	"regions"	text,
