@@ -337,23 +337,7 @@ CREATE TABLE "Output_CapacityByPeriodAndTech" (
 );
 CREATE TABLE "MyopicBaseyear" (
 	"year"	real
-	"notes"	text	
-);
-CREATE TABLE "MinGenGroupWeight" (
-	"regions"	text,
-	"tech"	text,
-	"group_name"	text,
-	"act_fraction"	REAL,
-	"tech_desc"	text,
-	PRIMARY KEY("tech","group_name","regions")
-);
-CREATE TABLE "MinGenGroupTarget" (
-	"regions"	text,
-	"periods"	integer,
-	"group_name"	text,
-	"min_act_g"	real,
-	"notes"	text,
-	PRIMARY KEY("periods","group_name","regions")
+	"notes"	text
 );
 CREATE TABLE "MinCapacity" (
 	"regions"	text,
@@ -1003,7 +987,7 @@ CREATE TABLE "MaxResource" (
 CREATE TABLE "LinkedTechs" (
 	"primary_region"	text,
 	"primary_tech"	text,
-	"emis_comm" text, 
+	"emis_comm" text,
  	"linked_tech"	text,
 	"tech_linked_notes"	text,
 	FOREIGN KEY("primary_tech") REFERENCES "technologies"("tech"),
