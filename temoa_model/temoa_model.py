@@ -232,6 +232,8 @@ def temoa_create_model(name="Temoa"):
     M.MinCapShare_rptg = Set(dimen=4, initialize=MinCapShareIndices)
     M.MinCapacityShare = Param(M.MinCapShare_rptg)
     M.MaxCapacityShare = Param(M.MinCapShare_rptg)
+    M.MinActivityShare = Param(M.MinCapShare_rptg) # MinMaxActivityShare parameter has the same index as the MinCapacityShare
+    M.MaxActivityShare = Param(M.MinCapShare_rptg)
     M.MinNewCapacityShare = Param(M.MinCapShare_rptg)
     M.MaxNewCapacityShare = Param(M.MinCapShare_rptg)
     M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions)
@@ -528,6 +530,20 @@ def temoa_create_model(name="Temoa"):
     )
     M.MaxCapacityShareConstraint = Constraint(
         M.MaxCapacityShareConstraint_rptg, rule=MaxCapacityShare_Constraint
+    )
+
+    M.MinActivityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MinActivityShare.sparse_iterkeys()
+    )
+    M.MinActivityShareConstraint = Constraint(
+        M.MinActivityShareConstraint_rptg, rule=MinActivityShare_Constraint
+    )
+
+    M.MaxActivityShareConstraint_rptg = Set(
+        dimen=4, initialize=lambda M: M.MaxActivityShare.sparse_iterkeys()
+    )
+    M.MaxActivityShareConstraint = Constraint(
+        M.MaxActivityShareConstraint_rptg, rule=MaxActivityShare_Constraint
     )
 
     M.MinNewCapacityShareConstraint_rptg = Set(
