@@ -378,7 +378,23 @@ class TemoaSolverInstance(object):
 				if self.options.neos:
 				    self.result = self.optimizer.solve(self.instance, opt=self.options.solver)
 				else:
-				    self.result = self.optimizer.solve( self.instance, suffixes=['dual'],# 'rc', 'slack'],
+					if self.options.solver == 'cbc':
+						# Solver options. Reference: https://genxproject.github.io/GenX/dev/solver_configuration/
+						self.optimizer.options["dualTolerance"] = 1e-6
+						self.optimizer.options["primalTolerance"] = 1e-6
+						self.optimizer.options["zeroTolerance"] = 1e-12
+						self.optimizer.options["crossover"] = 'off'
+
+					elif self.options.solver == 'cplex':
+						# Note: these parameter values are taken to be the same as those in PyPSA (see: https://pypsa-eur.readthedocs.io/en/latest/configuration.html)
+						self.optimizer.options["lpmethod"] = 4 # barrier
+						self.optimizer.options["solutiontype"] = 2 # non basic solution, ie no crossover
+						self.optimizer.options["barrier convergetol"] = 1.e-5
+						self.optimizer.options["feasopt tolerance"] = 1.e-6
+
+					# Note: still need to add gurobi parameters.
+
+					self.result = self.optimizer.solve( self.instance, suffixes=['dual'],# 'rc', 'slack'],
 								keepfiles=self.options.keepPyomoLP,
 								symbolic_solver_labels=self.options.keepPyomoLP )
 				yield '\t\t\t\t\t\t[%8.2f]\n' % duration()

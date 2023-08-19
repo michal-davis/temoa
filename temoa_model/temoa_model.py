@@ -121,7 +121,7 @@ def temoa_create_model(name="Temoa"):
     # Define demand- and resource-related parameters
     M.DemandDefaultDistribution = Param(M.time_season, M.time_of_day, mutable=True)
     M.DemandSpecificDistribution = Param(
-        M.regions, M.time_season, M.time_of_day, M.commodity_demand, mutable=True
+        M.regions, M.time_season, M.time_of_day, M.commodity_demand, mutable=True, default=0
     )
 
     M.Demand = Param(M.regions, M.time_optimize, M.commodity_demand)
@@ -378,6 +378,10 @@ def temoa_create_model(name="Temoa"):
     M.StorageEnergyConstraint = Constraint(
         M.StorageConstraints_rpsdtv, rule=StorageEnergy_Constraint
     )
+
+    # We make use of this following set in some of the storage constraints.
+    # Pre-computing it is considerably faster.
+    M.SegFracPerSeason = Param(M.time_season, initialize=SegFracPerSeason_rule)
 
     M.StorageEnergyUpperBoundConstraint = Constraint(
         M.StorageConstraints_rpsdtv, rule=StorageEnergyUpperBound_Constraint

@@ -425,8 +425,6 @@ words, an end-use demand must only be an end-use demand.  Note that if an output
 could satisfy both an end-use and internal system demand, then the output from
 :math:`\textbf{FO}` and :math:`\textbf{FOA}` would be double counted.
 """
-    if (r,s,d,dem) not in M.DemandSpecificDistribution.sparse_keys():
-        return Constraint.Skip
 
     supply = sum(
         M.V_FlowOut[r, p, s, d, S_i, S_t, S_v, dem]
@@ -443,6 +441,7 @@ could satisfy both an end-use and internal system demand, then the output from
     DemandConstraintErrorCheck(supply + supply_annual, r, p, s, d, dem)
 
     expr = supply + supply_annual == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
+
     return expr
 
 def DemandActivity_Constraint(M, r, p, s, d, t, v, dem, s_0, d_0):
@@ -474,9 +473,6 @@ Note that this constraint is only applied to the demand commodities with diurnal
 variations, and therefore the equation above only includes :math:`\textbf{FO}`
 and not  :math:`\textbf{FOA}`
 """
-    if (r,s,d,dem) not in M.DemandSpecificDistribution.sparse_keys():
-        return Constraint.Skip
-    DSD = M.DemandSpecificDistribution  # lazy programmer
 
     act_a = sum(
         M.V_FlowOut[r, p, s_0, d_0, S_i, t, v, dem]
@@ -487,7 +483,7 @@ and not  :math:`\textbf{FOA}`
         for S_i in M.ProcessInputsByOutput[r, p, t, v, dem]
     )
 
-    expr = act_a * DSD[r, s, d, dem] == act_b * DSD[r, s_0, d_0, dem]
+    expr = act_a * M.DemandSpecificDistribution[r, s, d, dem] == act_b * M.DemandSpecificDistribution[r, s_0, d_0, dem]
     return expr
 
 
@@ -989,7 +985,7 @@ scale the storage duration to account for the number of days in each season.
         M.V_Capacity[r, t, v]
         * M.CapacityToActivity[r, t]
         * (M.StorageDuration[r, t] / 8760)
-        * sum(M.SegFrac[s,S_d] for S_d in M.time_of_day) * 365
+        * M.SegFracPerSeason[s] * 365
         * value(M.ProcessLifeFrac[r, p, t, v])
     )
     expr = M.V_StorageLevel[r, p, s, d, t, v] <= energy_capacity
@@ -2600,7 +2596,8 @@ def ParamLoanAnnualize_rule(M, r, t, v):
 
     return annualized_rate
 
-
+def SegFracPerSeason_rule(M, s):
+    return sum(M.SegFrac[s, S_d] for S_d in M.time_of_day)
 
 def LinkedEmissionsTech_Constraint(M, r, p, s, d, t, v, e):
     r"""
