@@ -24,6 +24,8 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division
 
 from temoa_initialize import *
+from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
+
 
 
 # ---------------------------------------------------------------

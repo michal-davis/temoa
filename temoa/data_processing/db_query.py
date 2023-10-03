@@ -58,10 +58,10 @@ def get_flags(inputs):
 	file_ty = re.search(r"(\w+)\.(\w+)\b", inp_file) # Extract the input filename and extension
 	
 	if not file_ty :
-		raise "The file type %s is not recognized. Please specify a database file." % inp_f
+		raise "The file type %s is not recognized. Please specify a database file." % inp_file
 		
 	elif file_ty.group(2) not in ("db", "sqlite", "sqlite3", "sqlitedb") :
-		raise "The file type %s is not recognized. Please specify a database file." % inp_f
+		raise "The file type %s is not recognized. Please specify a database file." % inp_file
 	
 	if query_string is None:
 		print("No query specified.")
