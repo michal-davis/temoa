@@ -23,7 +23,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 # (e.g., 1/2 = 0 instead of 0.5)
 from __future__ import division
 
-from temoa_initialize import *
+from temoa.temoa_model.temoa_initialize import *
 from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
 
 

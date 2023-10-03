@@ -8,7 +8,7 @@ new entry point for running the model.
 # Created on:  7/18/23
 
 
-from temoa.temoa_model.temoa_model import TemoaModel
+from temoa.temoa_model.temoa_model import temoa_create_model
 from temoa.temoa_model.temoa_run import TemoaSolver
 
 def runModelUI(config_filename):
@@ -25,7 +25,7 @@ def runModel():
     __main__.py"""
 
     dummy = ""  # If calling from command line, send empty string
-    model = TemoaModel()
+    model = temoa_create_model()
     solver = TemoaSolver(model, dummy)
     for k in solver.createAndSolve():
         pass

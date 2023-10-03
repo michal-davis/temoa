@@ -29,8 +29,8 @@ from itertools import product
 from pyomo.environ import AbstractModel, Set, Param, BuildAction, Var, NonNegativeReals, Objective, minimize
 
 from definitions import PROJECT_ROOT
-from temoa_initialize import *
-from temoa_rules import *
+from temoa.temoa_model.temoa_initialize import *
+from temoa.temoa_model.temoa_rules import *
 
 # set the target folder for logging output from this run
 output_path = os.path.join(PROJECT_ROOT, "output_files", datetime.now().strftime("%Y-%m-%d %H%Mh"))

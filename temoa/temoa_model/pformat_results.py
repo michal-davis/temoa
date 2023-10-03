@@ -39,9 +39,9 @@ import sys
 import pandas as pd
 
 from temoa.data_processing.DB_to_Excel import make_excel
-from temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_config import TemoaConfig
 
-from temoa_config import TemoaConfig
+
 
 
 # Ensure compatibility with Python 2.7 and 3
