@@ -21,11 +21,36 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-from temoa_rules import *
-from temoa_initialize import *
-from temoa_run import *
+import logging
+import os
+from datetime import datetime
+from itertools import product
 
-import IPython
+from pyomo.environ import AbstractModel, Set, Param, BuildAction, Var, NonNegativeReals, Objective, minimize
+
+from definitions import PROJECT_ROOT
+from temoa_initialize import *
+from temoa_rules import *
+
+# set the target folder for logging output from this run
+output_path = os.path.join(PROJECT_ROOT, "output_files", datetime.now().strftime("%Y-%m-%d %H%Mh"))
+if not os.path.exists(output_path):
+    os.mkdir(output_path)
+
+# set up logger
+logger = logging.getLogger(__name__)
+logging.getLogger("pyomo").setLevel(logging.INFO)
+logging.getLogger("matplotlib").setLevel(logging.WARNING)
+filename = "log.log"
+logging.basicConfig(
+    filename=os.path.join(output_path, filename),
+    filemode="w",
+    format="%(asctime)s | %(module)s | %(levelname)s | %(message)s",
+    datefmt="%d-%b-%y %H:%M:%S",
+    level=logging.DEBUG,  # <-- global change for project is here
+)
+
+
 
 
 def temoa_create_model(name="Temoa"):
@@ -658,32 +683,3 @@ def temoa_create_model(name="Temoa"):
         M.LinkedEmissionsTechConstraint_rpsdtve, rule=LinkedEmissionsTech_Constraint)
     return M
 
-
-model = temoa_create_model()
-
-
-def runModelUI(config_filename):
-    """This function launches the model run from the Temoa GUI"""
-
-    solver = TemoaSolver(model, config_filename)
-    for k in solver.createAndSolve():
-        yield k
-        # yield " " * 1024
-
-
-def runModel():
-    """This function launches the model run, and is invoked when called from
-    __main__.py"""
-
-    dummy = ""  # If calling from command line, send empty string
-    solver = TemoaSolver(model, dummy)
-    for k in solver.createAndSolve():
-        pass
-
-
-if "__main__" == __name__:
-    """This code only invoked when called this file is invoked directly from the
-    command line as follows: $ python temoa_model/temoa_model.py path/to/dat/file"""
-
-    dummy = ""  # If calling from command line, send empty string
-    model = runModel()

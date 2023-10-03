@@ -38,11 +38,11 @@ import subprocess
 import sys
 import pandas as pd
 
+from temoa.data_processing.DB_to_Excel import make_excel
 from temoa_config import TemoaConfig
 
-# Need line below to import DB_to_Excel.py from data_processing
-sys.path.append(os.path.join(os.getcwd(), 'data_processing'))
-from DB_to_Excel import make_excel
+from temoa_config import TemoaConfig
+
 
 # Ensure compatibility with Python 2.7 and 3
 try:
@@ -50,7 +50,7 @@ try:
 except ImportError:
     from io import StringIO
 
-from pyomo.core import value
+from pyomo.core.kernel.numvalue import value
 
 
 def stringify_data(data, ostream=SO, format='plain'):

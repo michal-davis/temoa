@@ -20,8 +20,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have 
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
-
-from temoa_initialize import Var, Objective, Constraint, NonNegativeReals, minimize
+from pyomo.core.kernel.numvalue import value
 from temoa_model import temoa_create_model
 from temoa_rules import PeriodCost_rule
 from temoa_run import parse_args
@@ -31,7 +30,6 @@ from pyomo.pysp.scenariotree.manager import \
     ScenarioTreeManagerClientSerial
 from pyomo.pysp.ef import create_ef_instance
 from pyomo.opt import SolverFactory
-from time import time
 import os
 import sys
 

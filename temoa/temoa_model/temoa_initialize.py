@@ -23,8 +23,6 @@ from operator import itemgetter as iget
 from itertools import product as cross_product
 from sys import argv, stderr as SE, stdout as SO
 
-import IPython
-
 # Ensure compatibility with Python 2.7 and 3
 try:
     from cStringIO import StringIO

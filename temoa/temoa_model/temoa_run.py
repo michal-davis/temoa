@@ -27,6 +27,7 @@ from shutil import copyfile, move
 from pyomo.opt import SolverFactory as SF
 from pyomo.opt import SolverManagerFactory
 from pyomo.environ import *
+from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
 
 from temoa_config import TemoaConfig
 
@@ -131,15 +132,18 @@ class TemoaSolver(object):
         else:
             self.optimizer = SolverFactory(self.options.solver)
 
-        if self.optimizer:
-            pass
-        elif self.options.solver != 'NONE':
-            SE.write("\nWarning: Unable to initialize solver interface for '{}'\n\n"
-                     .format(self.options.solver))
-            if SE.isatty():
-                SE.write("Please press enter to continue or Ctrl+C to quit.")
-                if os.path.join('temoa_model', 'config_sample_myopic') not in options.file_location:
-                    raw_input()
+		if self.optimizer:
+			pass
+		elif self.options.solver != 'NONE':
+			SE.write( "\nWarning: Unable to initialize solver interface for '{}'\n\n"
+				.format( self.options.solver ))
+			if SE.isatty():
+				raise RuntimeError("unknown intent for this codeblock.  -JH ")
+				# TODO:  Not clear what the intent of the below lines are, but options is not defined.
+				#        probably a reference to self.options?  But intent is still unclear
+				# SE.write( "Please press enter to continue or Ctrl+C to quit." )
+				# if os.path.join('temoa_model','config_sample_myopic') not in options.file_location:
+				# 	raw_input()
 
     '''
     This function is called when MGA option is specified.
@@ -313,8 +317,6 @@ class TemoaSolver(object):
 This class is for creating one temoa solver instance. It is used by TemoaSolver.
 (Multiple instances are created for MGA/non-MGA options).
 '''
-
-
 class TemoaSolverInstance(object):
     def __init__(self, model, optimizer, options, txt_file):
         self.model = model
@@ -593,13 +595,13 @@ def parse_args():
     SE.write('Notice: Using the {} solver interface.\n'.format(s_choice))
     SE.flush()
 
-    SE.write("Continue Operation? [Press enter to continue or CTRL+C to abort]\n")
-    SE.flush()
-    try:  # make compatible with Python 2.7 or 3
-        if os.path.join('temoa_model', 'config_sample_myopic') not in options.file_location:
-            #
-            raw_input()  # Give the user a chance to confirm input
-    except:
-        input()
+	SE.write("Continue Operation? [Press enter to continue or CTRL+C to abort]\n")
+	SE.flush()
+	try:  #make compatible with Python 2.7 or 3
+		if os.path.join('temoa_model', 'config_sample_myopic') not in options.file_location:
+			#
+			input() # Give the user a chance to confirm input
+	except:
+		input()
 
     return options, config_flag

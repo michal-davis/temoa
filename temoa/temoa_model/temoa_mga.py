@@ -19,7 +19,7 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-from pyomo.environ import *
+from pyomo.core.kernel.numvalue import value
 from temoa_rules import TotalCost_rule
 
 
