@@ -18,10 +18,13 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+import os
 from os.path import abspath, isfile, splitext, dirname
 from os import sep
 
 import re
+
+from definitions import PROJECT_ROOT
 
 
 def db_2_dat(ifile, ofile, options):
@@ -288,11 +291,11 @@ class TemoaConfig( object ):
         self.graph_type       = 'separate_vintages'
         self.use_splines      = False
 
-        #Introduced during UI Development
-        self.path_to_data    = re.sub('temoa_model$', 'data_files', dirname(abspath(__file__)))# Path to where automated excel and text log folder will be save as output.
-        self.path_to_logs     = self.path_to_data+sep+"debug_logs" #Path to where debug logs will be generated for each run. By default in debug_logs folder in db_io.
-        self.path_to_lp_files = None
-        self.abort_temoa	  = False
+		#Introduced during UI Development
+		self.path_to_data     = os.path.join(PROJECT_ROOT, 'data_files') #re.sub('temoa_model$', 'data_files', dirname(abspath(__file__)))# Path to where automated excel and text log folder will be save as output.
+		self.path_to_logs     = os.path.join(PROJECT_ROOT, 'output_files', 'debug_logs')  #self.path_to_data+sep+"debug_logs" #Path to where debug logs will be generated for each run. By default in debug_logs folder in db_io.
+		self.path_to_lp_files = None
+		self.abort_temoa	  = False
 
         if 'd_solver' in kwargs.keys():
             self.solver = kwargs['d_solver']

@@ -29,7 +29,7 @@ from pyomo.opt import SolverManagerFactory
 from pyomo.environ import *
 from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
 
-from temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_config import TemoaConfig
 
 import errno, warnings
 import re as reg_exp
@@ -48,11 +48,11 @@ import sys, os, gc
 
 from pyomo.environ import DataPortal
 
-from pformat_results import pformat_results
+from temoa.temoa_model.pformat_results import pformat_results
 
 from collections import defaultdict
-from temoa_rules import TotalCost_rule, ActivityByTech_Constraint
-from temoa_mga import ActivityObj_rule, SlackedObjective_rule, PreviousAct_rule
+from temoa.temoa_model.temoa_rules import TotalCost_rule, ActivityByTech_Constraint
+from temoa.temoa_model.temoa_mga import ActivityObj_rule, SlackedObjective_rule, PreviousAct_rule
 import traceback
 
 signal(SIGINT, default_int_handler)
