@@ -38,6 +38,7 @@ import sys
 from IPython import embed as IP
 import io
 
+from definitions import PROJECT_ROOT
 
 def myopic_db_generator_solver(self):
     global db_path_org
@@ -426,7 +427,8 @@ def myopic_db_generator_solver(self):
 
         ifile.close()
         ofile.close()
-        os.system("python temoa_model/ --config=temoa_model/config_sample" + new_myopic_name)
+        executable_target = os.path.join(PROJECT_ROOT, 'main.py')  # temp fix to keep it all working....
+        os.system(f"python {executable_target} --config=temoa_model/config_sample"+new_myopic_name)
         # delete the temporary config file
         os.remove(new_config)
         if not self.options.KeepMyopicDBs:
