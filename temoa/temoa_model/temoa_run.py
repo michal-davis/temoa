@@ -33,8 +33,10 @@ from temoa.temoa_model.temoa_config import TemoaConfig
 
 import errno, warnings
 import re as reg_exp
-
-from argparse import Namespace
+import traceback
+from collections import defaultdict
+from logging import getLogger
+from os import path
 from os import sep
 
 from pyutilib.services import TempfileManager
@@ -78,6 +80,7 @@ This is followed all the way through to the first function_call of the UI where 
 as a StreamingHttpResponse().
 '''
 
+logger = getLogger(__name__)
 
 class TemoaSolver(object):
     def __init__(self, model, config_filename):
@@ -132,18 +135,13 @@ class TemoaSolver(object):
         else:
             self.optimizer = SolverFactory(self.options.solver)
 
-		if self.optimizer:
-			pass
-		elif self.options.solver != 'NONE':
-			SE.write( "\nWarning: Unable to initialize solver interface for '{}'\n\n"
-				.format( self.options.solver ))
-			if SE.isatty():
-				raise RuntimeError("unknown intent for this codeblock.  -JH ")
-				# TODO:  Not clear what the intent of the below lines are, but options is not defined.
-				#        probably a reference to self.options?  But intent is still unclear
-				# SE.write( "Please press enter to continue or Ctrl+C to quit." )
-				# if os.path.join('temoa_model','config_sample_myopic') not in options.file_location:
-				# 	raw_input()
+        if self.optimizer:
+            pass
+        elif self.options.solver != 'NONE':
+            SE.write("\nWarning: Unable to initialize solver interface for '{}'\n\n".format(self.options.solver))
+            if SE.isatty():
+                raise RuntimeError(
+                    "unknown intent for this codeblock.  -JH ")  # TODO:  Not clear what the intent of the below lines are, but options is not defined.  #        probably a reference to self.options?  But intent is still unclear  # SE.write( "Please press enter to continue or Ctrl+C to quit." )  # if os.path.join('temoa_model','config_sample_myopic') not in options.file_location:  # 	raw_input()
 
     '''
     This function is called when MGA option is specified.
@@ -159,13 +157,15 @@ class TemoaSolver(object):
         self.model.del_component('TotalCost')
         # Create concrete model
         temoaInstance1 = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
+        self.instance_hook = temoaInstance1  # hook for pytest reference
         for k in temoaInstance1.create_temoa_instance():
             # yield "<div>" + k + "</div>"
-            yield k
-        # yield " " * 1024
+            yield k  # yield " " * 1024
         # Now add back the objective function that we earlier removed; note that name
         # we choose here (FirstObj) will be copied to the output file.
         temoaInstance1.instance.FirstObj = Objective(rule=TotalCost_rule, sense=minimize)
+        # TODO:  The call below should not be necessary.  This was "old pyomo"
+        # ref:  (search for preproces) http://www.pyomo.org/blog
         temoaInstance1.instance.preprocess()
         temoaInstance1.instance.V_ActivityByTech = Var(temoaInstance1.instance.tech_all, domain=NonNegativeReals)
         temoaInstance1.instance.ActivityByTechConstraint = Constraint(temoaInstance1.instance.tech_all,
@@ -173,8 +173,7 @@ class TemoaSolver(object):
 
         for k in temoaInstance1.solve_temoa_instance():
             # yield "<div>" + k + "</div>"
-            yield k
-        # yield " " * 1024
+            yield k  # yield " " * 1024
 
         temoaInstance1.handle_files(log_name='Complete_OutputLog.log')
         # using value() converts the now-loaded results into a single number,
@@ -192,8 +191,7 @@ class TemoaSolver(object):
             temoaMGAInstance = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
             for k in temoaMGAInstance.create_temoa_instance():
                 # yield "<div>" + k + "</div>"
-                yield k
-            # yield " " * 1024
+                yield k  # yield " " * 1024
 
             try:
                 txt_file_mga = open(self.options.path_to_logs + os.sep + "Complete_OutputLog.log", "w")
@@ -213,20 +211,14 @@ class TemoaSolver(object):
             # Update second instance with the new MGA-specific objective function
             # and constraint.
             temoaMGAInstance.instance.SecondObj = Objective(
-                expr=ActivityObj_rule(temoaMGAInstance.instance, prev_activity_t),
-                noruleinit=True,
-                sense=minimize
-            )
-            temoaMGAInstance.instance.PreviousSlackedObjective = Constraint(
-                rule=None,
+                expr=ActivityObj_rule(temoaMGAInstance.instance, prev_activity_t), noruleinit=True, sense=minimize)
+            temoaMGAInstance.instance.PreviousSlackedObjective = Constraint(rule=None,
                 expr=SlackedObjective_rule(temoaMGAInstance.instance, Perfect_Foresight_Obj, self.options.mga),
-                noruleinit=True
-            )
+                noruleinit=True)
             temoaMGAInstance.instance.preprocess()
             for k in temoaMGAInstance.solve_temoa_instance():
                 # yield "<div>" + k + "</div>"
-                yield k
-            # yield " " * 1024
+                yield k  # yield " " * 1024
             temoaMGAInstance.handle_files(log_name='Complete_OutputLog.log')
             # Update MGA objective function weights for use in the next iteration
             prev_activity_t = PreviousAct_rule(temoaMGAInstance.instance, self.options.mga_weight, prev_activity_t)
@@ -238,23 +230,22 @@ class TemoaSolver(object):
     def solveWithoutMGA(self):
 
         temoaInstance1 = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
+        self.instance_hook = temoaInstance1  # hook for pytest reference
 
         if hasattr(self.options, 'myopic') and self.options.myopic:
 
             print('This run is myopic ...')
-            from temoa_myopic import myopic_db_generator_solver
+            from temoa.temoa_model.temoa_myopic import myopic_db_generator_solver
             myopic_db_generator_solver(self)
 
         else:
 
             for k in temoaInstance1.create_temoa_instance():
                 # yield "<div>" + k + "</div>"
-                yield k
-            # yield " " * 1024
+                yield k  # yield " " * 1024
             for k in temoaInstance1.solve_temoa_instance():
                 # yield "<div>" + k + "</div>"
-                yield k
-            # yield " " * 1024
+                yield k  # yield " " * 1024
             temoaInstance1.handle_files(log_name='Complete_OutputLog.log')
 
     '''
@@ -279,13 +270,11 @@ class TemoaSolver(object):
             if hasattr(self.options, 'mga') and self.options.mga:
                 for k in self.solveWithMGA():
                     # yield "<div>" + k + "</div>"
-                    yield k
-            # yield " " * 1024
+                    yield k  # yield " " * 1024
             else:  # User requested a single run
                 for k in self.solveWithoutMGA():
                     # yield "<div>" + k + "</div>"
-                    yield k
-        # yield " " * 1024
+                    yield k  # yield " " * 1024
 
         except KeyboardInterrupt as e:
             self.txt_file.close()
@@ -317,6 +306,8 @@ class TemoaSolver(object):
 This class is for creating one temoa solver instance. It is used by TemoaSolver.
 (Multiple instances are created for MGA/non-MGA options).
 '''
+
+
 class TemoaSolverInstance(object):
     def __init__(self, model, optimizer, options, txt_file):
         self.model = model
@@ -346,7 +337,9 @@ class TemoaSolverInstance(object):
             for fname in self.options.dot_dat:
                 if fname[-4:] != '.dat':
                     msg = "InputError: expecting a dot dat (e.g., data.dat) file, found '{}'\n"
-                    raise Exception(msg.format(fname))
+                    f_msg = msg.format(fname)
+                    logger.error(f_msg)
+                    raise Exception(f_msg)
                 modeldata.load(filename=fname)
             yield '\t\t\t\t\t[%8.2f]\n' % duration()
             SE.write('\r[%8.2f]\n' % duration())
@@ -365,6 +358,15 @@ class TemoaSolverInstance(object):
             yield '\t\t\t\t[%8.2f]\n' % duration()
             SE.write('\r[%8.2f]\n' % duration())
             self.txt_file.write('[%8.2f]\n' % duration())
+
+            # gather some stats...
+            c_count = 0
+            v_count = 0
+            for constraint in self.instance.component_objects(ctype=Constraint):
+                c_count += len(constraint)
+            for var in self.instance.component_objects(ctype=Var):
+                v_count += len(var)
+            logger.info("model built...  Variables: %d, Constraints: %d", v_count, c_count)
 
         except Exception as model_exc:
             yield "Exception found in create_temoa_instance\n"
@@ -430,6 +432,14 @@ class TemoaSolverInstance(object):
                 self.txt_file.write(formatted_results.getvalue())
                 if formatted_results.getvalue() == 'No solution found.':
                     SE.write(formatted_results.getvalue() + '\n')
+                # normal (non-MGA) run will have a TotalCost as the OBJ:
+                if hasattr(self.instance, 'TotalCost'):
+                    logger.info("objective value: %0.2f", value(self.instance.TotalCost))
+                # MGA runs should have either a FirstObj or SecondObj
+                if hasattr(self.instance, 'FirstObj'):
+                    logger.info("MGA First Obj value: %0.2f", value(self.instance.FirstObj))
+                elif hasattr(self.instance, 'SecondObj'):
+                    logger.info("MGA Second Obj value: %0.2f", value(self.instance.SecondObj))
             else:
                 yield '\r---------- Not solving: no available solver\n'
                 SE.write('\r---------- Not solving: no available solver\n')
@@ -534,36 +544,22 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.prog = path.basename(argv[0].strip('/'))
 
-    parser.add_argument('dot_dat',
-                        type=str,
-                        nargs='*',
+    parser.add_argument('dot_dat', type=str, nargs='*',
                         help='AMPL-format data file(s) with which to create a model instance. '
-                             'e.g. "data.dat"'
-                        )
+                             'e.g. "data.dat"')
 
     parser.add_argument('--path_to_logs',
                         help='Path to where debug logs will be generated by default. See folder debug_logs in data_files.',
-                        action='store',
-                        dest='path_to_logs',
-                        default=re.sub('temoa_model$', 'data_files', dirname(abspath(__file__))) + os.sep + "debug_logs"
-                        )
+                        action='store', dest='path_to_logs', default=re.sub('temoa_model$', 'data_files', dirname(
+            abspath(__file__))) + os.sep + "debug_logs")
 
-    parser.add_argument('--config',
-                        help='Path to file containing configuration information.',
-                        action='store',
-                        dest='config',
-                        default=None
-                        )
+    parser.add_argument('--config', help='Path to file containing configuration information.', action='store',
+                        dest='config', default=None)
 
-    parser.add_argument('--solver',
-                        help="Which backend solver to use.  See 'pyomo --help-solvers' for a list "
-                             'of solvers with which Pyomo can interface.  The list shown here is '
-                             'what Pyomo can currently find on this system.  [Default: {}]'
-                        .format(default_solver),
-                        action='store',
-                        choices=sorted(available_solvers),
-                        dest='solver',
-                        default=default_solver)
+    parser.add_argument('--solver', help="Which backend solver to use.  See 'pyomo --help-solvers' for a list "
+                                         'of solvers with which Pyomo can interface.  The list shown here is '
+                                         'what Pyomo can currently find on this system.  [Default: {}]'.format(
+        default_solver), action='store', choices=sorted(available_solvers), dest='solver', default=default_solver)
 
     options = parser.parse_args()
     options.neos = False
@@ -595,13 +591,13 @@ def parse_args():
     SE.write('Notice: Using the {} solver interface.\n'.format(s_choice))
     SE.flush()
 
-	SE.write("Continue Operation? [Press enter to continue or CTRL+C to abort]\n")
-	SE.flush()
-	try:  #make compatible with Python 2.7 or 3
-		if os.path.join('temoa_model', 'config_sample_myopic') not in options.file_location:
-			#
-			input() # Give the user a chance to confirm input
-	except:
-		input()
+    SE.write("Continue Operation? [Press enter to continue or CTRL+C to abort]\n")
+    SE.flush()
+    try:  # make compatible with Python 2.7 or 3
+        if os.path.join('temoa_model', 'config_sample_myopic') not in options.file_location:
+            #
+            input()  # Give the user a chance to confirm input
+    except:
+        input()
 
     return options, config_flag
