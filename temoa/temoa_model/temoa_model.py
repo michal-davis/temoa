@@ -51,8 +51,6 @@ logging.basicConfig(
 )
 
 
-
-
 def temoa_create_model(name="Temoa"):
     """\
     Returns an abstract instance of Temoa -- Abstract because it needs
@@ -682,4 +680,3 @@ def temoa_create_model(name="Temoa"):
     M.LinkedEmissionsTechConstraint = Constraint(
         M.LinkedEmissionsTechConstraint_rpsdtve, rule=LinkedEmissionsTech_Constraint)
     return M
-

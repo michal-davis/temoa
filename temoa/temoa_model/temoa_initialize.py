@@ -41,7 +41,9 @@ you are running a version compatible with Temoa.
 
     raise ImportError(msg)
 from logging import getLogger
+
 logger = getLogger(__name__)
+
 
 class TemoaModel(AbstractModel):
     def __init__(self, *args, **kwds):
@@ -327,14 +329,16 @@ def CreateLifetimes(M):
         # LLN._constructed = False
         for r, t, v in unspecified_loan_lives:
             LLN[r, t, v] = M.LifetimeLoanTech[(r, t)]
-        logger.debug("Created Loan Lives for %d processes without an explicit specification.", len(unspecified_loan_lives))
+        logger.debug("Created Loan Lives for %d processes without an explicit specification.",
+                     len(unspecified_loan_lives))
     # LLN._constructed = True
 
     if unspecified_tech_lives:
         # LPR._constructed = False
         for r, t, v in unspecified_tech_lives:
             LPR[r, t, v] = M.LifetimeTech[(r, t)]
-        logger.debug("Created Lifetime for %d processes without an explicit specification.", len(unspecified_tech_lives))
+        logger.debug("Created Lifetime for %d processes without an explicit specification.",
+                     len(unspecified_tech_lives))
     # LPR._constructed = True
 
 
@@ -639,7 +643,7 @@ def CreateSparseDicts(M):
             if (r, p, i, t) in M.TechInputSplit.sparse_iterkeys() and (r, p, i, t) not in M.inputsplitVintages:
                 M.inputsplitVintages[r, p, i, t] = set()
             if (r, p, i, t) in M.TechInputSplitAverage.sparse_iterkeys() and (
-            r, p, i, t) not in M.inputsplitaverageVintages:
+                    r, p, i, t) not in M.inputsplitaverageVintages:
                 M.inputsplitaverageVintages[r, p, i, t] = set()
             if (r, p, t, o) in M.TechOutputSplit.sparse_iterkeys() and (r, p, t, o) not in M.outputsplitVintages:
                 M.outputsplitVintages[r, p, t, o] = set()
@@ -961,7 +965,7 @@ def LinkedTechConstraintIndices(M):
                              (r, p, t) in M.processVintages.keys() for v in M.processVintages[r, p, t] if
                              (r, p, t, v) in M.activeActivity_rptv for s in M.time_season for d in M.time_of_day
 
-    )
+                             )
 
     return linkedtech_indices
 
@@ -971,7 +975,7 @@ def CapacityAnnualConstraintIndices(M):
 
                            for r, p, t, v in M.activeActivity_rptv if t in M.tech_annual
 
-    )
+                           )
 
     return capacity_indices
 
@@ -1099,7 +1103,7 @@ def StorageVariableIndices(M):
                   for r, p, t in M.storageVintages.keys() for s in M.time_season for d in M.time_of_day for v in
                   M.storageVintages[r, p, t]
 
-    )
+                  )
 
     return indices
 
