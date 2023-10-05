@@ -27,7 +27,6 @@ from temoa.temoa_model.temoa_initialize import *
 from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
 
 
-
 # ---------------------------------------------------------------
 # Define the derived variables used in the objective function
 # and constraints below.
@@ -1519,8 +1518,8 @@ we write this equation for all the time-slices defined in the database in each r
        \text{and} \forall r_i \in R
 
 """
-    if ((not M.tech_reserve) or
-            ((r, p) not in M.processReservePeriods.keys())):  # If reserve set empty or if r,p not in M.processReservePeriod.keys(), skip the constraint
+    if (not M.tech_reserve) or ((r,
+                                 p) not in M.processReservePeriods.keys()):  # If reserve set empty or if r,p not in M.processReservePeriod.keys(), skip the constraint
         return Constraint.Skip
 
     cap_avail = sum(

@@ -109,124 +109,126 @@ def db_2_dat(ifile, ofile, options):
                 print(str_row)
         f.write(';\n\n')
 
-        # [set or param, table_name, DAT fieldname, flag (if any), index (where to insert '#')
-        table_list = [
-            ['set',  'time_periods',              'time_exist',          'e',            0],
-            ['set',  'time_periods',              'time_future',         'f',            0],
-            ['set',  'time_season',               '',                    '',             0],
-            ['set',  'time_of_day',               '',                    '',             0],
-            ['set',  'regions',        	          '',                    '',             0],
-            ['set',  'tech_curtailment',          '',                    '',             0],
-            ['set',  'tech_flex',          		  '',                    '',             0],
-            ['set',  'tech_rps',          		  '',                    '',             1],
-            ['set',  'tech_reserve',              '',                    '',             0],
-            ['set',  'technologies',              'tech_resource',       'r',            0],
-            ['set',  'technologies',              'tech_production',    ['p','pb','ps'], 0],
-            ['set',  'technologies',              'tech_baseload',       'pb',           0],
-            ['set',  'technologies',              'tech_storage',  		 'ps',           0],
-            ['set',  'tech_ramping',              '',                    '',             0],
-            ['set',  'tech_exchange',             '',                    '',             0],
-            ['set',  'commodities',               'commodity_physical',  'p',            0],
-            ['set',  'commodities',               'commodity_emissions', 'e',            0],
-            ['set',  'commodities',               'commodity_demand',    'd',            0],
-            ['set',  'tech_groups',               '',                    '',             2],
-            ['set',  'tech_annual',               '',                    '',             0],
-            ['set',  'tech_variable',             '',                    '',             0],
-            ['set',  'tech_retirement',           '',                    '',             0],
-            ['set',  'groups',                    '',                    '',             0],
-            ['param','LinkedTechs',               '',                    '',             3],
-            ['param','SegFrac',                   '',                    '',             2],
-            ['param','DemandSpecificDistribution','',                    '',             4],
-            ['param','CapacityToActivity',        '',                    '',             2],
-            ['param','PlanningReserveMargin',     '',                    '',             1],
-            ['param','GlobalDiscountRate',        '',                    '',             0],
-            ['param','MyopicBaseyear',            '',                    '',             0],
-            ['param','DiscountRate',              '',                    '',             3],
-            ['param','EmissionActivity',          '',                    '',             6],
-            ['param','EmissionLimit',             '',                    '',             3],
-            ['param','Demand',                    '',                    '',             3],
-            ['param','TechOutputSplit',           '',                    '',             4],
-            ['param','TechInputSplit',            '',                    '',             4],
-            ['param','TechInputSplitAverage',     '',                    '',             4],
-            ['param','MinCapacity',               '',                    '',             3],
-            ['param','MaxCapacity',               '',                    '',             3],
-            ['param','MinNewCapacity',            '',                    '',             3],
-            ['param','MaxNewCapacity',            '',                    '',             3],
-            ['param','MaxActivity',               '',                    '',             3],
-            ['param','MinActivity',               '',                    '',             3],
-            ['param','RenewablePortfolioStandard','',                    '',             2],
-            ['param','MinAnnualCapacityFactor',   '',                    '',             4],
-            ['param','MaxAnnualCapacityFactor',   '',                    '',             4],
-            ['param','MinActivityGroup',          '',                    '',             3],
-            ['param','MaxActivityGroup',          '',                    '',             3],
-            ['param','MinCapacityGroup',          '',                    '',             3],
-            ['param','MaxCapacityGroup',          '',                    '',             3],
-            ['param','MinNewCapacityGroup',       '',                    '',             3],
-            ['param','MaxNewCapacityGroup',       '',                    '',             3],
-            ['param','MinActivityShare',          '',                    '',             4],
-            ['param','MaxActivityShare',          '',                    '',             4],
-            ['param','MinCapacityShare',          '',                    '',             4],
-            ['param','MaxCapacityShare',          '',                    '',             4],
-            ['param','MinNewCapacityShare',       '',                    '',             4],
-            ['param','MaxNewCapacityShare',       '',                    '',             4],
-            ['param','MaxResource',               '',                    '',             2],
-            ['param','GrowthRateMax',             '',                    '',             2],
-            ['param','GrowthRateSeed',            '',                    '',             2],
-            ['param','LifetimeTech',              '',                    '',             2],
-            ['param','LifetimeProcess',           '',                    '',             3],
-            ['param','LifetimeLoanTech',          '',                    '',             2],
-            ['param','CapacityFactorTech',        '',                    '',             4],
-            ['param','CapacityFactorProcess',     '',                    '',             5],
-            ['param','Efficiency',                '',                    '',             5],
-            ['param','ExistingCapacity',          '',                    '',             3],
-            ['param','CostInvest',                '',                    '',             3],
-            ['param','CostFixed',                 '',                    '',             4],
-            ['param','CostVariable',              '',                    '',             4],
-            ['param','CapacityCredit',            '',                    '',             4],
-            ['param','RampUp',                    '',                    '',             2],
-            ['param','RampDown',                  '',                    '',             2],
-            ['param','StorageInitFrac',           '',                    '',             3],
-            ['param','StorageDuration',           '',                    '',             2]]
+    #[set or param, table_name, DAT fieldname, flag (if any), index (where to insert '#')
+    table_list = [
+        ['set',  'time_periods',              'time_exist',          'e',            0],
+        ['set',  'time_periods',              'time_future',         'f',            0],
+        ['set',  'time_season',               '',                    '',             0],
+        ['set',  'time_of_day',               '',                    '',             0],
+        ['set',  'regions',        	          '',                    '',             0],
+        ['set',  'tech_curtailment',          '',                    '',             0],
+        ['set',  'tech_flex',          		  '',                    '',             0],
+        ['set',  'tech_rps',          		  '',                    '',             1],
+        ['set',  'tech_reserve',              '',                    '',             0],
+        ['set',  'technologies',              'tech_resource',       'r',            0],
+        ['set',  'technologies',              'tech_production',    ['p','pb','ps'], 0],
+        ['set',  'technologies',              'tech_baseload',       'pb',           0],
+        ['set',  'technologies',              'tech_storage',  		 'ps',           0],
+        ['set',  'tech_ramping',              '',                    '',             0],
+        ['set',  'tech_exchange',             '',                    '',             0],
+        ['set',  'commodities',               'commodity_physical',  'p',            0],
+        ['set',  'commodities',               'commodity_emissions', 'e',            0],
+        ['set',  'commodities',               'commodity_demand',    'd',            0],
+        ['set',  'tech_groups',               '',                    '',             2],
+        ['set',  'tech_annual',               '',                    '',             0],
+        ['set',  'tech_variable',             '',                    '',             0],
+        ['set',  'tech_retirement',           '',                    '',             0],
+        ['set',  'groups',                    '',                    '',             0],
+        ['param','LinkedTechs',               '',                    '',             3],
+        ['param','SegFrac',                   '',                    '',             2],
+        ['param','DemandSpecificDistribution','',                    '',             4],
+        ['param','CapacityToActivity',        '',                    '',             2],
+        ['param','PlanningReserveMargin',     '',                    '',             1],
+        ['param','GlobalDiscountRate',        '',                    '',             0],
+        ['param','MyopicBaseyear',            '',                    '',             0],
+        ['param','DiscountRate',              '',                    '',             3],
+        ['param','EmissionActivity',          '',                    '',             6],
+        ['param','EmissionLimit',             '',                    '',             3],
+        ['param','Demand',                    '',                    '',             3],
+        ['param','TechOutputSplit',           '',                    '',             4],
+        ['param','TechInputSplit',            '',                    '',             4],
+        ['param','TechInputSplitAverage',     '',                    '',             4],
+        ['param','MinCapacity',               '',                    '',             3],
+        ['param','MaxCapacity',               '',                    '',             3],
+        ['param','MinNewCapacity',            '',                    '',             3],
+        ['param','MaxNewCapacity',            '',                    '',             3],
+        ['param','MaxActivity',               '',                    '',             3],
+        ['param','MinActivity',               '',                    '',             3],
+        ['param','RenewablePortfolioStandard','',                    '',             2],
+        ['param','MinAnnualCapacityFactor',   '',                    '',             4],
+        ['param','MaxAnnualCapacityFactor',   '',                    '',             4],
+        ['param','MinActivityGroup',          '',                    '',             3],
+        ['param','MaxActivityGroup',          '',                    '',             3],
+        ['param','MinCapacityGroup',          '',                    '',             3],
+        ['param','MaxCapacityGroup',          '',                    '',             3],
+        ['param','MinNewCapacityGroup',       '',                    '',             3],
+        ['param','MaxNewCapacityGroup',       '',                    '',             3],
+        ['param','MinActivityShare',          '',                    '',             4],
+        ['param','MaxActivityShare',          '',                    '',             4],
+        ['param','MinCapacityShare',          '',                    '',             4],
+        ['param','MaxCapacityShare',          '',                    '',             4],
+        ['param','MinNewCapacityShare',       '',                    '',             4],
+        ['param','MaxNewCapacityShare',       '',                    '',             4],
+        ['param','MaxResource',               '',                    '',             2],
+        ['param','GrowthRateMax',             '',                    '',             2],
+        ['param','GrowthRateSeed',            '',                    '',             2],
+        ['param','LifetimeTech',              '',                    '',             2],
+        ['param','LifetimeProcess',           '',                    '',             3],
+        ['param','LifetimeLoanTech',          '',                    '',             2],
+        ['param','CapacityFactorTech',        '',                    '',             4],
+        ['param','CapacityFactorProcess',     '',                    '',             5],
+        ['param','Efficiency',                '',                    '',             5],
+        ['param','ExistingCapacity',          '',                    '',             3],
+        ['param','CostInvest',                '',                    '',             3],
+        ['param','CostFixed',                 '',                    '',             4],
+        ['param','CostVariable',              '',                    '',             4],
+        ['param','CapacityCredit',            '',                    '',             4],
+        ['param','RampUp',                    '',                    '',             2],
+        ['param','RampDown',                  '',                    '',             2],
+        ['param','StorageInitFrac',           '',                    '',             3],
+        ['param','StorageDuration',           '',                    '',             2]]
 
-        with open(ofile, 'w') as f:
-            f.write('data ;\n\n')
-            #connect to the database
-            con = sqlite3.connect(ifile, isolation_level=None)
-            cur = con.cursor()   # a database cursor is a control structure that enables traversal over the records in a database
-            con.text_factory = str #this ensures data is explored with the correct UTF-8 encoding
+    with open(ofile, 'w') as f:
+        f.write('data ;\n\n')
+        # connect to the database
+        con = sqlite3.connect(ifile, isolation_level=None)
+        cur = con.cursor()  # a database cursor is a control structure that enables traversal over the records in a database
+        con.text_factory = str  # this ensures data is explored with the correct UTF-8 encoding
 
-            # Return the full list of existing tables.
-            table_exist = cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-            table_exist = [i[0] for i in table_exist]
+        # Return the full list of existing tables.
+        table_exist = cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        table_exist = [i[0] for i in table_exist]
 
-            for table in table_list:
-                if table[1] in table_exist:
-                    query_table(table, f)
-            if options.mga_weight == 'integer':
-                write_tech_mga(f)
-            if options.mga_weight == 'normalized':
-                write_tech_sector(f)
+        for table in table_list:
+            if table[1] in table_exist:
+                query_table(table, f)
+        if options.mga_weight == 'integer':
+            write_tech_mga(f)
+        if options.mga_weight == 'normalized':
+            write_tech_sector(f)
 
-            # Making sure the database is empty from the begining for a myopic solve
-            if options.myopic:
-                cur.execute("DELETE FROM Output_CapacityByPeriodAndTech WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_Emissions WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_Costs WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_Objective WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_VFlow_In WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_VFlow_Out WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_V_Capacity WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_V_NewCapacity WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_V_RetiredCapacity WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_Curtailment WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("DELETE FROM Output_Duals WHERE scenario="+"'"+str(options.scenario)+"'")
-                cur.execute("VACUUM")
-                con.commit()
+        # Making sure the database is empty from the begining for a myopic solve
+        if options.myopic:
+            cur.execute(
+                "DELETE FROM Output_CapacityByPeriodAndTech WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_Emissions WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_Costs WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_Objective WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_VFlow_In WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_VFlow_Out WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_V_Capacity WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_V_NewCapacity WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_V_RetiredCapacity WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_Curtailment WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("DELETE FROM Output_Duals WHERE scenario=" + "'" + str(options.scenario) + "'")
+            cur.execute("VACUUM")
+            con.commit()
 
-            cur.close()
-            con.close()
+        cur.close()
+        con.close()
 
-class TemoaConfig( object ):
+
+class TemoaConfig(object):
     states = (
         ('mga', 'exclusive'),
     )
@@ -253,7 +255,7 @@ class TemoaConfig( object ):
         'mgaweight'
     )
 
-    t_ANY_ignore  = '[ \t]'
+    t_ANY_ignore = '[ \t]'
 
     def __init__(self, **kwargs):
         # Make compatible with Python 2.7 and 3
@@ -291,11 +293,11 @@ class TemoaConfig( object ):
         self.graph_type       = 'separate_vintages'
         self.use_splines      = False
 
-		#Introduced during UI Development
-		self.path_to_data     = os.path.join(PROJECT_ROOT, 'data_files') #re.sub('temoa_model$', 'data_files', dirname(abspath(__file__)))# Path to where automated excel and text log folder will be save as output.
-		self.path_to_logs     = os.path.join(PROJECT_ROOT, 'output_files', 'debug_logs')  #self.path_to_data+sep+"debug_logs" #Path to where debug logs will be generated for each run. By default in debug_logs folder in db_io.
-		self.path_to_lp_files = None
-		self.abort_temoa	  = False
+        #Introduced during UI Development
+        self.path_to_data     = os.path.join(PROJECT_ROOT, 'data_files') #re.sub('temoa_model$', 'data_files', dirname(abspath(__file__)))# Path to where automated excel and text log folder will be save as output.
+        self.path_to_logs     = os.path.join(PROJECT_ROOT, 'output_files', 'debug_logs')  #self.path_to_data+sep+"debug_logs" #Path to where debug logs will be generated for each run. By default in debug_logs folder in db_io.
+        self.path_to_lp_files = None
+        self.abort_temoa	  = False
 
         if 'd_solver' in kwargs.keys():
             self.solver = kwargs['d_solver']
@@ -515,7 +517,7 @@ class TemoaConfig( object ):
             for i in range(self.mga_iter):
                 self.__mga_todo.put(self.scenario + '_mga_' + str(i))
 
-        f = open(os.devnull, 'w')
+        f = open(os.devnull, 'w');
         sys.stdout = f  # Suppress the original DB_to_DAT.py output
 
         counter = 0
