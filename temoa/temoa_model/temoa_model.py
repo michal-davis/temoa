@@ -33,7 +33,7 @@ def temoa_create_model(name="Temoa"):
     Returns an abstract instance of Temoa -- Abstract because it needs
     to be populated with a "dot dat" file in order to create a specific model
     instantiation.
-  """
+    """
     M = TemoaModel(name)
 
     # ---------------------------------------------------------------
@@ -62,7 +62,7 @@ def temoa_create_model(name="Temoa"):
     # exhanges plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
     M.RegionalIndices = Set(initialize=CreateRegionalIndices)
     M.RegionalGlobalIndices = Set(initialize=RegionalGlobalInitializedIndices)
-    
+
     # Define technology-related sets
     M.tech_resource = Set()
     M.tech_production = Set()
@@ -74,14 +74,15 @@ def temoa_create_model(name="Temoa"):
     M.tech_capacity_min = Set(within=M.tech_all)
     M.tech_capacity_max = Set(within=M.tech_all)
     M.tech_curtailment = Set(within=M.tech_all)
-    M.tech_rps = Set(within=M.regions*M.tech_all)
+    M.tech_rps = Set(within=M.regions * M.tech_all)
     M.tech_flex = Set(within=M.tech_all)
     M.tech_exchange = Set(within=M.tech_all)
-    M.groups = Set(dimen=1) # Define groups for technologies
+    M.groups = Set(dimen=1)  # Define groups for technologies
     M.tech_groups = Set(within=M.RegionalGlobalIndices * M.groups * M.tech_all)
-    M.tech_annual = Set(within=M.tech_all) # Define techs with constant output
-    M.tech_variable = Set(within=M.tech_all) # Define techs for use with TechInputSplitAverage constraint, where techs have variable annual output but the user wishes to constrain them annually
-    M.tech_retirement = Set(within=M.tech_all) # Define techs for which economic retirement is an option
+    M.tech_annual = Set(within=M.tech_all)  # Define techs with constant output
+    M.tech_variable = Set(
+        within=M.tech_all)  # Define techs for use with TechInputSplitAverage constraint, where techs have variable annual output but the user wishes to constrain them annually
+    M.tech_retirement = Set(within=M.tech_all)  # Define techs for which economic retirement is an option
 
     # Define commodity-related sets
     M.commodity_demand = Set()
@@ -199,7 +200,6 @@ def temoa_create_model(name="Temoa"):
     M.Loan_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
     M.LoanAnnualize = Param(M.Loan_rtv, initialize=ParamLoanAnnualize_rule)
 
-
     M.ModelProcessLife_rptv = Set(dimen=4, initialize=ModelProcessLifeIndices)
     M.ModelProcessLife = Param(
         M.ModelProcessLife_rptv, initialize=ParamModelProcessLife_rule
@@ -237,7 +237,8 @@ def temoa_create_model(name="Temoa"):
     M.MinCapShare_rptg = Set(dimen=4, initialize=MinCapShareIndices)
     M.MinCapacityShare = Param(M.MinCapShare_rptg)
     M.MaxCapacityShare = Param(M.MinCapShare_rptg)
-    M.MinActivityShare = Param(M.MinCapShare_rptg) # MinMaxActivityShare parameter has the same index as the MinCapacityShare
+    M.MinActivityShare = Param(
+        M.MinCapShare_rptg)  # MinMaxActivityShare parameter has the same index as the MinCapacityShare
     M.MaxActivityShare = Param(M.MinCapShare_rptg)
     M.MinNewCapacityShare = Param(M.MinCapShare_rptg)
     M.MaxNewCapacityShare = Param(M.MinCapShare_rptg)
@@ -410,7 +411,7 @@ def temoa_create_model(name="Temoa"):
         M.StorageConstraints_rpsdtv, rule=StorageThroughput_Constraint
     )
 
-    M.StorageInitConstraint_rtv = Set(dimen=2,initialize=StorageInitConstraintIndices)
+    M.StorageInitConstraint_rtv = Set(dimen=2, initialize=StorageInitConstraintIndices)
     M.StorageInitConstraint = Constraint(
         M.StorageInitConstraint_rtv, rule=StorageInit_Constraint
     )
