@@ -23,8 +23,16 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 # (e.g., 1/2 = 0 instead of 0.5)
 from __future__ import division
 
-from temoa.temoa_model.temoa_initialize import *
+from sys import stderr as SE
+from typing import TYPE_CHECKING
+
+from pyomo.core import Constraint
 from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
+
+from temoa.temoa_model.temoa_initialize import DemandConstraintErrorCheck, CommodityBalanceConstraintErrorCheck, \
+    CommodityBalanceConstraintErrorCheckAnnual
+if TYPE_CHECKING:
+    from temoa.temoa_model.temoa_model import TemoaModel
 
 
 # ---------------------------------------------------------------
@@ -32,7 +40,7 @@ from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away a
 # and constraints below.
 # ---------------------------------------------------------------
 
-def AdjustedCapacity_Constraint(M, r, p, t, v):
+def AdjustedCapacity_Constraint(M: 'TemoaModel',   r, p, t, v):
     r"""
 This constraint updates the capacity of a process by taking into account retirements.
 For a given :code:`(r,p,t,v)` index, this constraint sets the capacity equal to
@@ -53,7 +61,7 @@ that occured up until the period in question, :code:`p`.
             return M.V_Capacity[r, p, t, v] == M.V_NewCapacity[r, t, v] - retired_cap
 
 
-def Capacity_Constraint(M, r, p, s, d, t, v):
+def Capacity_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 This constraint ensures that the capacity of a given process is sufficient
 to support its activity across all time periods and time slices. The calculation
@@ -116,7 +124,7 @@ possibility.
             * M.V_Capacity[r, p, t, v] >= useful_activity
 
 
-def CapacityAnnual_Constraint(M, r, p, t, v):
+def CapacityAnnual_Constraint(M: 'TemoaModel',   r, p, t, v):
     r"""
 Similar to Capacity_Constraint, but for technologies belonging to the
 :code:`tech_annual`  set. Technologies in the tech_annual set have constant output
@@ -156,7 +164,7 @@ capacity.
         * M.V_Capacity[r, p, t, v] >= activity_rptv
 
 
-def ActivityByTech_Constraint(M, t):
+def ActivityByTech_Constraint(M: 'TemoaModel',   t):
     r"""
 This constraint is utilized by the MGA objective function and defines
 the total activity of a technology over the planning horizon. The first version
@@ -200,7 +208,7 @@ in the :code:`tech_annual` set.
     return expr
 
 
-def CapacityAvailableByPeriodAndTech_Constraint(M, r, p, t):
+def CapacityAvailableByPeriodAndTech_Constraint(M: 'TemoaModel',   r, p, t):
     r"""
 
 The :math:`\textbf{CAPAVL}` variable is nominally for reporting solution values,
@@ -231,7 +239,7 @@ throughout the period.
     return expr
 
 
-def RetiredCapacity_Constraint(M, r, p, t, v):
+def RetiredCapacity_Constraint(M: 'TemoaModel',   r, p, t, v):
     r"""
 
 Temoa allows for the economic retirement of technologies presented in the
@@ -335,7 +343,7 @@ loan rates and periods.
     return sum(PeriodCost_rule(M, p) for p in M.time_optimize)
 
 
-def PeriodCost_rule(M, p):
+def PeriodCost_rule(M: 'TemoaModel',   p):
     P_0 = min(M.time_optimize)
     P_e = M.time_future.last()  # End point of modeled horizon
     GDR = value(M.GlobalDiscountRate)
@@ -427,7 +435,7 @@ def PeriodCost_rule(M, p):
 # ---------------------------------------------------------------
 
 
-def Demand_Constraint(M, r, p, s, d, dem):
+def Demand_Constraint(M: 'TemoaModel',   r, p, s, d, dem):
     r"""
 
 The Demand constraint drives the model.  This constraint ensures that supply at
@@ -471,7 +479,7 @@ could satisfy both an end-use and internal system demand, then the output from
     return expr
 
 
-def DemandActivity_Constraint(M, r, p, s, d, t, v, dem, s_0, d_0):
+def DemandActivity_Constraint(M: 'TemoaModel',   r, p, s, d, t, v, dem, s_0, d_0):
     r"""
 
 For end-use demands, it is unreasonable to let the model arbitrarily shift the
@@ -514,7 +522,7 @@ and not  :math:`\textbf{FOA}`
     return expr
 
 
-def CommodityBalance_Constraint(M, r, p, s, d, c):
+def CommodityBalance_Constraint(M: 'TemoaModel',   r, p, s, d, c):
     r"""
 Where the Demand constraint :eq:`Demand` ensures that end-use demands are met,
 the CommodityBalance constraint ensures that the endogenous system demands are
@@ -663,7 +671,7 @@ reduces computational burden.
     return expr
 
 
-def CommodityBalanceAnnual_Constraint(M, r, p, c):
+def CommodityBalanceAnnual_Constraint(M: 'TemoaModel',   r, p, c):
     r"""
 Similar to the CommodityBalance_Constraint, but this version applies only
 to commodities produced at a constant annual rate. This version of the
@@ -752,7 +760,7 @@ While the commodity :math:`c` can only be produced by technologies in the
     return expr
 
 
-def ResourceExtraction_Constraint(M, reg, p, r):
+def ResourceExtraction_Constraint(M: 'TemoaModel',   reg, p, r):
     r"""
 The ResourceExtraction constraint allows a modeler to specify an annual limit on
 the amount of a particular resource Temoa may use in a period. The first version
@@ -788,7 +796,7 @@ belonging to the :code:`tech_annual` set.
     return expr
 
 
-def BaseloadDiurnal_Constraint(M, r, p, s, d, t, v):
+def BaseloadDiurnal_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 
 Some electric generators cannot ramp output over a short period of time (e.g.,
@@ -860,7 +868,7 @@ functionality is currently on the Temoa TODO list.
     return expr
 
 
-def RegionalExchangeCapacity_Constraint(M, r_e, r_i, p, t, v):
+def RegionalExchangeCapacity_Constraint(M: 'TemoaModel',   r_e, r_i, p, t, v):
     r"""
 
 This constraint ensures that the process (t,v) connecting regions
@@ -882,7 +890,7 @@ r_e and r_i is handled by one capacity variables.
     return expr
 
 
-def StorageEnergy_Constraint(M, r, p, s, d, t, v):
+def StorageEnergy_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 
 This constraint tracks the storage charge level (:math:`\textbf{SL}_{r, p, s, d, t, v}`)
@@ -988,7 +996,7 @@ All equations below are sparsely indexed such that:
     return expr
 
 
-def StorageEnergyUpperBound_Constraint(M, r, p, s, d, t, v):
+def StorageEnergyUpperBound_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 
 This constraint ensures that the amount of energy stored does not exceed
@@ -1029,7 +1037,7 @@ scale the storage duration to account for the number of days in each season.
     return expr
 
 
-def StorageChargeRate_Constraint(M, r, p, s, d, t, v):
+def StorageChargeRate_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 
 This constraint ensures that the charge rate of the storage unit is
@@ -1067,7 +1075,7 @@ limited by the power capacity (typically GW) of the storage unit.
     return expr
 
 
-def StorageDischargeRate_Constraint(M, r, p, s, d, t, v):
+def StorageDischargeRate_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 
 This constraint ensures that the discharge rate of the storage unit
@@ -1104,7 +1112,7 @@ is limited by the power capacity (typically GW) of the storage unit.
     return expr
 
 
-def StorageThroughput_Constraint(M, r, p, s, d, t, v):
+def StorageThroughput_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 
 It is not enough to only limit the charge and discharge rate separately. We also
@@ -1146,7 +1154,7 @@ the capacity (typically GW) of the storage unit.
     return expr
 
 
-def StorageInit_Constraint(M, r, t, v):
+def StorageInit_Constraint(M: 'TemoaModel',   r, t, v):
     r"""
 
 This constraint is used if the users wishes to force a specific initial storage charge level
@@ -1187,7 +1195,7 @@ capacity could lead to more expensive solutions.
     return expr
 
 
-def RampUpDay_Constraint(M, r, p, s, d, t, v):
+def RampUpDay_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     # M.time_of_day is a sorted set, and M.time_of_day.first() returns the first
     # element in the set, similarly, M.time_of_day.last() returns the last element.
     # M.time_of_day.prev(d) function will return the previous element before s, and
@@ -1260,7 +1268,7 @@ In the :code:`RampUpDay` and :code:`RampUpSeason` constraints, we assume
     return expr
 
 
-def RampDownDay_Constraint(M, r, p, s, d, t, v):
+def RampDownDay_Constraint(M: 'TemoaModel',   r, p, s, d, t, v):
     r"""
 
 Similar to the :code`RampUpDay` constraint, we use the :code:`RampDownDay`
@@ -1311,7 +1319,7 @@ constraint to limit ramp down rates between any two adjacent time slices.
     return expr
 
 
-def RampUpSeason_Constraint(M, r, p, s, t, v):
+def RampUpSeason_Constraint(M: 'TemoaModel',   r, p, s, t, v):
     r"""
 
 Note that :math:`d_1` and :math:`d_{nd}` represent the first and last time-of-day,
@@ -1365,7 +1373,7 @@ respectively.
     return expr
 
 
-def RampDownSeason_Constraint(M, r, p, s, t, v):
+def RampDownSeason_Constraint(M: 'TemoaModel',   r, p, s, t, v):
     r"""
 
 Similar to the :code:`RampUpSeason` constraint, we use the
@@ -1420,7 +1428,7 @@ between any two adjacent seasons.
     return expr
 
 
-def RampUpPeriod_Constraint(M, r, p, t, v):
+def RampUpPeriod_Constraint(M: 'TemoaModel',   r, p, t, v):
     # if p != M.time_future.first():
     # 	p_prev  = M.time_future.prev(p)
     # 	s_first = M.time_season.first()
@@ -1446,7 +1454,7 @@ def RampUpPeriod_Constraint(M, r, p, t, v):
     return Constraint.Skip  # We don't need inter-period ramp up/down constraint.
 
 
-def RampDownPeriod_Constraint(M, r, p, t, v):
+def RampDownPeriod_Constraint(M: 'TemoaModel',   r, p, t, v):
     # if p != M.time_future.first():
     # 	p_prev  = M.time_future.prev(p)
     # 	s_first = M.time_season.first()
@@ -1473,7 +1481,7 @@ def RampDownPeriod_Constraint(M, r, p, t, v):
     return Constraint.Skip  # We don't need inter-period ramp up/down constraint.
 
 
-def ReserveMargin_Constraint(M, r, p, s, d):
+def ReserveMargin_Constraint(M: 'TemoaModel',   r, p, s, d):
     r"""
 
 During each period :math:`p`, the sum of the available capacity of all reserve
@@ -1619,7 +1627,7 @@ we write this equation for all the time-slices defined in the database in each r
     return cap_avail >= cap_target
 
 
-def EmissionLimit_Constraint(M, r, p, e):
+def EmissionLimit_Constraint(M: 'TemoaModel',   r, p, e):
     r"""
 
 A modeler can track emissions through use of the :code:`commodity_emissions`
@@ -1730,7 +1738,7 @@ output in separate terms.
     return expr
 
 
-def GrowthRateConstraint_rule(M, p, r, t):
+def GrowthRateConstraint_rule(M: 'TemoaModel',   p, r, t):
     r"""
 
 This constraint sets an upper bound growth rate on technology-specific capacity.
@@ -1772,7 +1780,7 @@ horizon.
     return expr
 
 
-def MaxActivity_Constraint(M, r, p, t):
+def MaxActivity_Constraint(M: 'TemoaModel',   r, p, t):
     r"""
 
 The MaxActivity sets an upper bound on the activity from a specific technology.
@@ -1827,7 +1835,7 @@ set.
     return expr
 
 
-def MinActivity_Constraint(M, r, p, t):
+def MinActivity_Constraint(M: 'TemoaModel',   r, p, t):
     r"""
 
 The MinActivity sets a lower bound on the activity from a specific technology.
@@ -1882,7 +1890,7 @@ set.
     return expr
 
 
-def MinActivityGroup_Constraint(M, r, p, g):
+def MinActivityGroup_Constraint(M: 'TemoaModel',   r, p, g):
     r"""
 
 The MinActivityGroup constraint sets a minimum activity limit for a user-defined
@@ -1956,7 +1964,7 @@ refers to the :code:`MinActivityGroup` parameter.
     return expr
 
 
-def MaxActivityGroup_Constraint(M, r, p, g):
+def MaxActivityGroup_Constraint(M: 'TemoaModel',   r, p, g):
     r"""
 The MaxActivityGroup constraint sets a maximum activity limit for a user-defined
 technology group.
@@ -2027,7 +2035,7 @@ refers to the :code:`MaxActivityGroup` parameter.
     return expr
 
 
-def MaxNewCapacity_Constraint(M, r, p, t):
+def MaxNewCapacity_Constraint(M: 'TemoaModel',   r, p, t):
     r"""
 The MaxNewCapacity constraint sets a limit on the maximum newly installed capacity of a
 given technology in a given year. Note that the indices for these constraints are region,
@@ -2041,7 +2049,7 @@ period and tech.
     return expr
 
 
-def MaxCapacity_Constraint(M, r, p, t):
+def MaxCapacity_Constraint(M: 'TemoaModel',   r, p, t):
     r"""
 
 The MaxCapacity constraint sets a limit on the maximum available capacity of a
@@ -2060,7 +2068,7 @@ tech, not tech and vintage.
     return expr
 
 
-def MaxResource_Constraint(M, r, t):
+def MaxResource_Constraint(M: 'TemoaModel',   r, t):
     r"""
 
 The MaxResource constraint sets a limit on the maximum available resource of a
@@ -2100,7 +2108,7 @@ constraints are region and tech.
     return expr
 
 
-def MaxCapacityGroup_Constraint(M, r, p, g):
+def MaxCapacityGroup_Constraint(M: 'TemoaModel',   r, p, g):
     r"""
 Similar to the :code:`MaxCapacity` constraint, but works on a group of technologies.
 
@@ -2132,7 +2140,7 @@ Similar to the :code:`MaxCapacity` constraint, but works on a group of technolog
     return expr
 
 
-def MinNewCapacity_Constraint(M, r, p, t):
+def MinNewCapacity_Constraint(M: 'TemoaModel',   r, p, t):
     r"""
 The MinNewCapacity constraint sets a limit on the minimum newly installed capacity of a
 given technology in a given year. Note that the indices for these constraints are region,
@@ -2146,7 +2154,7 @@ period, and tech.
     return expr
 
 
-def MinCapacity_Constraint(M, r, p, t):
+def MinCapacity_Constraint(M: 'TemoaModel',   r, p, t):
     r"""
 
 The MinCapacity constraint sets a limit on the minimum available capacity of a
@@ -2165,7 +2173,7 @@ tech, not tech and vintage.
     return expr
 
 
-def MinCapacityGroup_Constraint(M, r, p, g):
+def MinCapacityGroup_Constraint(M: 'TemoaModel',   r, p, g):
     r"""
 Similar to the :code:`MinCapacity` constraint, but works on a group of technologies.
 
@@ -2197,7 +2205,7 @@ Similar to the :code:`MinCapacity` constraint, but works on a group of technolog
     return expr
 
 
-def MinNewCapacityGroup_Constraint(M, r, p, g):
+def MinNewCapacityGroup_Constraint(M: 'TemoaModel',   r, p, g):
     r"""
 Similar to the :code:`MinNewCapacity` constraint, but works on a group of technologies.
 """
@@ -2211,7 +2219,7 @@ Similar to the :code:`MinNewCapacity` constraint, but works on a group of techno
     return expr
 
 
-def MaxNewCapacityGroup_Constraint(M, r, p, g):
+def MaxNewCapacityGroup_Constraint(M: 'TemoaModel',   r, p, g):
     r"""
 Similar to the :code:`MinNewCapacity` constraint, but works on a group of technologies.
 """
@@ -2225,7 +2233,7 @@ Similar to the :code:`MinNewCapacity` constraint, but works on a group of techno
     return expr
 
 
-def MinActivityShare_Constraint(M, r, p, t, g):
+def MinActivityShare_Constraint(M: 'TemoaModel',   r, p, t, g):
     r"""
 The MinActivityShare constraint sets a minimum capacity share for a given
 technology within a technology groups to which it belongs.
@@ -2286,7 +2294,7 @@ that no less than 10% of LDVs must be of a certain type.
     return expr
 
 
-def MaxActivityShare_Constraint(M, r, p, t, g):
+def MaxActivityShare_Constraint(M: 'TemoaModel',   r, p, t, g):
     r"""
 The MaxActivityShare constraint sets a maximum Activity share for a given
 technology within a technology groups to which it belongs.
@@ -2346,7 +2354,7 @@ that no more than 10% of LDVs must be of a certain type.
     return expr
 
 
-def MinCapacityShare_Constraint(M, r, p, t, g):
+def MinCapacityShare_Constraint(M: 'TemoaModel',   r, p, t, g):
     r"""
 The MinCapacityShare constraint sets a minimum capacity share for a given
 technology within a technology groups to which it belongs.
@@ -2367,7 +2375,7 @@ that no less than 10% of LDVs must be of a certain type.
     return expr
 
 
-def MaxCapacityShare_Constraint(M, r, p, t, g):
+def MaxCapacityShare_Constraint(M: 'TemoaModel',   r, p, t, g):
     r"""
 The MaxCapacityShare constraint sets a maximum capacity share for a given
 technology within a technology groups to which it belongs.
@@ -2388,7 +2396,7 @@ that no more than 10% of LDVs must be of a certain type.
     return expr
 
 
-def MinNewCapacityShare_Constraint(M, r, p, t, g):
+def MinNewCapacityShare_Constraint(M: 'TemoaModel',   r, p, t, g):
     r"""
 The MinNewCapacityShare constraint sets a minimum new capacity share for a given
 technology within a technology groups to which it belongs.
@@ -2409,7 +2417,7 @@ that no less than 10% of new LDV purchases in a given year must be of a certain 
     return expr
 
 
-def MaxNewCapacityShare_Constraint(M, r, p, t, g):
+def MaxNewCapacityShare_Constraint(M: 'TemoaModel',   r, p, t, g):
     r"""
 The MaxCapacityShare constraint sets a maximum new capacity share for a given
 technology within a technology groups to which it belongs.
@@ -2430,7 +2438,7 @@ that no more than 10% of LDV purchases in a given year must be of a certain type
     return expr
 
 
-def MinAnnualCapacityFactor_Constraint(M, r, p, t, o):
+def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel',   r, p, t, o):
     r"""
 The MinAnnualCapacityFactor sets a lower bound on the annual capacity factor
 from a specific technology. The first portion of the constraint pertains to
@@ -2476,7 +2484,7 @@ pertains to technologies with constant annual output belonging to the
     return expr
 
 
-def MaxAnnualCapacityFactor_Constraint(M, r, p, t, o):
+def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel',   r, p, t, o):
     r"""
 The MaxAnnualCapacityFactor sets an upper bound on the annual capacity factor
 from a specific technology. The first portion of the constraint pertains to
@@ -2522,7 +2530,7 @@ pertains to technologies with constant annual output belonging to the
     return expr
 
 
-def TechInputSplit_Constraint(M, r, p, s, d, i, t, v):
+def TechInputSplit_Constraint(M: 'TemoaModel',   r, p, s, d, i, t, v):
     r"""
 Allows users to specify fixed or minimum shares of commodity inputs to a process
 producing a single output. These shares can vary by model time period. See
@@ -2545,7 +2553,7 @@ NOT in the :code:`tech_annual` set) are considered.
     return expr
 
 
-def TechInputSplitAnnual_Constraint(M, r, p, i, t, v):
+def TechInputSplitAnnual_Constraint(M: 'TemoaModel',   r, p, i, t, v):
     r"""
 Allows users to specify fixed or minimum shares of commodity inputs to a process
 producing a single output. These shares can vary by model time period. See
@@ -2568,7 +2576,7 @@ of the :math:`tech_annual` set) are considered.
     return expr
 
 
-def TechInputSplitAverage_Constraint(M, r, p, i, t, v):
+def TechInputSplitAverage_Constraint(M: 'TemoaModel',   r, p, i, t, v):
     r"""
 Allows users to specify fixed or minimum shares of commodity inputs to a process
 producing a single output. Under this constraint, only the technologies with variable
@@ -2597,7 +2605,7 @@ the constraint only fixes the input shares over the course of a year.
     return expr
 
 
-def TechOutputSplit_Constraint(M, r, p, s, d, t, v, o):
+def TechOutputSplit_Constraint(M: 'TemoaModel',   r, p, s, d, t, v, o):
     r"""
 
 Some processes take a single input and make multiple outputs, and the user would like to
@@ -2648,7 +2656,7 @@ The constraint is formulated as follows:
     return expr
 
 
-def TechOutputSplitAnnual_Constraint(M, r, p, t, v, o):
+def TechOutputSplitAnnual_Constraint(M: 'TemoaModel',   r, p, t, v, o):
     r"""
 This constraint operates similarly to TechOutputSplit_Constraint.
 However, under this function, only the technologies with constant annual
@@ -2680,7 +2688,7 @@ output (i.e., members of the :math:`tech_annual` set) are considered.
     return expr
 
 
-def RenewablePortfolioStandard_Constraint(M, r, p):
+def RenewablePortfolioStandard_Constraint(M: 'TemoaModel',   r, p):
     r"""
 Allows users to specify the share of electricity generation in a region
 coming from RPS-eligible technologies. 
@@ -2712,14 +2720,14 @@ coming from RPS-eligible technologies.
 # ---------------------------------------------------------------
 # Define rule-based parameters
 # ---------------------------------------------------------------
-def ParamModelProcessLife_rule(M, r, p, t, v):
+def ParamModelProcessLife_rule(M: 'TemoaModel',   r, p, t, v):
     life_length = value(M.LifetimeProcess[r, t, v])
     tpl = min(v + life_length - p, value(M.PeriodLength[p]))
 
     return tpl
 
 
-def ParamPeriodLength(M, p):
+def ParamPeriodLength(M: 'TemoaModel',   p):
     # This specifically does not use time_optimize because this function is
     # called /over/ time_optimize.
     periods = sorted(M.time_future)
@@ -2733,7 +2741,7 @@ def ParamPeriodLength(M, p):
     return length
 
 
-def ParamProcessLifeFraction_rule(M, r, p, t, v):
+def ParamProcessLifeFraction_rule(M: 'TemoaModel',   r, p, t, v):
     """\
 
 Calculate the fraction of period p that process :math:`<t, v>` operates.
@@ -2756,7 +2764,7 @@ create useful output.
     return frac
 
 
-def ParamLoanAnnualize_rule(M, r, t, v):
+def ParamLoanAnnualize_rule(M: 'TemoaModel',   r, t, v):
     dr = value(M.DiscountRate[r, t, v])
     lln = value(M.LifetimeLoanProcess[r, t, v])
     if not dr:
@@ -2766,11 +2774,11 @@ def ParamLoanAnnualize_rule(M, r, t, v):
     return annualized_rate
 
 
-def SegFracPerSeason_rule(M, s):
+def SegFracPerSeason_rule(M: 'TemoaModel',   s):
     return sum(M.SegFrac[s, S_d] for S_d in M.time_of_day)
 
 
-def LinkedEmissionsTech_Constraint(M, r, p, s, d, t, v, e):
+def LinkedEmissionsTech_Constraint(M: 'TemoaModel',   r, p, s, d, t, v, e):
     r"""
 This constraint is necessary for carbon capture technologies that produce
 CO2 as an emissions commodity, but the CO2 also serves as a physical

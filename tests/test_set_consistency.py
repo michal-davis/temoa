@@ -17,7 +17,7 @@ import pathlib
 from pyomo import environ as pyo
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_model import TemoaModel, temoa_create_model
+from temoa.temoa_model.temoa_model import TemoaModel, TemoaModel
 from temoa.temoa_model.temoa_run import TemoaSolver
 
 
@@ -26,7 +26,7 @@ def test_upoptia_set_consistency():
     test the set membership of the utopia model against cached values to ensure consistency
     """
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_utopia')
-    model = temoa_create_model()  # TODO: TemoaModel()
+    model = TemoaModel()  # TODO: TemoaModel()
     temoa_solver = TemoaSolver(model=model, config_filename=config_file)
     for _ in temoa_solver.createAndSolve():
         pass
@@ -55,7 +55,7 @@ def test_test_system_set_consistency():
     """
     # this could be combined with the similar test for utopia to use the fixture at some time...
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_test_system')
-    model = temoa_create_model()  # TemoaModel()
+    model = TemoaModel()  # TemoaModel()
     temoa_solver = TemoaSolver(model=model, config_filename=config_file)
     for _ in temoa_solver.createAndSolve():
         pass

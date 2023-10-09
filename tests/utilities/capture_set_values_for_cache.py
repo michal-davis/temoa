@@ -14,7 +14,7 @@ from os import path
 import pyomo.environ as pyo
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_model import TemoaModel, temoa_create_model
+from temoa.temoa_model.temoa_model import TemoaModel, TemoaModel
 from temoa.temoa_model.temoa_run import TemoaSolver
 
 print("WARNING:  Continuing to execute this file will update the cached values in the testing_data folder"
@@ -27,7 +27,7 @@ if t not in {'y', 'Y'}:
 output_file = path.join(PROJECT_ROOT, 'tests', 'testing_data', 'utopia_sets.json')
 config_file = path.join(PROJECT_ROOT, 'tests', 'utilities', 'config_utopia_for_utility')
 
-model = temoa_create_model('utility')
+model = TemoaModel('utility')
 temoa_solver = TemoaSolver(model=model, config_filename=config_file)
 # override the location of the .dat file in the config
 temoa_solver.options
@@ -46,7 +46,7 @@ with open(output_file, 'w') as f_out:
 output_file = path.join(PROJECT_ROOT, 'tests', 'testing_data', 'test_system_sets.json')
 config_file = path.join(PROJECT_ROOT, 'tests', 'utilities', 'config_test_system_for_utility')
 
-model = temoa_create_model('utility')
+model = TemoaModel('utility')
 temoa_solver = TemoaSolver(model=model, config_filename=config_file)
 # override the location of the .dat file in the config
 temoa_solver.options
