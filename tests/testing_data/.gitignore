@@ -1,0 +1,4 @@
+# ignore generated data structures here
+
+*.dat
+*.xlsx
