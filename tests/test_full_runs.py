@@ -13,7 +13,7 @@ from pyomo.core import Constraint, Var
 
 from definitions import PROJECT_ROOT
 # from src.temoa_model.temoa_model import temoa_create_model
-from temoa.temoa_model.temoa_model import temoa_create_model
+from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_run import TemoaSolver
 from tests.legacy_test_values import TestVals, test_vals
 
@@ -36,7 +36,7 @@ def system_test_run(request):
     filename = request.param
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)
     # make a TemoaSolver and pass it a model instance and the config file
-    model = temoa_create_model()  # TemoaModel()  <-- for after conversion
+    model = TemoaModel()  # TemoaModel()  <-- for after conversion
     temoa_solver = TemoaSolver(model, config_filename=config_file)
     for _ in temoa_solver.createAndSolve():
         pass
@@ -100,7 +100,7 @@ def test_myopic_utopia():
     if os.path.isfile(output_db):
         os.remove(output_db)
     shutil.copy(input_db, output_db)  # put a new copy in place, ones that are used before fail.
-    model = temoa_create_model()  # TODO: TemoaModel()
+    model = TemoaModel()  # TODO: TemoaModel()
     temoa_solver = TemoaSolver(model, config_filename=config_file)
     for _ in temoa_solver.createAndSolve():
         pass

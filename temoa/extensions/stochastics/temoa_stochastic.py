@@ -21,7 +21,7 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 from pyomo.core.kernel.numvalue import value
-from temoa_model import temoa_create_model
+from temoa_model import TemoaModel
 from temoa_rules import PeriodCost_rule
 from temoa_run import parse_args
 from pformat_results import pformat_results
@@ -194,7 +194,7 @@ def Objective_rule(M):
     return sum(M.StochasticPointCost[pp] for pp in M.time_optimize)
 
 
-M = model = temoa_create_model('TEMOA Stochastic')
+M = model = TemoaModel('TEMOA Stochastic')
 
 M.StochasticPointCost = Var(M.time_optimize, within=NonNegativeReals)
 M.StochasticPointCostConstraint = Constraint(M.time_optimize, rule=StochasticPointObjective_rule)

@@ -19,43 +19,30 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-from os import path, close as os_close
-from sys import argv, stderr as SE, stdout as SO
-from signal import signal, SIGINT, default_int_handler
-from shutil import copyfile, move
-
-from pyomo.opt import SolverFactory as SF
-from pyomo.opt import SolverManagerFactory
-from pyomo.environ import *
-from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
-
-from temoa.temoa_model.temoa_config import TemoaConfig
-
-import errno, warnings
+import os
 import re as reg_exp
 import traceback
 from collections import defaultdict
 from logging import getLogger
 from os import path
 from os import sep
-
-from pyutilib.services import TempfileManager
-from pyutilib.services import TempfileManager
-from pyutilib.common import ApplicationError
-
-from sys import version_info, exit
-
+from shutil import copyfile, move
+from signal import signal, SIGINT, default_int_handler
+from sys import argv, stderr as SE
+from sys import version_info
 from time import time
-import sys, os, gc
 
+from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
+from pyomo.environ import *
 from pyomo.environ import DataPortal
+from pyomo.opt import SolverFactory as SF
+from pyutilib.common import ApplicationError
+from pyutilib.services import TempfileManager
 
 from temoa.temoa_model.pformat_results import pformat_results
-
-from collections import defaultdict
-from temoa.temoa_model.temoa_rules import TotalCost_rule, ActivityByTech_Constraint
+from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mga import ActivityObj_rule, SlackedObjective_rule, PreviousAct_rule
-import traceback
+from temoa.temoa_model.temoa_rules import TotalCost_rule, ActivityByTech_Constraint
 
 signal(SIGINT, default_int_handler)
 
@@ -535,7 +522,7 @@ def get_solvers():
 
 def parse_args():
     """Parse arguments specfied from command line or in config file."""
-    import argparse, sys
+    import argparse
     import os, re
     from os.path import dirname, abspath
 
