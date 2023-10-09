@@ -9,6 +9,7 @@ import sqlite3
 
 import pyomo.environ as pyo
 import pytest
+from pyomo.core import Constraint, Var
 
 from definitions import PROJECT_ROOT
 # from src.temoa_model.temoa_model import temoa_create_model
@@ -64,6 +65,20 @@ def test_against_legacy_outputs(system_test_run):
     assert len(tuple(efficiency_param.sparse_iterkeys())) == expected_vals[
         TestVals.EFF_INDEX_SIZE], 'should match legacy numbers'
     assert len(efficiency_param._index) == expected_vals[TestVals.EFF_DOMAIN_SIZE], 'should match legacy numbers'
+
+    # inspect the total variable and constraint counts
+    # gather some stats...
+    c_count = 0
+    v_count = 0
+    for constraint in mdl.component_objects(ctype=Constraint):
+        c_count += len(constraint)
+    for var in mdl.component_objects(ctype=Var):
+        v_count += len(var)
+
+    # check the count of constraints & variables
+    assert c_count == expected_vals[TestVals.CONSTR_COUNT], 'should have this many constraints'
+    assert v_count == expected_vals[TestVals.VAR_COUNT],    'should have this many variables'
+
 
 
 @pytest.mark.skip('not ready yet...')
