@@ -1,2 +1,6 @@
 # ignore everything in the outputs
-*
+/*
+
+# except the .gitignore file in the subfolder, currently needed for output catching
+!/debug_logs/lp_files/README.txt
+

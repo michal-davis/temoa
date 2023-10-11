@@ -21,34 +21,8 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-import logging
-import os
-from datetime import datetime
-
-from pyomo.core import AbstractModel, BuildAction
-from pyomo.environ import Set, Var, Param
-
-from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.temoa_initialize import *
-
-# set the target folder for logging output from this run
-output_path = os.path.join(PROJECT_ROOT, "output_files", datetime.now().strftime("%Y-%m-%d %H%Mh"))
-if not os.path.exists(output_path):
-    os.mkdir(output_path)
-
-# set up logger
-logger = logging.getLogger(__name__)
-logging.getLogger("pyomo").setLevel(logging.INFO)
-logging.getLogger("matplotlib").setLevel(logging.WARNING)
-filename = "log.log"
-logging.basicConfig(
-    filename=os.path.join(output_path, filename),
-    filemode="w",
-    format="%(asctime)s | %(module)s | %(levelname)s | %(message)s",
-    datefmt="%d-%b-%y %H:%M:%S",
-    level=logging.DEBUG,  # <-- global change for project is here
-)
+from temoa.temoa_model.temoa_rules import *
 
 
 class TemoaModel(AbstractModel):
