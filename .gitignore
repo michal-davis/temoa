@@ -7,3 +7,6 @@ data_files/untracked_data/
 
 # ignore the .idea folder from pycharm -- a pycharm specific config folder
 .idea/*
+
+# ignore goings-on in the venv
+/venv/*
