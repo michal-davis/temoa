@@ -1,0 +1,47 @@
+# Requirements for core model functionality
+# python=3.7.3
+# tested using python 3.7.9.
+# There was some compatibility issue (see dev notes) about the introduction of keyword "asynch" about
+# this time and using 3.7.9 and pyomo 3.5.1 fixed it.  So if using this file to set up, fetch 3.7.9 from
+# python.org and use pip to install these requirements.  Other deltas are noted below.
+
+# to use pip to install (in a venv, if desired):
+# $: pip install -r requirements.txt
+
+pyomo==5.5.1
+#  pyomo.extras  <-- not avaialable on PyPi.  Does not appear to be used in project
+xlwt
+ipython
+matplotlib
+pandas
+numpy
+scipy
+joblib
+salib
+pydoe
+pyutilib==5.8
+# glpk  <-- Not in PyPi.  Should be installed separately
+# python-graphviz  <-- appears as graphviz in pypi (below)
+graphviz
+ipykernel
+jupyter
+jupyter_contrib_nbextensions
+seaborn
+tabulate
+xlsxwriter
+plotly
+pyam-iamc  # <-- different name on PyPi
+
+# Below required to update documentation
+sphinx
+# sphisphinx_rtd_theme <-- not available on PyPi
+sphinxcontrib-htmlhelp
+sphinxcontrib-serializinghtml
+# nxcontrib-bibtex <-- not available on pypi
+# cbc <-- solver should be installed separately, not available on PyPi
+
+# new requirements
+pytest
+
+
+
