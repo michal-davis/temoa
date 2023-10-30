@@ -581,7 +581,8 @@ def parse_args():
     SE.write("Continue Operation? [Press enter to continue or CTRL+C to abort]\n")
     SE.flush()
     try:  # make compatible with Python 2.7 or 3
-        if os.path.join('temoa_model', 'config_sample_myopic') not in options.file_location:
+        # TODO:  this remnant is a horrible hack that needs to be changed to inspect for myopic mode vs. name matching
+        if 'config_sample_myopic' not in options.file_location:
             #
             input()  # Give the user a chance to confirm input
     except:

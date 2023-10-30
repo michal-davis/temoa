@@ -8,19 +8,21 @@
 # Input File (Mandatory) 
 # Input can be a .sqlite or .dat file
 # Both relative path and absolute path are accepted
---input=testing_data/temoa_utopia.sqlite
+--input=testing_outputs/temoa_utopia_output_catcher.sqlite
 
 # Output File (Mandatory)
 # The output file must be a existing .sqlite file
---output=testing_data/temoa_utopia_output_catcher.sqlite
+--output=testing_outputs/temoa_utopia_output_catcher.sqlite
 
 # Scenario Name (Mandatory) 
 # This scenario name is used to store results within the output .sqlite file
---scenario=test_run
+--scenario=test_run_myopic
 
 # Path to folder containing input dataset (Mandatory)
 # This is the location where database files reside
---path_to_data=testing_data
+# TODO:  The use of the db in the "outputs" folder is a placeholder due to current functionality
+#        it should be changed to a "clean" source when code mods are done
+--path_to_data=testing_outputs
 
 # Solve Myopically (Optional)
 # Allows user to solve one model time period at a time, sequentially

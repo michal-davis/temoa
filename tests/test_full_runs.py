@@ -81,7 +81,6 @@ def test_against_legacy_outputs(system_test_run):
 
 
 
-@pytest.mark.skip('not ready yet...')
 def test_myopic_utopia():
     """
     test the myopic functionality on Utopia.  We need to copy the source db to make the output and then erase
@@ -93,14 +92,14 @@ def test_myopic_utopia():
 
     """
     eps = 1e-3
-    config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_utopia_myopic')
+    config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_sample')
     # config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_utopia_myopic')
     input_db = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_data', 'temoa_utopia.sqlite')
-    output_db = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_data', 'temoa_utopia_output_catcher.sqlite')
+    output_db = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_outputs', 'temoa_utopia_output_catcher.sqlite')
     if os.path.isfile(output_db):
         os.remove(output_db)
     shutil.copy(input_db, output_db)  # put a new copy in place, ones that are used before fail.
-    model = TemoaModel()  # TODO: TemoaModel()
+    model = TemoaModel()
     temoa_solver = TemoaSolver(model, config_filename=config_file)
     for _ in temoa_solver.createAndSolve():
         pass
