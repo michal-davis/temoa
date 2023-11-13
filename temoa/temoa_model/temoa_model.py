@@ -20,7 +20,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
-
+from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 
@@ -104,7 +104,7 @@ class TemoaModel(AbstractModel):
         M.tech_capacity_min = Set(within=M.tech_all)
         M.tech_capacity_max = Set(within=M.tech_all)
         M.tech_curtailment = Set(within=M.tech_all)
-        M.tech_rps = Set(within=M.regions * M.tech_all)
+        M.tech_rps = Set(within=M.regions * M.tech_all, doc='region-tech pairs for all technologies')
         M.tech_flex = Set(within=M.tech_all)
         M.tech_exchange = Set(within=M.tech_all)
         M.groups = Set(dimen=1)  # Define groups for technologies
@@ -223,6 +223,7 @@ class TemoaModel(AbstractModel):
         M.CostVariableVintageDefault = Param(M.CostVariableVintageDefault_rtv)
 
         M.initialize_Costs = BuildAction(rule=CreateCosts)
+        M.validate_pricing = BuildAction(rule=price_checker)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
