@@ -86,6 +86,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
     )
     if str(soln.Status) not in optimal_solutions:
         output.write('No solution found.')
+        # TODO:  We should stop the train here, log something and kill the program
         return output
 
     objs = list(m.component_data_objects(Objective))
@@ -494,6 +495,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
 
         ### Copy tables from Input File to DB file.
         # IF output file is empty database.
+        # TODO:  The syntax here is backwards.  is_db_empty is "false" if it is empty???!!!
         cur.execute("SELECT * FROM technologies")
         is_db_empty = False  # False for empty db file
         for elem in cur:

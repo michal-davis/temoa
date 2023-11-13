@@ -116,3 +116,5 @@ def test_myopic_utopia():
     assert abs(diesel_emissions_by_year[2000] - 2.4549) < eps
     assert abs(diesel_emissions_by_year[2010] - 5.4539) < eps
     os.remove(output_db)
+
+# TODO:  add additional tests for myopic that have retirement eligible things in them
