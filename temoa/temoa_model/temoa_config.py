@@ -318,6 +318,7 @@ class TemoaConfig(object):
         sys.stdout = f  # Suppress the original DB_to_DAT.py output
 
         counter = 0
+        # TODO:  Look at this counter and the dot_dat...  How could we have more than 1 file listed in self.dot_dat?
 
         for ifile in self.dot_dat:
             i_name, i_ext = splitext(ifile)

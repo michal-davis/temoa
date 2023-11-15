@@ -131,6 +131,7 @@ def validate_time(M: 'TemoaModel'):
     python invocation of Temoa throws an error (including a traceback)
     that has proven to be scary and/or impenetrable for the typical modeler.
     """
+    logger.debug('Started validating time index')
     for year in M.time_exist:
         if isinstance(year, int): continue
 
@@ -166,6 +167,7 @@ def validate_time(M: 'TemoaModel'):
                'time_exist max:   {}\ntime_future min: {}')
         logger.error(msg.format(max_exist, min_horizon))
         raise Exception(msg.format(max_exist, min_horizon))
+    logger.debug('Finished validating time')
 
 
 def validate_SegFrac(M: 'TemoaModel'):
@@ -261,7 +263,7 @@ def CreateCapacityFactors(M: 'TemoaModel'):
         # CFP._constructed = False
         for r, s, d, t, v in unspecified_cfs:
             CFP[r, s, d, t, v] = M.CapacityFactorTech[r, s, d, t]
-        logger.debug("Created Capacity Factors for %d unspecified processes.", len(unspecified_cfs))
+        logger.debug("Created Capacity Factors for %d processes without an explicit specification", len(unspecified_cfs))
     # CFP._constructed = True
 
 
@@ -296,7 +298,7 @@ def CreateLifetimes(M: 'TemoaModel'):
         # LLN._constructed = False
         for r, t, v in unspecified_loan_lives:
             LLN[r, t, v] = M.LifetimeLoanTech[(r, t)]
-        logger.debug("Created Loan Lives for %d processes without an explicit specification.",
+        logger.debug("Created Loan Lives for %d processes without an explicit specification",
                      len(unspecified_loan_lives))
     # LLN._constructed = True
 
@@ -304,7 +306,7 @@ def CreateLifetimes(M: 'TemoaModel'):
         # LPR._constructed = False
         for r, t, v in unspecified_tech_lives:
             LPR[r, t, v] = M.LifetimeTech[(r, t)]
-        logger.debug("Created Lifetime for %d processes without an explicit specification.",
+        logger.debug("Created Lifetime for %d processes without an explicit specification",
                      len(unspecified_tech_lives))
     # LPR._constructed = True
 
@@ -323,6 +325,7 @@ def CreateDemands(M: 'TemoaModel'):
     specify the distribution, or not.  No in-between.
      5. Validate that the per-demand distributions sum to 1.
     """
+    logger.debug('Started creating demand distributions in CreateDemands()')
 
     # Step 0: some setup for a couple of reusable items
 
@@ -422,7 +425,7 @@ def CreateDemands(M: 'TemoaModel'):
                    ' {}\n\n   {}\n\tsum = {}')
             logger.error(msg.format(dem, items, total))
             raise Exception(msg.format(dem, items, total))
-
+    logger.debug('Finished creating demand distributions')
 
 def CreateCosts(M: 'TemoaModel'):
     """
@@ -431,7 +434,7 @@ def CreateCosts(M: 'TemoaModel'):
     2. Find the ones _not_ specified in CostFixed and CostVariable
     3. Set them, based on Cost*VintageDefault
     """
-
+    logger.debug('Started Creating Fixed and Variable costs in CreateCosts()')
     # Shorter names, for us lazy programmer types
     CF = M.CostFixed
     CV = M.CostVariable
@@ -463,8 +466,9 @@ def CreateCosts(M: 'TemoaModel'):
             if (r, t, v) in M.CostVariableVintageDefault:
                 CV[r, p, t, v] = M.CostVariableVintageDefault[r, t, v]
     # CV._constructed = True
-    logger.debug('created M.CostFixed with size: %d', len(M.CostFixed))
-    logger.debug('created M.CostVariable with size: %d', len(M.CostVariable))
+    logger.debug('Created M.CostFixed with size: %d', len(M.CostFixed))
+    logger.debug('Created M.CostVariable with size: %d', len(M.CostVariable))
+    logger.debug('Finished creating Fixed and Variable costs')
 
 
 def init_set_time_optimize(M: 'TemoaModel'):
@@ -740,7 +744,7 @@ def CreateSparseDicts(M: 'TemoaModel'):
     M.activeCapacityAvailable_rptv = set((r, p, t, v)
 
                                          for r, p, t in M.processVintages.keys() for v in M.processVintages[r, p, t])
-
+    logger.debug('Completed creation of SparseDicts')
 
 # ---------------------------------------------------------------
 # Create sparse parameter indices.

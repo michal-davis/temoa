@@ -101,6 +101,7 @@ class TemoaSolver(object):
             available_solvers, default_solver = get_solvers()
             temoa_config = TemoaConfig(d_solver=default_solver)
             temoa_config.build(config=self.config_filename)
+            logger.info('Built a TemoaConfig for scenario %s', self.options.scenario)
             self.options = temoa_config
 
             self.temp_lp_dest = '/srv/thirdparty/temoa/data_files/'
@@ -327,7 +328,9 @@ class TemoaSolverInstance(object):
                     f_msg = msg.format(fname)
                     logger.error(f_msg)
                     raise Exception(f_msg)
+                logger.debug('Started loading the DataPortal from the .dat file')
                 modeldata.load(filename=fname)
+                logger.debug('Finished reading the .dat file')
             yield '\t\t\t\t\t[%8.2f]\n' % duration()
             SE.write('\r[%8.2f]\n' % duration())
             self.txt_file.write('[%8.2f]\n' % duration())
@@ -337,11 +340,14 @@ class TemoaSolverInstance(object):
             SE.flush()
             self.txt_file.write('Creating Temoa model instance.')
 
+            # TODO:  Look at this.  There is likely a better way to get the dual than using Suffix (?)
             self.model.dual = Suffix(direction=Suffix.IMPORT)
             # self.model.rc = Suffix(direction=Suffix.IMPORT)
             # self.model.slack = Suffix(direction=Suffix.IMPORT)
 
+            logger.info('Started creating model instance from data')
             self.instance = self.model.create_instance(modeldata)
+            logger.info('Finished creating model instance from data')
             yield '\t\t\t\t[%8.2f]\n' % duration()
             SE.write('\r[%8.2f]\n' % duration())
             self.txt_file.write('[%8.2f]\n' % duration())
@@ -375,6 +381,7 @@ class TemoaSolverInstance(object):
             SE.flush()
             self.txt_file.write('Solving.')
             if self.optimizer:
+                logger.info('Starting the solve process using %s solver', self.options.solver)
                 if self.options.neos:
                     self.result = self.optimizer.solve(self.instance, opt=self.options.solver)
                 else:
@@ -397,6 +404,8 @@ class TemoaSolverInstance(object):
                     self.result = self.optimizer.solve(self.instance, suffixes=['dual'],  # 'rc', 'slack'],
                                                        keepfiles=self.options.keepPyomoLP,
                                                        symbolic_solver_labels=self.options.keepPyomoLP)
+                    logger.info('Solve process complete')
+                    logger.debug('Solver results: \n %s', self.result)
                 yield '\t\t\t\t\t\t[%8.2f]\n' % duration()
                 SE.write('\r[%8.2f]\n' % duration())
                 self.txt_file.write('[%8.2f]\n' % duration())
@@ -421,12 +430,13 @@ class TemoaSolverInstance(object):
                     SE.write(formatted_results.getvalue() + '\n')
                 # normal (non-MGA) run will have a TotalCost as the OBJ:
                 if hasattr(self.instance, 'TotalCost'):
-                    logger.info("objective value: %0.2f", value(self.instance.TotalCost))
+                    logger.info("TotalCost value: %0.2f", value(self.instance.TotalCost))
                 # MGA runs should have either a FirstObj or SecondObj
                 if hasattr(self.instance, 'FirstObj'):
                     logger.info("MGA First Obj value: %0.2f", value(self.instance.FirstObj))
                 elif hasattr(self.instance, 'SecondObj'):
                     logger.info("MGA Second Obj value: %0.2f", value(self.instance.SecondObj))
+
             else:
                 yield '\r---------- Not solving: no available solver\n'
                 SE.write('\r---------- Not solving: no available solver\n')
@@ -584,7 +594,9 @@ def parse_args():
         # TODO:  this remnant is a horrible hack that needs to be changed to inspect for myopic mode vs. name matching
         if 'config_sample_myopic' not in options.file_location:
             #
-            input()  # Give the user a chance to confirm input
+            pass
+            # TODO: below confirmation is temp commented out to speed development
+            # input()  # Give the user a chance to confirm input
     except:
         input()
 

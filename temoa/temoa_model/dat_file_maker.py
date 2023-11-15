@@ -3,14 +3,19 @@ Utility to convert sqlite database file to a pyomo-friendly .dat file.
 
 The original contents below were originally located in the temoa_config file
 """
+import logging
+# Adapted from DB_to_DAT.py
+import sqlite3
+import sys
+import re
+import getopt
+from logging import getLogger
 
+logger = getLogger(__name__)
 
 def db_2_dat(ifile, ofile, options):
-    # Adapted from DB_to_DAT.py
-    import sqlite3
-    import sys
-    import re
-    import getopt
+
+    logger.debug('Starting creation of .dat file from database %s', ifile)
 
     def write_tech_mga(f):
         cur.execute("SELECT tech FROM technologies")
@@ -204,3 +209,5 @@ def db_2_dat(ifile, ofile, options):
 
         cur.close()
         con.close()
+
+    logger.debug('Finished creation of .dat file')
