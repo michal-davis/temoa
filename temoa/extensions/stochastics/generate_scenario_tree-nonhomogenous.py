@@ -29,11 +29,7 @@ from pprint import pformat
 from shutil import copy as copyfile, rmtree
 from textwrap import TextWrapper
 
-# Ensure compatibility with Python 2.7 and 3
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from io import StringIO
+from io import StringIO
 
 from pyomo.core.base.sets import _SetProduct, _SetContainer
 
@@ -632,7 +628,7 @@ def main ( ):
 if '__main__' == __name__:
 	try:
 		main()
-	except Exception, e:
+	except Exception as e:
 		if '--debug' in sys.argv:
 			raise
 
