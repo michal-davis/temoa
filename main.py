@@ -3,6 +3,7 @@ new entry point for running the model.
 """
 import logging
 import os
+import sys
 from datetime import datetime
 
 from definitions import PROJECT_ROOT
@@ -53,5 +54,7 @@ if __name__ == '__main__':
         datefmt="%d-%b-%y %H:%M:%S",
         level=logging.DEBUG,  # <-- global change for project is here
     )
+    logger.info('Starting Program')
+    logger.debug('Recieved Command Line Args: %s', sys.argv[1:])
 
     runModel()

@@ -124,6 +124,7 @@ def price_checker(M: 'TemoaModel'):
                 missing_techs[t].add((r, v))
         for t in missing_techs:
             compaprable_ic = sorted(filter(lambda x: x[1] == t, registered_inv_costs))
+            err = None
             if compaprable_ic:
                 err = f'check 1b:\ntech {t} has Investment Cost in some vintage/regions but not all\n'
                 err += '    missing (r, v):\n'
@@ -132,7 +133,8 @@ def price_checker(M: 'TemoaModel'):
                 err += '    available (r, v):\n'
                 for (r, tt, v) in compaprable_ic:
                     err += f'       ({r}, {v}): {M.CostInvest[r, tt, v]}\n'
-            logger.warning(err)
+            if err:
+                logger.warning(err)
 
     # Check 2:  inconsistent fixed/var costs.  Only check for techs that have ANY fixed cost that do not have ALL
     #           fixed costs that match ALL variable costs and vice-versa.  Else, we are going to get false

@@ -38,6 +38,8 @@ import subprocess
 import sys
 import pandas as pd
 
+from logging import getLogger
+
 from temoa.data_processing.DB_to_Excel import make_excel
 from temoa.temoa_model.temoa_config import TemoaConfig
 
@@ -48,6 +50,8 @@ except ImportError:
     from io import StringIO
 
 from pyomo.core.kernel.numvalue import value
+
+logger = getLogger(__name__)
 
 
 def stringify_data(data, ostream=SO, format='plain'):
@@ -70,6 +74,9 @@ def stringify_data(data, ostream=SO, format='plain'):
 
 
 def pformat_results(pyomo_instance, pyomo_result, options):
+
+    logger.info('Starting results processing')
+
     from pyomo.core import Objective, Var, Constraint
 
     output = StringIO()
@@ -614,6 +621,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         #		  ""+options.output+" \
         #		  " -o data_files"+os.sep+options.scenario+" -s "+options.scenario)
 
+    logger.info('Finished results processing')
     return output
 
 

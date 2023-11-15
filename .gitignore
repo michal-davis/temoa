@@ -1,7 +1,7 @@
 *.pyc
 data_files/debug_logs/*.log
 data_files/debug_logs/lp_files/*
-data_files/untracked_data/
+data_files/untracked_data/*
 .DS_Store
 *.ipynb_checkpoints
 
@@ -10,3 +10,7 @@ data_files/untracked_data/
 
 # ignore goings-on in the venv
 /venv/*
+
+# ignore (for now) associated jupyter notebooks
+notebooks/
+/temoa/temoa_model/config_sample_9R
