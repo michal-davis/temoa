@@ -43,11 +43,7 @@ from logging import getLogger
 from temoa.data_processing.DB_to_Excel import make_excel
 from temoa.temoa_model.temoa_config import TemoaConfig
 
-# Ensure compatibility with Python 2.7 and 3
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from io import StringIO
+from io import StringIO
 
 from pyomo.core.kernel.numvalue import value
 

@@ -23,6 +23,7 @@ from os.path import abspath, isfile, splitext
 
 from definitions import PROJECT_ROOT
 from temoa.temoa_model.dat_file_maker import db_2_dat
+import queue
 
 
 class TemoaConfig(object):
@@ -55,11 +56,8 @@ class TemoaConfig(object):
     t_ANY_ignore = '[ \t]'
 
     def __init__(self, **kwargs):
-        # Make compatible with Python 2.7 and 3
-        try:
-            import queue
-        except:
-            import Queue as queue
+
+
 
         self.__error          = list()
         self.__mga_todo       = queue.Queue()

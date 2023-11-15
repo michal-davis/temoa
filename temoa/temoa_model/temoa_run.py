@@ -101,8 +101,8 @@ class TemoaSolver(object):
             available_solvers, default_solver = get_solvers()
             temoa_config = TemoaConfig(d_solver=default_solver)
             temoa_config.build(config=self.config_filename)
-            logger.info('Built a TemoaConfig for scenario %s', self.options.scenario)
             self.options = temoa_config
+            logger.info('Built a TemoaConfig for scenario %s', self.options.scenario)
 
             self.temp_lp_dest = '/srv/thirdparty/temoa/data_files/'
 
@@ -110,12 +110,8 @@ class TemoaSolver(object):
             TempfileManager.tempdir = self.options.path_to_lp_files
 
     def temoa_checks(self):
-        """Make sure Python 2.7 is used and that a suitable solver is available."""
-
-        if version_info < (2, 7):
-            msg = ("Temoa requires Python v2.7 to run.\n\n The model may not solve"
-                   "properly with another version.")
-            raise SystemExit(msg)
+        if version_info < (3, 10):
+            logger.warning('Model is run with python %s.  Expecting version 3.10 or later.  Model may not run properly!', version_info)
 
         if self.options.neos is True:
             # Invoke NEOS solver manager if flag is specified in config file
@@ -590,14 +586,13 @@ def parse_args():
 
     SE.write("Continue Operation? [Press enter to continue or CTRL+C to abort]\n")
     SE.flush()
-    try:  # make compatible with Python 2.7 or 3
-        # TODO:  this remnant is a horrible hack that needs to be changed to inspect for myopic mode vs. name matching
-        if 'config_sample_myopic' not in options.file_location:
-            #
-            pass
-            # TODO: below confirmation is temp commented out to speed development
-            # input()  # Give the user a chance to confirm input
-    except:
-        input()
+
+    # TODO:  this remnant is a horrible hack that needs to be changed to inspect for myopic mode vs. name matching
+    if 'config_sample_myopic' not in options.file_location:
+        #
+        pass
+        # TODO: below confirmation is temp commented out to speed development
+        # input()  # Give the user a chance to confirm input
+
 
     return options, config_flag

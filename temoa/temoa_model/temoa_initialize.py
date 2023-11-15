@@ -27,11 +27,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
 
-# Ensure compatibility with Python 2.7 and 3
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from io import StringIO
+from io import StringIO
 
 try:
     from pyomo.core import (AbstractModel, BuildAction, Constraint, NonNegativeReals, Reals, Objective, Param, Set, Var,
