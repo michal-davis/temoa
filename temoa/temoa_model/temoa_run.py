@@ -22,6 +22,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 import os
 import re as reg_exp
 import traceback
+from argparse import Namespace
 from collections import defaultdict
 from logging import getLogger
 from os import path
@@ -69,221 +70,217 @@ as a StreamingHttpResponse().
 
 logger = getLogger(__name__)
 
-class TemoaSolver(object):
-    def __init__(self, model, config_filename):
-        self.model = model
-        self.config_filename = config_filename
-        self.temoa_setup()
-        self.temoa_checks()
 
-    def temoa_setup(self):
-        """This function prepares the model to be solved.
 
-        Inputs:
-        model -- the model object
-        config_filename -- config filename, non-blank if called from the UI
-        There are three possible ways to call the model:
-        1. python temoa_model/ /path/to/data_files
-        2. python temoa_model/ --config=/path/to/config/file
-        3. function call from the UI
-        This function discerns which way the model was called and process the
-        inputs accordingly.
-        """
-        if self.config_filename == '':  # Called from the command line
-            self.options, config_flag = parse_args()
-            if config_flag == 1:  # Option 2 (using config file)
-                self.options.path_to_lp_files = self.options.path_to_logs + sep + "lp_files"
-                TempfileManager.tempdir = self.options.path_to_lp_files
-            else:  # Must be Option 1 (no config file)
-                pass
+def temoa_setup(config_filename):
+    """This function prepares the model to be solved.
 
-        else:  # Config file already specified, so must be an interface call
-            available_solvers, default_solver = get_solvers()
-            temoa_config = TemoaConfig(d_solver=default_solver)
-            temoa_config.build(config=self.config_filename)
-            self.options = temoa_config
-            logger.info('Built a TemoaConfig for scenario %s', self.options.scenario)
-
-            self.temp_lp_dest = '/srv/thirdparty/temoa/data_files/'
-
-            self.options.path_to_lp_files = self.options.path_to_logs + sep + "lp_files"
-            TempfileManager.tempdir = self.options.path_to_lp_files
-
-    def temoa_checks(self):
-        if version_info < (3, 10):
-            logger.warning('Model is run with python %s.  Expecting version 3.10 or later.  Model may not run properly!', version_info)
-
-        if self.options.neos is True:
-            # Invoke NEOS solver manager if flag is specified in config file
-            self.optimizer = pyomo.opt.SolverManagerFactory('neos')
-        else:
-            self.optimizer = SolverFactory(self.options.solver)
-
-        if self.optimizer:
+    Inputs:
+    model -- the model object
+    config_filename -- config filename, non-blank if called from the UI
+    There are three possible ways to call the model:
+    1. python temoa_model/ /path/to/data_files
+    2. python temoa_model/ --config=/path/to/config/file
+    3. function call from the UI
+    This function discerns which way the model was called and process the
+    inputs accordingly.
+    """
+    if config_filename == '':  # Called from the command line
+        options, config_flag = parse_args()
+        if config_flag == 1:  # Option 2 (using config file)
+            options.path_to_lp_files = options.path_to_logs + sep + "lp_files"
+            TempfileManager.tempdir = options.path_to_lp_files
+        else:  # Must be Option 1 (no config file)
             pass
-        elif self.options.solver != 'NONE':
-            SE.write("\nWarning: Unable to initialize solver interface for '{}'\n\n".format(self.options.solver))
-            if SE.isatty():
-                raise RuntimeError(
-                    "unknown intent for this codeblock.  -JH ")  # TODO:  Not clear what the intent of the below lines are, but options is not defined.  #        probably a reference to self.options?  But intent is still unclear  # SE.write( "Please press enter to continue or Ctrl+C to quit." )  # if os.path.join('temoa_model','config_sample_myopic') not in options.file_location:  # 	raw_input()
 
-    '''
-    This function is called when MGA option is specified.
-    It uses the self.model, self.optimzer, and self.options parameters of the class object
-    '''
+    else:  # Config file already specified, so must be an interface call
+        available_solvers, default_solver = get_solvers()
+        temoa_config = TemoaConfig(d_solver=default_solver)
+        temoa_config.build(config=config_filename)
+        options = temoa_config
+        logger.info('Built a TemoaConfig for scenario %s', options.scenario)
 
-    def solveWithMGA(self):
-        scenario_names = []
-        scenario_names.append(self.options.scenario)
+        temp_lp_dest = '/srv/thirdparty/temoa/data_files/'
 
-        # The MGA algorithm uses different objectives per iteration, so the first
-        # step is to remove the original objective function
-        self.model.del_component('TotalCost')
-        # Create concrete model
-        temoaInstance1 = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
-        self.instance_hook = temoaInstance1  # hook for pytest reference
+        options.path_to_lp_files = options.path_to_logs + sep + "lp_files"
+        TempfileManager.tempdir = options.path_to_lp_files
+    return options  #TODO:  We need to move to TemoaConfig
+
+def temoa_checks(options: TemoaConfig):
+    if version_info < (3, 10):
+        logger.warning('Model is run with python %s.  Expecting version 3.10 or later.  Model may not run properly!', version_info)
+
+    if options.neos is True:
+        # Invoke NEOS solver manager if flag is specified in config file
+        optimizer = pyomo.opt.SolverManagerFactory('neos')
+    else:
+        optimizer = SolverFactory(options.solver)
+
+    if optimizer:
+        pass
+    elif options.solver != 'NONE':
+        SE.write("\nWarning: Unable to initialize solver interface for '{}'\n\n".format(options.solver))
+        if SE.isatty():
+            raise RuntimeError(
+                "unknown intent for this codeblock.  -JH ")  # TODO:  Not clear what the intent of the below lines are, but options is not defined.  #        probably a reference to options?  But intent is still unclear  # SE.write( "Please press enter to continue or Ctrl+C to quit." )  # if os.path.join('temoa_model','config_sample_myopic') not in options.file_location:  # 	raw_input()
+
+'''
+This function is called when MGA option is specified.
+It uses the self.model, self.optimzer, and self.options parameters of the class object
+'''
+
+def solveWithMGA(self):
+    scenario_names = []
+    scenario_names.append(self.options.scenario)
+
+    # The MGA algorithm uses different objectives per iteration, so the first
+    # step is to remove the original objective function
+    self.model.del_component('TotalCost')
+    # Create concrete model
+    temoaInstance1 = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
+    self.instance_hook = temoaInstance1  # hook for pytest reference
+    for k in temoaInstance1.create_temoa_instance():
+        # yield "<div>" + k + "</div>"
+        yield k  # yield " " * 1024
+    # Now add back the objective function that we earlier removed; note that name
+    # we choose here (FirstObj) will be copied to the output file.
+    temoaInstance1.instance.FirstObj = Objective(rule=TotalCost_rule, sense=minimize)
+    # TODO:  The call below should not be necessary.  This was "old pyomo"
+    # ref:  (search for preproces) http://www.pyomo.org/blog
+    temoaInstance1.instance.preprocess()
+    temoaInstance1.instance.V_ActivityByTech = Var(temoaInstance1.instance.tech_all, domain=NonNegativeReals)
+    temoaInstance1.instance.ActivityByTechConstraint = Constraint(temoaInstance1.instance.tech_all,
+                                                                  rule=ActivityByTech_Constraint)
+
+    for k in temoaInstance1.solve_temoa_instance():
+        # yield "<div>" + k + "</div>"
+        yield k  # yield " " * 1024
+
+    temoaInstance1.handle_files(log_name='Complete_OutputLog.log')
+    # using value() converts the now-loaded results into a single number,
+    # which we'll use with our slightly unusual SlackedObjective_rule below
+    # (but defined above).
+    Perfect_Foresight_Obj = value(temoaInstance1.instance.FirstObj)
+
+    # Create a new dictionary that stores the MGA objective function weights
+    prev_activity_t = defaultdict(int)
+    # Store first set of MGA objective weights drawn from base solution
+    prev_activity_t = PreviousAct_rule(temoaInstance1.instance, self.options.mga_weight, prev_activity_t)
+
+    # Perform MGA iterations
+    while self.options.next_mga():
+        temoaMGAInstance = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
+        for k in temoaMGAInstance.create_temoa_instance():
+            # yield "<div>" + k + "</div>"
+            yield k  # yield " " * 1024
+
+        try:
+            txt_file_mga = open(self.options.path_to_logs + os.sep + "Complete_OutputLog.log", "w")
+        except BaseException as io_exc:
+            yield "MGA Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n"
+            SE.write(
+                "MGA Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n")
+            txt_file_mga = open("OutputLog_MGA_last.log", "w")
+
+        # Set up the Activity By Tech constraint, which is required for the
+        # updated objective function.
+        temoaMGAInstance.instance.V_ActivityByTech = Var(temoaMGAInstance.instance.tech_all,
+                                                         domain=NonNegativeReals)
+        temoaMGAInstance.instance.ActivityByTechConstraint = Constraint(temoaMGAInstance.instance.tech_all,
+                                                                        rule=ActivityByTech_Constraint)
+
+        # Update second instance with the new MGA-specific objective function
+        # and constraint.
+        temoaMGAInstance.instance.SecondObj = Objective(
+            expr=ActivityObj_rule(temoaMGAInstance.instance, prev_activity_t), noruleinit=True, sense=minimize)
+        temoaMGAInstance.instance.PreviousSlackedObjective = Constraint(rule=None,
+            expr=SlackedObjective_rule(temoaMGAInstance.instance, Perfect_Foresight_Obj, self.options.mga),
+            noruleinit=True)
+        temoaMGAInstance.instance.preprocess()
+        for k in temoaMGAInstance.solve_temoa_instance():
+            # yield "<div>" + k + "</div>"
+            yield k  # yield " " * 1024
+        temoaMGAInstance.handle_files(log_name='Complete_OutputLog.log')
+        # Update MGA objective function weights for use in the next iteration
+        prev_activity_t = PreviousAct_rule(temoaMGAInstance.instance, self.options.mga_weight, prev_activity_t)
+
+'''
+This function is called when MGA option is not specified.
+'''
+
+def solveWithoutMGA(self):
+
+    temoaInstance1 = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
+    self.instance_hook = temoaInstance1  # hook for pytest reference
+
+    if hasattr(self.options, 'myopic') and self.options.myopic:
+
+        print('This run is myopic ...')
+        from temoa.temoa_model.temoa_myopic import myopic_db_generator_solver
+        myopic_db_generator_solver(self)
+
+    else:
+
         for k in temoaInstance1.create_temoa_instance():
             # yield "<div>" + k + "</div>"
             yield k  # yield " " * 1024
-        # Now add back the objective function that we earlier removed; note that name
-        # we choose here (FirstObj) will be copied to the output file.
-        temoaInstance1.instance.FirstObj = Objective(rule=TotalCost_rule, sense=minimize)
-        # TODO:  The call below should not be necessary.  This was "old pyomo"
-        # ref:  (search for preproces) http://www.pyomo.org/blog
-        temoaInstance1.instance.preprocess()
-        temoaInstance1.instance.V_ActivityByTech = Var(temoaInstance1.instance.tech_all, domain=NonNegativeReals)
-        temoaInstance1.instance.ActivityByTechConstraint = Constraint(temoaInstance1.instance.tech_all,
-                                                                      rule=ActivityByTech_Constraint)
-
         for k in temoaInstance1.solve_temoa_instance():
             # yield "<div>" + k + "</div>"
             yield k  # yield " " * 1024
-
         temoaInstance1.handle_files(log_name='Complete_OutputLog.log')
-        # using value() converts the now-loaded results into a single number,
-        # which we'll use with our slightly unusual SlackedObjective_rule below
-        # (but defined above).
-        Perfect_Foresight_Obj = value(temoaInstance1.instance.FirstObj)
 
-        # Create a new dictionary that stores the MGA objective function weights
-        prev_activity_t = defaultdict(int)
-        # Store first set of MGA objective weights drawn from base solution
-        prev_activity_t = PreviousAct_rule(temoaInstance1.instance, self.options.mga_weight, prev_activity_t)
+'''
+This funciton creates and solves TemoaSolverInstance.
+This is the function that should be called from outside this class after __init__
+'''
 
-        # Perform MGA iterations
-        while self.options.next_mga():
-            temoaMGAInstance = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
-            for k in temoaMGAInstance.create_temoa_instance():
+def createAndSolve(self):
+    try:
+        self.txt_file = open(self.options.path_to_logs + os.sep + "Complete_OutputLog.log", "w")
+
+    except BaseException as io_exc:
+        yield "Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n"
+        SE.write(
+            "Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n")
+        self.txt_file = open("Complete_OutputLog.log", "w")
+        self.txt_file.write(
+            "Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n")
+
+    # Check and see if mga attribute exists and if mga is specified
+    try:
+        if hasattr(self.options, 'mga') and self.options.mga:
+            for k in self.solveWithMGA():
+                # yield "<div>" + k + "</div>"
+                yield k  # yield " " * 1024
+        else:  # User requested a single run
+            for k in self.solveWithoutMGA():
                 # yield "<div>" + k + "</div>"
                 yield k  # yield " " * 1024
 
-            try:
-                txt_file_mga = open(self.options.path_to_logs + os.sep + "Complete_OutputLog.log", "w")
-            except BaseException as io_exc:
-                yield "MGA Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n"
-                SE.write(
-                    "MGA Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n")
-                txt_file_mga = open("OutputLog_MGA_last.log", "w")
-
-            # Set up the Activity By Tech constraint, which is required for the
-            # updated objective function.
-            temoaMGAInstance.instance.V_ActivityByTech = Var(temoaMGAInstance.instance.tech_all,
-                                                             domain=NonNegativeReals)
-            temoaMGAInstance.instance.ActivityByTechConstraint = Constraint(temoaMGAInstance.instance.tech_all,
-                                                                            rule=ActivityByTech_Constraint)
-
-            # Update second instance with the new MGA-specific objective function
-            # and constraint.
-            temoaMGAInstance.instance.SecondObj = Objective(
-                expr=ActivityObj_rule(temoaMGAInstance.instance, prev_activity_t), noruleinit=True, sense=minimize)
-            temoaMGAInstance.instance.PreviousSlackedObjective = Constraint(rule=None,
-                expr=SlackedObjective_rule(temoaMGAInstance.instance, Perfect_Foresight_Obj, self.options.mga),
-                noruleinit=True)
-            temoaMGAInstance.instance.preprocess()
-            for k in temoaMGAInstance.solve_temoa_instance():
-                # yield "<div>" + k + "</div>"
-                yield k  # yield " " * 1024
-            temoaMGAInstance.handle_files(log_name='Complete_OutputLog.log')
-            # Update MGA objective function weights for use in the next iteration
-            prev_activity_t = PreviousAct_rule(temoaMGAInstance.instance, self.options.mga_weight, prev_activity_t)
-
-    '''
-    This function is called when MGA option is not specified.
-    '''
-
-    def solveWithoutMGA(self):
-
-        temoaInstance1 = TemoaSolverInstance(self.model, self.optimizer, self.options, self.txt_file)
-        self.instance_hook = temoaInstance1  # hook for pytest reference
-
-        if hasattr(self.options, 'myopic') and self.options.myopic:
-
-            print('This run is myopic ...')
-            from temoa.temoa_model.temoa_myopic import myopic_db_generator_solver
-            myopic_db_generator_solver(self)
-
-        else:
-
-            for k in temoaInstance1.create_temoa_instance():
-                # yield "<div>" + k + "</div>"
-                yield k  # yield " " * 1024
-            for k in temoaInstance1.solve_temoa_instance():
-                # yield "<div>" + k + "</div>"
-                yield k  # yield " " * 1024
-            temoaInstance1.handle_files(log_name='Complete_OutputLog.log')
-
-    '''
-    This funciton creates and solves TemoaSolverInstance.
-    This is the function that should be called from outside this class after __init__
-    '''
-
-    def createAndSolve(self):
-        try:
-            self.txt_file = open(self.options.path_to_logs + os.sep + "Complete_OutputLog.log", "w")
-
-        except BaseException as io_exc:
-            yield "Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n"
-            SE.write(
-                "Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n")
-            self.txt_file = open("Complete_OutputLog.log", "w")
-            self.txt_file.write(
-                "Log file cannot be opened. Please check path. Trying to find:\n" + self.options.path_to_logs + " folder\n")
-
-        # Check and see if mga attribute exists and if mga is specified
-        try:
-            if hasattr(self.options, 'mga') and self.options.mga:
-                for k in self.solveWithMGA():
-                    # yield "<div>" + k + "</div>"
-                    yield k  # yield " " * 1024
-            else:  # User requested a single run
-                for k in self.solveWithoutMGA():
-                    # yield "<div>" + k + "</div>"
-                    yield k  # yield " " * 1024
-
-        except KeyboardInterrupt as e:
-            self.txt_file.close()
-            yield str(e) + '\n'
-            yield 'User requested quit.  Exiting Temoa ...\n'
-            SE.write(str(e) + '\n')
-            SE.write('User requested quit.  Exiting Temoa ...\n')
-            traceback.print_exc()
-            SE.flush()
-        except SystemExit as e:
-            self.txt_file.close()
-            yield str(e) + '\n'
-            yield 'Temoa exit requested.  Exiting ...\n'
-            SE.write(str(e) + '\n')
-            SE.write('Temoa exit requested.  Exiting ...\n')
-            traceback.print_exc()
-            SE.flush()
-        except Exception as e:
-            self.txt_file.close()
-            yield str(e) + '\n'
-            yield 'Exiting Temoa ...\n'
-            SE.write(str(e) + '\n')
-            SE.write('Exiting Temoa ...\n')
-            traceback.print_exc()
-            SE.flush()
+    except KeyboardInterrupt as e:
+        self.txt_file.close()
+        yield str(e) + '\n'
+        yield 'User requested quit.  Exiting Temoa ...\n'
+        SE.write(str(e) + '\n')
+        SE.write('User requested quit.  Exiting Temoa ...\n')
+        traceback.print_exc()
+        SE.flush()
+    except SystemExit as e:
+        self.txt_file.close()
+        yield str(e) + '\n'
+        yield 'Temoa exit requested.  Exiting ...\n'
+        SE.write(str(e) + '\n')
+        SE.write('Temoa exit requested.  Exiting ...\n')
+        traceback.print_exc()
+        SE.flush()
+    except Exception as e:
+        self.txt_file.close()
+        yield str(e) + '\n'
+        yield 'Exiting Temoa ...\n'
+        SE.write(str(e) + '\n')
+        SE.write('Exiting Temoa ...\n')
+        traceback.print_exc()
+        SE.flush()
 
 
 '''
@@ -564,6 +561,7 @@ def parse_args():
     # If the user specifies the config flag, then call TemoaConfig and overwrite
     # the argument parser above.
     if options.config:
+        # TODO:  Change this out to proper boolean
         config_flag = 1  # flag indicates config file was used.
         try:
             temoa_config = TemoaConfig(d_solver=default_solver)
