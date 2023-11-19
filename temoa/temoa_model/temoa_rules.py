@@ -23,8 +23,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 from sys import stderr as SE
 from typing import TYPE_CHECKING
 
-from pyomo.core import Constraint
-from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
+from pyomo.environ import Constraint, value
 
 from temoa.temoa_model.temoa_initialize import DemandConstraintErrorCheck, CommodityBalanceConstraintErrorCheck, \
     CommodityBalanceConstraintErrorCheckAnnual

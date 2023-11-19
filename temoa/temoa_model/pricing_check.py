@@ -29,8 +29,11 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
+def progress_check(M, checkpoint: str):
+    logger.info('here: %s', checkpoint)
 
 def price_checker(M: 'TemoaModel'):
+    logger.info('Started price checking model: %s', M.name)
     # some sets for x-checking
     registered_inv_costs = {(region, tech, vintage) for (region, tech, vintage)
                             in M.CostInvest}
@@ -53,9 +56,9 @@ def price_checker(M: 'TemoaModel'):
         var_costs[r, t, v].add(p)
         if p == v:
             base_year_variable_cost_rtv.add((r, t, v))
-
+    logger.debug('  Finished making costing data structures for price checker')
     # Check 1 looks for missing (1a) and inconsistent (1b) fixed cost - investment cost pairings
-
+    logger.debug('  Starting price check #1a')
     # Check 1a:  Look for "missing" FC/IC (no fixed or investment cost) based on what is in the Efficiency set
     techs_without_fc_or_ic = set()
     # pull the details...
@@ -91,6 +94,7 @@ def price_checker(M: 'TemoaModel'):
         #                    'variable: %s, investment: %s', tech, vintage, fc, vc, ic)
 
     # test 1b:  find items that have inconsistent FC/IC across regions & vintages in the base (vintage) year only
+    logger.debug('  Starting price check #1b')
     missing_fc = efficiency_rtv - base_year_fixed_cost_rtv  # set of {r, t, v} with no base-year FC entry anywhere
     # if there are missing FC, scan filter to find other regions and vintages of same tech for comparison
     if missing_fc:
@@ -140,7 +144,7 @@ def price_checker(M: 'TemoaModel'):
     #           fixed costs that match ALL variable costs and vice-versa.  Else, we are going to get false
     #           positives on things that have NO fixed (or variable) costs at all.  Note this checks all Periods,
     #           not just base year as previous check did.
-
+    logger.debug('  Starting price check #2')
     for (region, tech, vintage) in sorted_efficiency_rtv:
         # take the differenece in the sets of periods...
         missing_fixed_costs = var_costs[region, tech, vintage] - fixed_costs[region, tech, vintage] if fixed_costs[
@@ -163,6 +167,7 @@ def price_checker(M: 'TemoaModel'):
     #           ones with NO entry in the period are assumed to be intentionally omitted and may be caught by
     #           test 1 above.
 
+    logger.debug('  Starting price check #3')
     for (region, tech, vintage) in sorted_efficiency_rtv:
         # skip resources
         if tech in M.tech_resource:
@@ -186,3 +191,5 @@ def price_checker(M: 'TemoaModel'):
                 'check 3: Technology %s of vintage %s in region %s variable costs are missing periods %s relative to '
                 'lifetime expiration in %d',
                 tech, vintage, region, sorted(missing_var_costs), vintage + lifetime)
+
+    logger.info('Finished Price Checking Build Action')

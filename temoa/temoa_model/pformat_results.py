@@ -40,12 +40,13 @@ import pandas as pd
 
 from logging import getLogger
 
+from pyomo.environ import value
+
 from temoa.data_processing.DB_to_Excel import make_excel
 from temoa.temoa_model.temoa_config import TemoaConfig
 
 from io import StringIO
 
-from pyomo.core.kernel.numvalue import value
 
 logger = getLogger(__name__)
 
@@ -358,7 +359,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         # assumption 3: Unlike other output tables in which Ri-Rj and Rj-Ri entries
         # are allowed in the region column, for the Output_Costs table the region
         # to the right of the hyphen sign gets the costs.
-        for i in m.RegionalExchangeCapacityConstraint_rrptv.iterkeys():
+        for i in m.RegionalExchangeCapacityConstraint_rrptv:
             reg_dir1 = i[0] + "-" + i[1]
             reg_dir2 = i[1] + "-" + i[0]
             tech = i[3]

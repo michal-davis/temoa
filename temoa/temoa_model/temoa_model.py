@@ -20,7 +20,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
-from temoa.temoa_model.pricing_check import price_checker
+from temoa.temoa_model.pricing_check import price_checker, progress_check
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 
@@ -70,6 +70,7 @@ class TemoaModel(AbstractModel):
         # Define sets.
         # Sets are collections of items used to index parameters and variables
         # ---------------------------------------------------------------
+        M.ba1 = BuildAction(['starting_sets'], rule=progress_check)
 
         # Define time periods
         M.time_exist = Set(ordered=True)
@@ -144,7 +145,7 @@ class TemoaModel(AbstractModel):
         # The complete index set is: psditvo, where p=period, s=season, d=day,
         # i=input commodity, t=technology, v=vintage, o=output commodity.
         # ---------------------------------------------------------------
-
+        M.ba2 = BuildAction(['starting params'], rule=progress_check )
         M.GlobalDiscountRate = Param()
 
         # Define time-related parameters
@@ -223,7 +224,7 @@ class TemoaModel(AbstractModel):
         M.CostVariableVintageDefault = Param(M.CostVariableVintageDefault_rtv)
 
         M.initialize_Costs = BuildAction(rule=CreateCosts)
-        M.validate_pricing = BuildAction(rule=price_checker)
+        # M.validate_pricing = BuildAction(rule=price_checker)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
@@ -241,6 +242,7 @@ class TemoaModel(AbstractModel):
             M.ProcessLifeFrac_rptv, initialize=ParamProcessLifeFraction_rule
         )
 
+        M.ba3 = BuildAction(['starting params for user-defined constraints'], rule=progress_check)
         # Define parameters associated with user-defined constraints
 
         M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
@@ -275,6 +277,7 @@ class TemoaModel(AbstractModel):
         M.MaxNewCapacityShare = Param(M.MinCapShare_rptg)
         M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions)
 
+        M.ba31 = BuildAction(['starting electric sector params'], rule=progress_check)
         # Define parameters associated with electric sector operation
         M.RampUp = Param(M.regions, M.tech_ramping)
         M.RampDown = Param(M.regions, M.tech_ramping)
@@ -297,6 +300,8 @@ class TemoaModel(AbstractModel):
         # convenience, where 1 or more indices in the base variables are
         # summed over.
         # ---------------------------------------------------------------
+
+        M.ba32 = BuildAction(['starting variables'], rule=progress_check)
         # Define base decision variables
         M.FlowVar_rpsditvo = Set(dimen=8, initialize=FlowVariableIndices)
         M.V_FlowOut = Var(M.FlowVar_rpsditvo, domain=NonNegativeReals)
@@ -347,7 +352,7 @@ class TemoaModel(AbstractModel):
         # of these constraints are provided in the associated comment blocks
         # in temoa_rules.py, where the constraints are defined.
         # ---------------------------------------------------------------
-
+        M.ba4 = BuildAction(['starting constraints'], rule=progress_check)
         # Declare constraints to calculate derived decision variables
 
         M.CapacityConstraint_rpsdtv = Set(dimen=6, initialize=CapacityConstraintIndices)
@@ -368,6 +373,7 @@ class TemoaModel(AbstractModel):
         M.AdjustedCapacityConstraint = Constraint(
             M.CostFixed_rptv, rule=AdjustedCapacity_Constraint
         )
+        M.ba5 = BuildAction(['finished capacity constraints'], rule=progress_check)
 
         # Declare core model constraints that ensure proper system functioning
         # In driving order, starting with the need to meet end-use demands
@@ -416,6 +422,7 @@ class TemoaModel(AbstractModel):
         M.RegionalExchangeCapacityConstraint = Constraint(
             M.RegionalExchangeCapacityConstraint_rrptv, rule=RegionalExchangeCapacity_Constraint)
 
+        M.ba6 = BuildAction(['starting storage constraints'], rule=progress_check)
         # This set works for all the storage-related constraints
         M.StorageConstraints_rpsdtv = Set(dimen=6, initialize=StorageVariableIndices)
         M.StorageEnergyConstraint = Constraint(
@@ -482,7 +489,7 @@ class TemoaModel(AbstractModel):
         M.EmissionLimitConstraint = Constraint(
             M.EmissionLimitConstraint_rpe, rule=EmissionLimit_Constraint
         )
-
+        M.ba7 = BuildAction(['starting growth constraints'], rule=progress_check)
         from itertools import product
 
         M.GrowthRateMaxConstraint_rtv = Set(
