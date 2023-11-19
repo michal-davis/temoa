@@ -1,6 +1,7 @@
 """
 new entry point for running the model.
 """
+import argparse
 import logging
 import os
 import sys
@@ -15,7 +16,8 @@ from definitions import PROJECT_ROOT
 
 
 from temoa.temoa_model.temoa_model import TemoaModel
-from temoa.temoa_model.temoa_run import TemoaSolver
+from temoa.temoa_model.temoa_sequencer import TemoaMode, TemoaSequencer
+
 
 def runModelUI(config_filename):
     """This function launches the model run from the Temoa GUI"""
@@ -26,15 +28,18 @@ def runModelUI(config_filename):
         # yield " " * 1024
 
 
-def runModel():
+def runModel(config_file: str):
     """This function launches the model run, and is invoked when called from
     __main__.py"""
 
-    dummy = ""  # If calling from command line, send empty string
-    model = TemoaModel()
-    solver = TemoaSolver(model, dummy)
-    for k in solver.createAndSolve():
-        pass
+    ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.PERFECT_FORESIGHT, confirmations=True)
+    ts.start()
+
+    # dummy = ""  # If calling from command line, send empty string
+    # model = TemoaModel()
+    # solver = TemoaSolver(model, dummy)
+    # for k in solver.createAndSolve():
+    #     pass
 
 if __name__ == '__main__':
     # set the target folder for logging output from this run
@@ -55,6 +60,17 @@ if __name__ == '__main__':
         level=logging.DEBUG,  # <-- global change for project is here
     )
     logger.info('Starting Program')
-    logger.debug('Recieved Command Line Args: %s', sys.argv[1:])
+    logger.debug('Received Command Line Args: %s', sys.argv[1:])
 
-    runModel()
+    # parse the CLA
+    parser = argparse.ArgumentParser()
+    # parser.prog = path.basename(argv[0].strip('/'))
+    logger.debug('Parsing CLA for information...')
+
+    parser.add_argument('--config', help='Path to file containing configuration information.', action='store',
+                        dest='config', default=None)
+
+    options = parser.parse_args()
+    config_file = options.config if options.config else None
+
+    runModel(config_file)

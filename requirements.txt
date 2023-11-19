@@ -8,7 +8,7 @@
 # to use pip to install (in a venv, if desired):
 # $: pip install -r requirements.txt
 
-pyomo==5.5.1
+pyomo==6.6.2
 #  pyomo.extras  <-- not avaialable on PyPi.  Does not appear to be used in project
 xlwt
 ipython
@@ -19,7 +19,7 @@ scipy
 joblib
 salib
 pydoe
-pyutilib==5.8
+pyutilib
 # glpk  <-- Not in PyPi.  Should be installed separately
 # python-graphviz  <-- appears as graphviz in pypi (below)
 graphviz
