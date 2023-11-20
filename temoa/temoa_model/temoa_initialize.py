@@ -24,7 +24,6 @@ from itertools import product as cross_product
 from sys import argv, stderr as SE, stdout as SO
 from typing import TYPE_CHECKING
 
-from deprecated.classic import deprecated
 
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
@@ -799,7 +798,7 @@ def CostInvestIndices(M: 'TemoaModel'):
 
     return indices
 
-@deprecated('No longer used.  See the region_group_check in validators.py')
+# @deprecated('No longer used.  See the region_group_check in validators.py')
 def RegionalGlobalInitializedIndices(M: 'TemoaModel'):
     from itertools import permutations
     indices = set()
