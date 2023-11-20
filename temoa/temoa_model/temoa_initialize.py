@@ -24,6 +24,8 @@ from itertools import product as cross_product
 from sys import argv, stderr as SE, stdout as SO
 from typing import TYPE_CHECKING
 
+from deprecated.classic import deprecated
+
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
 
@@ -167,7 +169,7 @@ def validate_time(M: 'TemoaModel'):
 
 
 def validate_SegFrac(M: 'TemoaModel'):
-    total = sum(i for i in M.SegFrac.itervalues())
+    total = sum(i for i in M.SegFrac.values())
 
     if abs(float(total) - 1.0) > 0.001:
         # We can't explicitly test for "!= 1.0" because of incremental rounding
@@ -267,21 +269,18 @@ def CreateLifetimes(M: 'TemoaModel'):
     """
     Steps to creating lifetimes:
     1. Collect all possible processes
-    2. Find the ones _not_ specified in LifetimeProcess and LifetimeLoanProcess
+    2. Find the ones _not_ specified in  LifetimeLoanProcess
     3. Set them, based on Lifetime*Tech.
     """
 
     # Shorter names, for us lazy programmer types
     LLN = M.LifetimeLoanProcess
-    LPR = M.LifetimeProcess
 
     # Step 1
     lprocesses = set(M.LifetimeLoanProcess_rtv)
-    processes = set(M.LifetimeProcess_rtv)
 
     # Step 2
     unspecified_loan_lives = lprocesses.difference(LLN.sparse_iterkeys())
-    unspecified_tech_lives = processes.difference(LPR.sparse_iterkeys())
 
     # Step 3
 
@@ -298,14 +297,34 @@ def CreateLifetimes(M: 'TemoaModel'):
                      len(unspecified_loan_lives))
     # LLN._constructed = True
 
-    if unspecified_tech_lives:
-        # LPR._constructed = False
-        for r, t, v in unspecified_tech_lives:
-            LPR[r, t, v] = M.LifetimeTech[(r, t)]
-        logger.debug("Created Lifetime for %d processes without an explicit specification",
-                     len(unspecified_tech_lives))
-    # LPR._constructed = True
+def initialize_process_lifetimes(M: 'TemoaModel', r, t, v):
+    """
+    This initializer is split off and derived from the CreateLifetimes above in order
+    to initialize the final value for LifetimeProcess_final
 
+    Priority:
+        1.  Specified in LifetimeProcess data
+        2.  Specified in LifetimeTech data
+        3.  The default value from the LifetimeTech param (automatic)
+    :param M: generic model reference (not used)
+    :param r: region
+    :param t: tech
+    :param v: vintage
+    :return: the final lifetime value
+    """
+    if (r, t, v) in M.LifetimeProcess:
+        return M.LifetimeProcess[r, t, v]
+    return M.LifetimeTech[r, t]
+
+def clear_unused_params(M: 'TemoaModel'):
+    """
+    Intent is to clear the LifetimeTech and LifetimeProcess params that were used above to fill
+    LifetimeProcess_final.  These "helper" params should not be used anywhere else, and this is a failsafe.
+    :param M:
+    :return: None
+    """
+    M.LifetimeTech.clear()
+    M.LifetimeProcess.clear()
 
 def CreateDemands(M: 'TemoaModel'):
     """
@@ -356,7 +375,7 @@ def CreateDemands(M: 'TemoaModel'):
             DDD[tslice] = M.SegFrac[tslice]  # DDD._constructed = True
 
     # Step 3
-    total = sum(i for i in DDD.itervalues())
+    total = sum(i for i in DDD.values())
     if abs(value(total) - 1.0) > 0.001:
         # We can't explicitly test for "!= 1.0" because of incremental rounding
         # errors associated with the specification of demand shares by time slice,
@@ -480,6 +499,7 @@ def init_set_vintage_optimize(M: 'TemoaModel'):
 
 
 def CreateRegionalIndices(M: 'TemoaModel'):
+    """ Create the set of all regions and all region-region pairs """
     regional_indices = set()
     for r_i in M.regions:
         if "-" in r_i:
@@ -526,7 +546,7 @@ def CreateSparseDicts(M: 'TemoaModel'):
             logger.error(msg)
             raise Exception(msg)
         l_process = (r, t, v)
-        l_lifetime = value(M.LifetimeProcess[l_process])
+        l_lifetime = value(M.LifetimeProcess_final[l_process])
         # Do some error checking for the user.
         if v in M.vintage_exist:
             if l_process not in l_exist_indices:
@@ -779,7 +799,7 @@ def CostInvestIndices(M: 'TemoaModel'):
 
     return indices
 
-
+@deprecated('No longer used.  See the region_group_check in validators.py')
 def RegionalGlobalInitializedIndices(M: 'TemoaModel'):
     from itertools import permutations
     indices = set()

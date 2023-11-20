@@ -42,6 +42,7 @@ sphinxcontrib-serializinghtml
 
 # new requirements
 pytest
+Deprecated
 
 
 

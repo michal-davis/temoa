@@ -32,7 +32,7 @@ def runModel(config_file: str):
     """This function launches the model run, and is invoked when called from
     __main__.py"""
 
-    ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.PERFECT_FORESIGHT, confirmations=True)
+    ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.BUILD_ONLY, confirmations=True)
     ts.start()
 
     # dummy = ""  # If calling from command line, send empty string
