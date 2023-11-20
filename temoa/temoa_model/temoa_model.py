@@ -23,6 +23,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 from pyomo.core import BuildCheck
 from pyomo.environ import Any, NonNegativeReals
 
+from temoa.temoa_model import validators
 from temoa.temoa_model.pricing_check import progress_check
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
@@ -96,7 +97,7 @@ class TemoaModel(AbstractModel):
         # RegionalIndices is the set of all the possible combinations of interregional
         # exhanges plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
         M.RegionalIndices = Set(initialize=CreateRegionalIndices)
-        M.RegionalGlobalIndices = Set(initialize=RegionalGlobalInitializedIndices)
+        M.RegionalGlobalIndices = Set(validate=validators.region_group_check) # Set(initialize=RegionalGlobalInitializedIndices)
 
         # Define technology-related sets
         M.tech_resource = Set()

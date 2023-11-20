@@ -36,7 +36,7 @@ def test_linked_region_check():
     Test legal pairings for linked regions
     """
     m = pyo.ConcreteModel()
-    m.R = pyo.Set(initialize=['AZ', 'R2', 'Mexico'])
+    m.regions = pyo.Set(initialize=['AZ', 'R2', 'Mexico'])
     good_names = {'AZ-R2', 'Mexico-AZ'}
     bad_names = {
         'AZ R2',        # bad separator
@@ -58,10 +58,10 @@ def test_region_group_check():
     Test legal multi-region groupings
     """
     m = pyo.ConcreteModel()
-    m.R = pyo.Set(initialize=['AZ', 'R2', 'Mexico', 'E_US'])
-    good_names = {'AZ+R2', 'Mexico+AZ', 'AZ+R2+Mexico', 'R2+E_US', 'global'}
+    m.regions = pyo.Set(initialize=['AZ', 'R2', 'Mexico', 'E_US'])
+    good_names = {'AZ+R2', 'Mexico+AZ', 'AZ+R2+Mexico', 'R2+E_US', 'global', 'AZ-R2'}
     bad_names = {
-        'AZ-R2',        # bad separator
+        'AZ-R2+Mexico', # arbitrary grouping of a link + other region not supported
         'AZ+AZ',        # dupe
         'AZ + R2',      # bad spacing
         'AZ+R2+R3',     # R3 is not in m.R

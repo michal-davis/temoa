@@ -118,7 +118,7 @@ def linked_region_check(M: 'TemoaModel', region_pair) -> bool:
     if linked_regions:
         r1 = linked_regions.group(1)
         r2 = linked_regions.group(2)
-        if all(r in M.R for r in (r1, r2)) and r1 != r2:  # both captured regions are in the set of M.R
+        if all(r in M.regions for r in (r1, r2)) and r1 != r2:  # both captured regions are in the set of M.R
             return True
     return False
 
@@ -126,16 +126,18 @@ def region_group_check(M: 'TemoaModel', rg) -> bool:
     """
     Validate the region-group name (region or regions separated by '+')
     """
+    if '-' in rg:  # it should just be evaluated as a linked_region
+        return linked_region_check(M, rg)
     if re.search(r'\A[a-zA-Z0-9\+_]+\Z', rg):
         # it has legal characters only
         if '+' in rg:
             # break up the group
             contained_regions = rg.strip().split('+')
-            if all(t in M.R for t in contained_regions) and \
+            if all(t in M.regions for t in contained_regions) and \
                 len(set(contained_regions)) == len(contained_regions):  # no dupes
                 return True
         else:  # it is a singleton
-            return (rg in M.R) or rg == 'global'
+            return (rg in M.regions) or rg == 'global'
     return False
 
 def tech_groups_set_check(M: 'TemoaModel', rg, g, t) -> bool:
