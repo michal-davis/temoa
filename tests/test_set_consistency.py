@@ -50,12 +50,14 @@ def test_upoptia_set_consistency():
     missing_in_model = {s for s in missing_in_model if "_index" not in s}
     assert not missing_in_model, f'one or more cached set not in model: {missing_in_model}'
     if shortage_in_model:
-        print('shortages')
+        print('Overages compared to cache: ')
         for k, v in shortage_in_model.items():
-            print(k, v)
-        print('overages')
+            if len(v) > 0:
+                print(k, v)
+        print('Shortages compared to cache: ')
         for k, v in overage_in_model.items():
-            print(k, v)
+            if len(v) > 0:
+                print(k, v)
     assert not shortage_in_model and not overage_in_model, 'The Utopia run-produced sets did not match cached values'
 
 
@@ -89,10 +91,12 @@ def test_test_system_set_consistency():
     missing_in_model = {s for s in missing_in_model if "_index" not in s}
     assert not missing_in_model, f'one or more cached set not in model: {missing_in_model}'
     if shortage_in_model:
-        print('shortages')
+        print('Overages compared to cache: ')
         for k, v in shortage_in_model.items():
-            print(k, v)
-        print('overages')
+            if len(v) > 0:
+                print(k, v)
+        print('Shortages compared to cache: ')
         for k, v in overage_in_model.items():
-            print(k, v)
+            if len(v) > 0:
+                print(k, v)
     assert not shortage_in_model and not overage_in_model, 'The Utopia run-produced sets did not match cached values'

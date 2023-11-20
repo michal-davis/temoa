@@ -13,9 +13,46 @@ from logging import getLogger
 
 logger = getLogger(__name__)
 
+# the tables below are ones in which we might find regional groups which should be captured
+# to make the members of the RegionalGlobalIndices Set in the model.  They need to aggregated
+tables_with_regional_groups = {'MaxActivity': 'regions',
+                               'MinActivity': 'regions',
+                               'MinAnnualCapacityFactor': 'regions',
+                               'MaxAnnualCapacityFactor': 'regions',
+                               'EmissionLimit': 'regions',
+                               'MinActivityGroup': 'regions',
+                               'MaxActivityGroup': 'regions',
+                               'MinCapacityGroup': 'regions',
+                               'MaxCapacityGroup': 'regions',
+                               #'tech_groups': 'region',  # <-- note the odd duck (non plural)
+                               }
+# TODO:  Sort out the schema for tech_groups.  RN, US_9R stuff does not comply w/ schema for this table
 def db_2_dat(ifile, ofile, options):
 
     logger.debug('Starting creation of .dat file from database %s', ifile)
+
+    def construct_RegionalGlobalIndices(tables_in_db, f) -> None:
+        """
+        go through all tables that may include regional groups that exist within this db and:
+        select the region/regions column based on table info, union the results together,
+        write the set to the .dat file with appropriate name
+        :param tables_in_db: the tables that exist in the db
+        :param f: the output stream to write to
+        :return:
+        """
+        tables_to_parse = set(tables_in_db) & tables_with_regional_groups.keys()
+        # make the query
+        query = ' UNION '.join(('SELECT ' + tables_with_regional_groups[table] + ' FROM ' + table for table in tables_to_parse))
+        logger.info('using query:\n  %s', query)
+        cur.execute(query)
+        count = 0
+        f.write('set RegionalGlobalIndices :=\n')
+        for row in cur:
+            f.write(row[0])
+            f.write('\n')
+            count += 1
+        f.write(';\n\n')
+        logger.debug('Located total of %d entries for RegionalGlobalIndices', count)
 
     def write_tech_mga(f):
         cur.execute("SELECT tech FROM technologies")
@@ -189,6 +226,9 @@ def db_2_dat(ifile, ofile, options):
             write_tech_mga(f)
         if options.mga_weight == 'normalized':
             write_tech_sector(f)
+
+        # construct the RegionalGlobalIndices Set
+        construct_RegionalGlobalIndices(tables_in_db=table_exist, f=f)
 
         # Making sure the database is empty from the begining for a myopic solve
         if options.myopic:

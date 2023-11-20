@@ -11,11 +11,11 @@ This file should not need to be run again unless model schema changes
 import json
 import sys
 from os import path
+
 import pyomo.environ as pyo
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_model import TemoaModel, TemoaModel
-from temoa.temoa_model.temoa_run import TemoaSolver
+from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 
 print("WARNING:  Continuing to execute this file will update the cached values in the testing_data folder"
       " from the sqlite databases in the same folder.  This should only need to be done if the schema or"
@@ -27,14 +27,11 @@ if t not in {'y', 'Y'}:
 output_file = path.join(PROJECT_ROOT, 'tests', 'testing_data', 'utopia_sets.json')
 config_file = path.join(PROJECT_ROOT, 'tests', 'utilities', 'config_utopia_for_utility')
 
-model = TemoaModel('utility')
-temoa_solver = TemoaSolver(model=model, config_filename=config_file)
-# override the location of the .dat file in the config
-temoa_solver.options
-for _ in temoa_solver.createAndSolve():
-    pass
-instance_object = temoa_solver.instance_hook
-model_sets = instance_object.instance.component_map(ctype=pyo.Set)
+ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.BUILD_ONLY)
+ts.start()
+built_instance = ts.pf_solved_instance  # actually not solved in this case
+
+model_sets = built_instance.component_map(ctype=pyo.Set)
 sets_dict = {k: list(v) for k, v in model_sets.items()}
 
 # stash the result in a json file...
@@ -46,14 +43,11 @@ with open(output_file, 'w') as f_out:
 output_file = path.join(PROJECT_ROOT, 'tests', 'testing_data', 'test_system_sets.json')
 config_file = path.join(PROJECT_ROOT, 'tests', 'utilities', 'config_test_system_for_utility')
 
-model = TemoaModel('utility')
-temoa_solver = TemoaSolver(model=model, config_filename=config_file)
-# override the location of the .dat file in the config
-temoa_solver.options
-for _ in temoa_solver.createAndSolve():
-    pass
-instance_object = temoa_solver.instance_hook
-model_sets = instance_object.instance.component_map(ctype=pyo.Set)
+ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.BUILD_ONLY)
+ts.start()
+built_instance = ts.pf_solved_instance  # actually not solved in this case
+
+model_sets = built_instance.component_map(ctype=pyo.Set)
 sets_dict = {k: list(v) for k, v in model_sets.items()}
 
 # stash the result in a json file...
