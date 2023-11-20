@@ -21,14 +21,12 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 from pyomo.core import BuildCheck
-
-from temoa.temoa_model.pricing_check import price_checker, progress_check
-from temoa.temoa_model.temoa_initialize import *
-from temoa.temoa_model.temoa_rules import *
-
 from pyomo.environ import Any, NonNegativeReals
 
-from temoa.temoa_model.validators import validate_linked_tech, region_check, tech_groups_set_check
+from temoa.temoa_model.pricing_check import progress_check
+from temoa.temoa_model.temoa_initialize import *
+from temoa.temoa_model.temoa_rules import *
+from temoa.temoa_model.validators import validate_linked_tech, region_check
 
 
 class TemoaModel(AbstractModel):
@@ -98,7 +96,7 @@ class TemoaModel(AbstractModel):
         # RegionalIndices is the set of all the possible combinations of interregional
         # exhanges plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
         M.RegionalIndices = Set(initialize=CreateRegionalIndices)
-        M.RegionalGlobalIndices = Any  #pyomo's set of anything.  This will be screened when used  #Set(initialize=RegionalGlobalInitializedIndices)
+        M.RegionalGlobalIndices = Set(initialize=RegionalGlobalInitializedIndices)
 
         # Define technology-related sets
         M.tech_resource = Set()
@@ -115,8 +113,7 @@ class TemoaModel(AbstractModel):
         M.tech_flex = Set(within=M.tech_all)
         M.tech_exchange = Set(within=M.tech_all)
         M.groups = Set(dimen=1)  # Define groups for technologies
-        # TODO:  come back and look at tech_groups.  Why isn't this an inexed set?  tech_groups = Set(M.groups, ...) ??
-        M.tech_groups = Set(dimen=3, validate=tech_groups_set_check)
+        M.tech_groups = Set(within=M.RegionalGlobalIndices * M.groups * M.tech_all)
         M.tech_annual = Set(within=M.tech_all)  # Define techs with constant output
         M.tech_variable = Set(
             within=M.tech_all)  # Define techs for use with TechInputSplitAverage constraint, where techs have variable annual output but the user wishes to constrain them annually

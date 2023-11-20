@@ -5,6 +5,7 @@ import re
 from collections import defaultdict
 from logging import getLogger
 from typing import TYPE_CHECKING
+from pyomo.environ import NonNegativeReals
 
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
@@ -97,7 +98,7 @@ def validate_linked_tech(M: "TemoaModel") -> bool:
         logger.error('Temoa Exiting...')
         return False
 
-def region_check(M: 'TemoaModel', region):
+def region_check(M: 'TemoaModel', region) -> bool:
     """
     Validate the region name (letters + numbers only + underscore)
     """
@@ -109,7 +110,7 @@ def region_check(M: 'TemoaModel', region):
     # if this matches, return is true, fail -> false
     return re.match(r'[a-zA-Z0-9_]+\Z', region)  # string that has only letters and numbers
 
-def linked_region_check(M: 'TemoaModel', region_pair):
+def linked_region_check(M: 'TemoaModel', region_pair) -> bool:
     """
     Validate a pair of regions (r-r format where r ∈ M.R )
     """
@@ -121,7 +122,7 @@ def linked_region_check(M: 'TemoaModel', region_pair):
             return True
     return False
 
-def region_group_check(M: 'TemoaModel', rg):
+def region_group_check(M: 'TemoaModel', rg) -> bool:
     """
     Validate the region-group name (region or regions separated by '+')
     """
@@ -137,7 +138,7 @@ def region_group_check(M: 'TemoaModel', rg):
             return (rg in M.R) or rg == 'global'
     return False
 
-def tech_groups_set_check(M: 'TemoaModel', rg, g, t):
+def tech_groups_set_check(M: 'TemoaModel', rg, g, t) -> bool:
     """
     Validate this entry to the tech_groups set
     :param M: the model
@@ -150,4 +151,73 @@ def tech_groups_set_check(M: 'TemoaModel', rg, g, t):
         region_group_check(M, rg),
         g in M.groups,
         t in M.tech_all
+    ))
+
+def activity_param_check(M: 'TemoaModel', val, rg, p, t) -> bool:
+    """
+    Validate the index and the value for an entry into an activity param indexed with region-groups
+    :param M: the model
+    :param val: the value of the parameter for this index
+    :param rg: region-group
+    :param p: time period
+    :param t: tech
+    :return: True if all OK
+    """
+    return all((
+        val in NonNegativeReals,    # the value should be in this set
+        region_group_check(M, rg),
+        p in M.time_optimize,
+        t in M.tech_all
+    ))
+
+def capacity_param_check(M: 'TemoaModel', val, rg, p, t, carrier) -> bool:
+    """
+    validate entries to capacity params
+    :param M: the model
+    :param val: the param value at this index
+    :param rg: region-group
+    :param p: time period
+    :param t: tech
+    :param carrier: commodity carrier
+    :return: True if all OK
+    """
+    return all((
+        val in NonNegativeReals,
+        region_group_check(M, rg),
+        p in M.time_optimize,
+        t in M.tech_all,
+        carrier in M.commodity_carrier
+    ))
+
+def activity_group_param_check(M: 'TemoaModel', val, rg, p, g) -> bool:
+    """
+    validate entries into capacity groups
+    :param M: the model
+    :param val: the value at this index
+    :param rg: region-group
+    :param p: time period
+    :param g: tech group name
+    :return: True if all OK
+    """
+    return all((
+        val in NonNegativeReals,
+        region_group_check(M, rg),
+        p in M.time_optimize,
+        g in M.groups
+    ))
+
+def emission_limit_param_check(M: 'TemoaModel', val, rg, p, e) -> bool:
+    """
+    validate entries into EmissionLimit param
+    :param M: the model
+    :param val: the value at this index
+    :param rg: region-group
+    :param p: time period
+    :param e: commodity emission
+    :return: True if all OK
+    """
+    return all((
+        region_group_check(M, rg),
+        p in M.time_optimize,
+        e in M.commodity_emissions
     ))

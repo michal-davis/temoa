@@ -33,12 +33,10 @@ from sys import argv, stderr as SE
 from sys import version_info
 from time import time
 
-from pyomo.core.kernel.numvalue import value  # TODO:  This probably goes away after later getting rid of the value()'s
-from pyomo.environ import *
-from pyomo.environ import DataPortal
+from pyomo.environ import *  # TODO:  specify this better!
 from pyomo.opt import SolverFactory as SF
 from pyutilib.common import ApplicationError
-from pyutilib.services import TempfileManager
+# from pyutilib.services import TempfileManager
 
 from temoa.temoa_model.pformat_results import pformat_results
 from temoa.temoa_model.temoa_config import TemoaConfig
@@ -89,7 +87,7 @@ def temoa_setup(config_filename):
         options, config_flag = parse_args()
         if config_flag == 1:  # Option 2 (using config file)
             options.path_to_lp_files = options.path_to_logs + sep + "lp_files"
-            TempfileManager.tempdir = options.path_to_lp_files
+            # TempfileManager.tempdir = options.path_to_lp_files
         else:  # Must be Option 1 (no config file)
             pass
 
@@ -103,13 +101,15 @@ def temoa_setup(config_filename):
         temp_lp_dest = '/srv/thirdparty/temoa/data_files/'
 
         options.path_to_lp_files = options.path_to_logs + sep + "lp_files"
-        TempfileManager.tempdir = options.path_to_lp_files
+        # TempfileManager.tempdir = options.path_to_lp_files
     return options  #TODO:  We need to move to TemoaConfig
 
 def temoa_checks(options: TemoaConfig):
+    # TODO:  Clean up the neos stuff
     if version_info < (3, 10):
-        logger.warning('Model is run with python %s.  Expecting version 3.10 or later.  Model may not run properly!', version_info)
+        logger.warning('Model is being run with python %d.%d.  Expecting version 3.10 or later.  Model may not run properly!', version_info.major, version_info.minor)
 
+    # TODO:  Add a check here to see if the SolverFactory can make the solver
     if options.neos is True:
         # Invoke NEOS solver manager if flag is specified in config file
         optimizer = pyomo.opt.SolverManagerFactory('neos')
@@ -117,7 +117,7 @@ def temoa_checks(options: TemoaConfig):
         optimizer = SolverFactory(options.solver)
 
     if optimizer:
-        pass
+        options.optimizer = optimizer
     elif options.solver != 'NONE':
         SE.write("\nWarning: Unable to initialize solver interface for '{}'\n\n".format(options.solver))
         if SE.isatty():
