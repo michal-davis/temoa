@@ -96,10 +96,10 @@ def coef_IC(instance, target_tech, target_year):
                 ) 
     ) * (
 		  (
-			  1 -  x**( -min( value(instance.LifetimeProcess[t, v]), P_e - v ) )
+			  1 -  x**(-min(value(instance.LifetimeProcess_final[t, v]), P_e - v))
 		  )
 		  /(
-			  1 -  x**( -value( instance.LifetimeProcess[t, v] ) ) 
+			  1 -  x**(-value(instance.LifetimeProcess_final[t, v]))
 		  )
     )
     return value(c_i)

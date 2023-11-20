@@ -365,8 +365,8 @@ def PeriodCost_rule(M: 'TemoaModel',   p):
                 )
         )
         * (
-                (1 - x ** (-min(value(M.LifetimeProcess[r, S_t, S_v]), P_e - S_v)))
-                / (1 - x ** (-value(M.LifetimeProcess[r, S_t, S_v])))
+                (1 - x ** (-min(value(M.LifetimeProcess_final[r, S_t, S_v]), P_e - S_v)))
+                / (1 - x ** (-value(M.LifetimeProcess_final[r, S_t, S_v])))
         )
         for r, S_t, S_v in M.CostInvest.sparse_iterkeys()
         if S_v == p
@@ -2717,7 +2717,7 @@ coming from RPS-eligible technologies.
 # Define rule-based parameters
 # ---------------------------------------------------------------
 def ParamModelProcessLife_rule(M: 'TemoaModel',   r, p, t, v):
-    life_length = value(M.LifetimeProcess[r, t, v])
+    life_length = value(M.LifetimeProcess_final[r, t, v])
     tpl = min(v + life_length - p, value(M.PeriodLength[p]))
 
     return tpl
@@ -2747,7 +2747,7 @@ that will cease operation (rust out, be decommissioned, etc.) between periods,
 calculate the fraction of the period that the technology is able to
 create useful output.
 """
-    eol_year = v + value(M.LifetimeProcess[r, t, v])
+    eol_year = v + value(M.LifetimeProcess_final[r, t, v])
     frac = eol_year - p
     period_length = value(M.PeriodLength[p])
     if frac >= period_length:
@@ -2798,14 +2798,18 @@ the primary region corresponds to the linked technology as well. The lifetimes
 of the primary and linked technologies should be specified and identical.
 """
     linked_t = M.LinkedTechs[r, t, e]
-    if (r, t, v) in M.LifetimeProcess.keys() and M.LifetimeProcess[r, linked_t, v] != M.LifetimeProcess[r, t, v]:
-        msg = ('the LifetimeProcess values of the primary and linked technologies '
-               'in the LinkedTechs table have to be specified and identical')
-        raise Exception(msg)
-    if (r, t) in M.LifetimeTech.keys() and M.LifetimeTech[r, linked_t] != M.LifetimeTech[r, t]:
-        msg = ('the LifetimeTech values of the primary and linked technologies '
-               'in the LinkedTechs table have to be specified and identical')
-        raise Exception(msg)
+    # TODO:  Move this check.  We should QA the LifetimeProcess of the techs separately to prevent many unnecessary
+    #  executions here.
+    # if (r, t, v) in M.LifetimeProcess_final.keys() and M.LifetimeProcess_final[r, linked_t, v] != M.LifetimeProcess_final[r, t, v]:
+    #     msg = ('the LifetimeProcess values of the primary and linked technologies '
+    #            'in the LinkedTechs table have to be specified and identical')
+    #     raise Exception(msg)
+
+    # TODO:  Verify that the below is not needed.  All Lifetime data is in LifetimeProcess_final
+    # if (r, t) in M.LifetimeTech.keys() and M.LifetimeTech[r, linked_t] != M.LifetimeTech[r, t]:
+    #     msg = ('the LifetimeTech values of the primary and linked technologies '
+    #            'in the LinkedTechs table have to be specified and identical')
+    #     raise Exception(msg)
 
     primary_flow = sum(
         M.V_FlowOut[r, p, s, d, S_i, t, v, S_o] * M.EmissionActivity[r, e, S_i, t, v, S_o]
@@ -2819,5 +2823,5 @@ of the primary and linked technologies should be specified and identical.
         for S_o in M.ProcessOutputsByInput[r, p, linked_t, v, S_i]
     )
 
-    expr = -primary_flow == linked_flow
-    return expr
+    # expr = -primary_flow == linked_flow
+    return -primary_flow == linked_flow

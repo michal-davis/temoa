@@ -20,9 +20,15 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+from pyomo.core import BuildCheck
+
 from temoa.temoa_model.pricing_check import price_checker, progress_check
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
+
+from pyomo.environ import Any, NonNegativeReals
+
+from temoa.temoa_model.validators import validate_linked_tech, region_check, tech_groups_set_check
 
 
 class TemoaModel(AbstractModel):
@@ -79,7 +85,7 @@ class TemoaModel(AbstractModel):
         # Define time period vintages to track capacity installation
         M.vintage_exist = Set(ordered=True, initialize=init_set_vintage_exist)
         M.vintage_optimize = Set(ordered=True, initialize=init_set_vintage_optimize)
-        M.vintage_all = M.time_exist | M.time_optimize
+        M.vintage_all = Set(initialize= M.time_exist | M.time_optimize)
         # Perform some basic validation on the specified time periods.
         M.validate_time = BuildAction(rule=validate_time)
 
@@ -88,16 +94,16 @@ class TemoaModel(AbstractModel):
         M.time_of_day = Set(ordered=True)
 
         # Define regions
-        M.regions = Set()
+        M.regions = Set(validate=region_check)
         # RegionalIndices is the set of all the possible combinations of interregional
         # exhanges plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
         M.RegionalIndices = Set(initialize=CreateRegionalIndices)
-        M.RegionalGlobalIndices = Set(initialize=RegionalGlobalInitializedIndices)
+        M.RegionalGlobalIndices = Any  #pyomo's set of anything.  This will be screened when used  #Set(initialize=RegionalGlobalInitializedIndices)
 
         # Define technology-related sets
         M.tech_resource = Set()
         M.tech_production = Set()
-        M.tech_all = M.tech_resource | M.tech_production
+        M.tech_all = Set(initialize=M.tech_resource | M.tech_production)
         M.tech_baseload = Set(within=M.tech_all)
         M.tech_storage = Set(within=M.tech_all)
         M.tech_reserve = Set(within=M.tech_all)
@@ -109,7 +115,8 @@ class TemoaModel(AbstractModel):
         M.tech_flex = Set(within=M.tech_all)
         M.tech_exchange = Set(within=M.tech_all)
         M.groups = Set(dimen=1)  # Define groups for technologies
-        M.tech_groups = Set(within=M.RegionalGlobalIndices * M.groups * M.tech_all)
+        # TODO:  come back and look at tech_groups.  Why isn't this an inexed set?  tech_groups = Set(M.groups, ...) ??
+        M.tech_groups = Set(dimen=3, validate=tech_groups_set_check)
         M.tech_annual = Set(within=M.tech_all)  # Define techs with constant output
         M.tech_variable = Set(
             within=M.tech_all)  # Define techs for use with TechInputSplitAverage constraint, where techs have variable annual output but the user wishes to constrain them annually
@@ -119,8 +126,8 @@ class TemoaModel(AbstractModel):
         M.commodity_demand = Set()
         M.commodity_emissions = Set()
         M.commodity_physical = Set()
-        M.commodity_carrier = M.commodity_physical | M.commodity_demand
-        M.commodity_all = M.commodity_carrier | M.commodity_emissions
+        M.commodity_carrier = Set(initialize=M.commodity_physical | M.commodity_demand)
+        M.commodity_all = Set(initialize=M.commodity_carrier | M.commodity_emissions)
 
         # Define sets for MGA weighting
         M.tech_mga = Set(within=M.tech_all)
@@ -186,11 +193,19 @@ class TemoaModel(AbstractModel):
         M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
 
         M.LifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeProcessIndices)
-        M.LifetimeProcess = Param(M.LifetimeProcess_rtv, mutable=True)
+        M.LifetimeProcess = Param(M.LifetimeProcess_rtv)
+        # devnote:  The param below is derived from LifetimeProcess and LifetimeTech by the initializer
+        #           The name is unfortunate, as it would be better to change the others, but they are locked
+        #           to the database schema.  It is all needed to make the param IMMUTABLE to support the
+        #           LinkedEmissionsTech_Constraint.  Possible future change to schema or do the lifetime verification
+        #           in data/db with query before build and get rid of LifetimeTech altogether.
+        M.LifetimeProcess_final = Param(M.LifetimeProcess_rtv, initialize=initialize_process_lifetimes)
+        M.clear_helper_params = BuildAction(rule=clear_unused_params)
 
         M.LifetimeLoanProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
         M.LifetimeLoanProcess = Param(M.LifetimeLoanProcess_rtv, mutable=True)
         M.initialize_Lifetimes = BuildAction(rule=CreateLifetimes)
+
 
         M.TechInputSplit = Param(M.regions, M.time_optimize, M.commodity_physical, M.tech_all)
         M.TechInputSplitAverage = Param(M.regions, M.time_optimize, M.commodity_physical, M.tech_variable)
@@ -275,7 +290,8 @@ class TemoaModel(AbstractModel):
         M.MaxActivityShare = Param(M.MinCapShare_rptg)
         M.MinNewCapacityShare = Param(M.MinCapShare_rptg)
         M.MaxNewCapacityShare = Param(M.MinCapShare_rptg)
-        M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions)
+        M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions, within=Any)
+        M.validate_LinkedTech_lifetimes = BuildCheck(rule=validate_linked_tech)
 
         M.ba31 = BuildAction(['starting electric sector params'], rule=progress_check)
         # Define parameters associated with electric sector operation
@@ -614,6 +630,7 @@ class TemoaModel(AbstractModel):
             M.MaxNewCapacityShareConstraint_rptg, rule=MaxNewCapacityShare_Constraint
         )
 
+        M.ba8 = BuildAction(['starting Max/Min Resource constraints'], rule=progress_check)
         M.MaxResourceConstraint_rt = Set(
             dimen=2, initialize=lambda M: M.MaxResource.sparse_iterkeys()
         )
@@ -642,6 +659,7 @@ class TemoaModel(AbstractModel):
             M.MinAnnualCapacityFactorConstraint_rpto, rule=MinAnnualCapacityFactor_Constraint
         )
 
+        # TODO:  Look at removing the lambda below and just init'ing from .sparse_keys()
         M.MaxAnnualCapacityFactorConstraint_rpto = Set(
             dimen=4, initialize=lambda M: M.MaxAnnualCapacityFactor.sparse_iterkeys()
         )
