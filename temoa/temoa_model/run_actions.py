@@ -141,7 +141,7 @@ def handle_results(instance: TemoaModel, results, options):
     duration = lambda: time() - begin
     formatted_results = pformat_results(instance, results, options)
     # yield '\t[%8.2f]\n' % duration()
-    SE.write('\r[%8.2f\n' % duration())
+    SE.write('\r[%8.2f]\n' % duration())
 
     # SO.write( formatted_results.getvalue() )
 

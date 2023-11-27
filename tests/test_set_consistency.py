@@ -17,7 +17,6 @@ import pathlib
 from pyomo import environ as pyo
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_model import TemoaModel, TemoaModel
 from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 
 
@@ -26,9 +25,10 @@ def test_upoptia_set_consistency():
     test the set membership of the utopia model against cached values to ensure consistency
     """
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_utopia')
-    ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.BUILD_ONLY)
-    ts.start()
-    built_instance = ts.pf_solved_instance  # actually not solved in this case
+    options = {'silent': True, 'debug': True}
+    ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.BUILD_ONLY, **options)
+
+    built_instance = ts.start()
     model_sets = built_instance.component_map(ctype=pyo.Set)
     model_sets = {k: set(v) for k, v in model_sets.items()}
 
@@ -36,7 +36,8 @@ def test_upoptia_set_consistency():
     cache_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_data', 'utopia_sets.json')
     with open(cache_file, 'r') as src:
         cached_sets = json.load(src)
-    cached_sets = {k: set(tuple(t) if isinstance(t, list) else t for t in v) for (k, v) in cached_sets.items()}
+    cached_sets = {k: set(tuple(t) if isinstance(t, list) else t for t in v) for (k, v) in
+                   cached_sets.items()}
 
     shortage_in_model = dict()
     overage_in_model = dict()
@@ -59,7 +60,6 @@ def test_upoptia_set_consistency():
             if len(v) > 0:
                 print(k, v)
     assert not shortage_in_model and not overage_in_model, 'The Utopia run-produced sets did not match cached values'
-
 
 
 def test_test_system_set_consistency():
@@ -68,17 +68,16 @@ def test_test_system_set_consistency():
     """
     # this could be combined with the similar test for utopia to use the fixture at some time...
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_test_system')
-    ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.BUILD_ONLY)
-    ts.start()
-    built_instance = ts.pf_solved_instance  # actually not solved in this case
+    options = {'silent': True, 'debug': True}
+    ts = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.BUILD_ONLY, **options)
+    built_instance = ts.start()
     model_sets = built_instance.component_map(ctype=pyo.Set)
-
     model_sets = {k: set(v) for k, v in model_sets.items()}
-
     cache_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_data', 'test_system_sets.json')
     with open(cache_file, 'r') as src:
         cached_sets = json.load(src)
-    cached_sets = {k: set(tuple(t) if isinstance(t, list) else t for t in v) for (k, v) in cached_sets.items()}
+    cached_sets = {k: set(tuple(t) if isinstance(t, list) else t for t in v) for (k, v) in
+                   cached_sets.items()}
     shortage_in_model = dict()
     overage_in_model = dict()
     for set_name, s in model_sets.items():
@@ -99,4 +98,4 @@ def test_test_system_set_consistency():
         for k, v in overage_in_model.items():
             if len(v) > 0:
                 print(k, v)
-    assert not shortage_in_model and not overage_in_model, 'The Utopia run-produced sets did not match cached values'
+    assert not shortage_in_model and not overage_in_model, 'The Test System run-produced sets did not match cached values'
