@@ -4,6 +4,8 @@ import re
 import getopt
 import pandas as pd
 import xlsxwriter
+# TODO:  Something with this import is causing logging problems inside of testing modules...
+#        Can we swap over to pandas?
 from pyam import IamDataFrame
 
 def make_excel(ifile, ofile, scenario):

@@ -2,10 +2,7 @@
 Test a couple full-runs to match objective function value and some internals
 """
 import logging
-import os
 import pathlib
-import shutil
-import sqlite3
 
 import pyomo.environ as pyo
 import pytest
@@ -13,9 +10,7 @@ from pyomo.core import Constraint, Var
 
 from definitions import PROJECT_ROOT
 # from src.temoa_model.temoa_model import temoa_create_model
-from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
-
 from tests.legacy_test_values import TestVals, test_vals
 
 # Written by:  J. F. Hyink
@@ -34,10 +29,13 @@ def system_test_run(request):
     """
     spin up the model, solve it, and hand over the model and result for inspection
     """
+    logger.info('Setting up and solving: %s', request)
     filename = request.param
+    options = {'silent': True, 'debug': True}
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)
 
-    sequencer = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.PERFECT_FORESIGHT)
+    sequencer = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.PERFECT_FORESIGHT,
+                               **options)
     sequencer.start()
     res = sequencer.pf_results
     mdl = sequencer.pf_solved_instance
@@ -64,7 +62,8 @@ def test_against_legacy_outputs(system_test_run):
         TestVals.EFF_INDEX_SIZE], 'should match legacy numbers'
 
     # check the size of the domain.  NOTE:  The build of the domain here may be "expensive" for large models
-    assert len((efficiency_param.index_set().domain)) == expected_vals[TestVals.EFF_DOMAIN_SIZE], 'should match legacy numbers'
+    assert len((efficiency_param.index_set().domain)) == expected_vals[
+        TestVals.EFF_DOMAIN_SIZE], 'should match legacy numbers'
 
     # inspect the total variable and constraint counts
     # gather some stats...
@@ -77,7 +76,7 @@ def test_against_legacy_outputs(system_test_run):
 
     # check the count of constraints & variables
     assert c_count == expected_vals[TestVals.CONSTR_COUNT], 'should have this many constraints'
-    assert v_count == expected_vals[TestVals.VAR_COUNT],    'should have this many variables'
+    assert v_count == expected_vals[TestVals.VAR_COUNT], 'should have this many variables'
 
 
 @pytest.mark.skip(reason='Myopic test on hold till myopic is running again')
