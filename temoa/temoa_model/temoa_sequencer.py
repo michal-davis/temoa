@@ -5,14 +5,15 @@ accomplish that.  Several processing requirements have requirements for multiple
 a possibly unique sequencer based on the processing mode selected
 """
 import sys
-from enum import Enum, unique
 from logging import getLogger
 from pathlib import Path
 
 import pyomo.opt
 
+from temoa.temoa_model.dat_file_maker import db_2_dat
 from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results
 from temoa.temoa_model.temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_run import temoa_checks
 
@@ -23,21 +24,13 @@ from temoa.temoa_model.temoa_run import temoa_checks
 
 logger = getLogger(__name__)
 
-
-@unique
-class TemoaMode(Enum):
-    """The processing mode for the scenario"""
-    PERFECT_FORESIGHT = 1  # Normal run, single execution for full time horizon
-    MGA = 2  # Modeling for Generation of Alternatives, mutliple runs w/ changing constrained obj
-    MYOPIC = 3  # Step-wise execution through the future
-    METHOD_OF_MORRIS = 4  # Method-of-Morris run
-    BUILD_ONLY = 5  # Just build the model, no solve
-
-
 class TemoaSequencer:
     """A Sequencer instance to control all runs for a scenario based on the TemoaMode"""
 
-    def __init__(self, config_file: str | Path, mode_override: TemoaMode = None, **kwargs):
+    def __init__(self, config_file: str | Path,
+                 output_path: str | Path,
+                 mode_override: TemoaMode,
+                 **kwargs):
         """
         Create a new Sequencer
         :param config_file: Optional path to config file.  If not provided, it will be read from Command Line Args
@@ -45,17 +38,17 @@ class TemoaSequencer:
         """
         self.config: TemoaConfig | None = None
         self.temoa_mode: TemoaMode
-        self.config_file: Path
-        if config_file:
-            self.config_file = Path(config_file)
-        else:
-            logger.error('No config file passed in.  Exiting')
-            raise AttributeError('No config file location')
+        self.config_file: Path = Path(config_file)
         # check it...
         if not self.config_file.is_file():
-            logger.error('Config file location passed %d does not point to a file',
+            logger.error('Config file location passed %s does not point to a file',
                          self.config_file)
             raise FileNotFoundError(f'Invalid config file: {self.config_file}')
+        self.output_path: Path = Path(output_path)
+        # check it...
+        if not self.output_path.is_dir():
+            logger.error('Output directory does not exist: %s', self.output_path)
+            raise FileNotFoundError(f'Invalid output directory: {self.output_path}')
         self.mode_override: TemoaMode = mode_override
 
         # for feedback to user
@@ -70,19 +63,25 @@ class TemoaSequencer:
 
         # Run the preliminaries...
         # Build a TemoaConfig
-        self.config = TemoaConfig()
-        self.config.build(config=self.config_file)
+        self.config = TemoaConfig.build_config(config_file=self.config_file,
+                                                output_path=self.output_path)
 
+        # TODO:  Screen this vs. what is already done at this point
         temoa_checks(self.config)
 
         # Distill the TemoaMode
-        # TODO:  Temp patch until config is updated
-        self.config.temoa_mode = TemoaMode.PERFECT_FORESIGHT
-        self.temoa_mode = self.mode_override if self.mode_override else self.config.temoa_mode
+        self.temoa_mode = self.mode_override if self.mode_override else self.config.scenario_mode
         if not isinstance(self.temoa_mode, TemoaMode):
             logger.error('Temoa Mode not set properly.  Override: %d, Config File: %d',
-                         self.mode_override, self.config.temoa_mode)
+                         self.mode_override, self.config.scenario_mode)
             raise RuntimeError('Problem with mode selection, see log file.')
+
+        # convert the input file from .sqlite -> .dat if needed
+        if self.config.input_file.suffix == '.sqlite':
+            dat_file = self.config.input_file.with_suffix('.dat')
+            db_2_dat(self.config.input_file, dat_file, self.config)
+            # update the config to point to the .dat file newly created
+            self.config.input_file = dat_file
 
         # Get user confirmation if not silent
         if not self.silent:
@@ -103,8 +102,8 @@ class TemoaSequencer:
             case TemoaMode.PERFECT_FORESIGHT:
                 instance = build_instance(self.config.dot_dat)
                 self.pf_solved_instance, self.pf_results = solve_instance(instance,
-                                                                          self.config.solver,
-                                                                          self.config.keepPyomoLP)
+                                                                          self.config.solver_name,
+                                                                          self.config.save_lp_file)
                 handle_results(self.pf_solved_instance, self.pf_results, self.config)
             case _:
                 raise NotImplementedError('not yet built')

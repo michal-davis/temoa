@@ -35,10 +35,12 @@ def runModel(arg_list: list[str] | None = None) -> TemoaModel | None:
     :param arg_list: optional arg_list
     :return: A TemoaModel instance (if asked for), more likely None
     """
-    logger.info('*** STARTING TEMOA ***')
     options = parse_args(arg_list=arg_list)
     mode = TemoaMode.BUILD_ONLY if options.build_only else None
-    ts = TemoaSequencer(config_file=options.config_file, mode_override=mode, silent=options.silent)
+    ts = TemoaSequencer(config_file=options.config_file,
+                        output_path=options.output_path,
+                        mode_override=mode,
+                        silent=options.silent)
     result = ts.start()
     return result
 
@@ -63,11 +65,45 @@ def parse_args(arg_list: list[str] | None) -> argparse.Namespace:
                         help='Set logging level to DEBUG to see debugging output in log file.',
                         action='store_true',
                         dest='debug')
+    parser.add_argument('-o', '--output_path',
+                        help='Set the path for log and program outputs to an existing directory.  '
+                             'Default is time-stamped folder in output_files.',
+                        action='store',
+                        dest='output_path')
+    parser.add_argument('--how_to_cite',
+                        help='Show citation information for publishing purposes.',
+                        action='store_true',
+                        dest='how_to_cite')
+    parser.add_argument('-v', '--version',
+                        help='Show current Temoa version and db schema version.',
+                        action='store_true',
+                        dest='version')
 
-    options = parser.parse_args(args=arg_list)  # note:  The default (if None) is sys.argv
+    options = parser.parse_args(args=arg_list)  # dev note:  The default (if None) is sys.argv
 
-    # initialize the logging now that option is known...
-    setup_logging(options.debug)
+    # handle the non-execution options and quit
+    if options.how_to_cite or options.version:
+        if options.version:
+            print('Temoa Version 3.0')
+        if options.how_to_cite:
+            raise NotImplementedError('Need this information...')
+        sys.exit()
+
+    # validate the output folder if provided, or make the default
+    output_path: Path
+    if options.output_path:
+        if not Path(options.output_path).is_dir():
+            raise FileNotFoundError(f'The selected output path directory {options.output_path} '
+                                    f'could not be located.')
+        else:
+            output_path = Path(options.output_path)
+    else:
+        output_path = create_output_folder()
+    # capture it in options
+    options.output_path = output_path
+
+    # initialize the logging now that option & path are known...
+    setup_logging(output_path=output_path, debug_level=options.debug)
 
     # check for config file existence
     if not options.config_file:
@@ -88,13 +124,19 @@ def parse_args(arg_list: list[str] | None) -> argparse.Namespace:
     return options
 
 
-def setup_logging(debug_level=False):
-    # set the target folder for logging output from this run
-    output_path = os.path.join(PROJECT_ROOT, "output_files",
+def create_output_folder() -> Path:
+    """
+    create a time-stamped folder as the default catch-all for outputs
+    :return: Path to default folder
+    """
+    output_path = Path(PROJECT_ROOT, "output_files",
                                datetime.now().strftime("%Y-%m-%d %H%Mh"))
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
+    if not output_path.is_dir():
+        output_path.mkdir()
+    return output_path
 
+
+def setup_logging(output_path: Path, debug_level=False):
     # set up logger
     if debug_level:
         level = logging.DEBUG
@@ -111,7 +153,7 @@ def setup_logging(debug_level=False):
         datefmt="%d-%b-%y %H:%M:%S",
         level=level
     )
-    logger.info('Starting Program')
+    logger.info('*** STARTING TEMOA ***')
 
 
 if __name__ == '__main__':
