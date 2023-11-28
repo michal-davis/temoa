@@ -151,7 +151,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
 
     if hasattr(options, 'file_location') and os.path.join('temoa_model',
                                                           'config_sample_myopic') in options.file_location:
-        original_dbpath = options.output
+        original_dbpath = options.output_file
         con = sqlite3.connect(original_dbpath)
         cur = con.cursor()
         time_periods = cur.execute("SELECT t_periods FROM time_periods WHERE flag='f'").fetchall()
@@ -418,7 +418,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 svars['Costs'][(item[0], item[1][item[1].find("-") + 1:], item[2], item[3])] = svars['Costs'][item]
                 del svars['Costs'][item]
 
-    if options.saveDUALS:
+    if options.save_duals:
         duals = collect_result_data(Cons, con_info, epsilon=1e-9)
 
     msg = ('Model name: %s\n'
@@ -477,8 +477,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                  'LifetimeTech', 'LifetimeProcess', 'Efficiency', 'EmissionActivity', 'ExistingCapacity']
 
     if isinstance(options, TemoaConfig):
-        if not options.output:
-            if options.saveTEXTFILE or options.keepPyomoLP:
+        if not options.output_file:
+            if options.saveTEXTFILE or options.save_lp_file:
                 for inpu in options.dot_dat:
                     print(inpu)
                     file_ty = re.search(r"\b([\w-]+)\.(\w+)\b", inpu)
@@ -489,11 +489,11 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             print("No Output File specified.")
             return output
 
-        if not os.path.exists(options.output):
-            print("Please put the " + options.output + " file in the right Directory")
+        if not os.path.exists(options.output_file):
+            print("Please put the " + options.output_file + " file in the right Directory")
             return output
 
-        con = sqlite3.connect(options.output)
+        con = sqlite3.connect(options.output_file)
         cur = con.cursor()  # A database cursor enables traversal over DB records
         con.text_factory = str  # This ensures data is explored with UTF-8 encoding
 
@@ -586,7 +586,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
 								WHERE " + tables[table] + ".tech = technologies.tech);")
 
         # WRITE DUALS RESULTS
-        if (options.saveDUALS):
+        if (options.save_duals):
             if (len(duals) != 0):
                 overwrite_keys = [str(tuple(x)) for x in
                                   duals.reset_index()[['constraint_name', 'scenario']].to_records(index=False)]
@@ -599,7 +599,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         con.commit()
         con.close()
 
-        if options.saveEXCEL or options.saveTEXTFILE or options.keepPyomoLP:
+        if options.save_excel or options.saveTEXTFILE or options.save_lp_file:
             for inpu in options.dot_dat:
                 file_ty = re.search(r"\b([\w-]+)\.(\w+)\b", inpu)
             new_dir = options.path_to_data + os.sep + file_ty.group(1) + '_' + options.scenario + '_model'
@@ -607,13 +607,13 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 rmtree(new_dir)
             os.mkdir(new_dir)
 
-            if options.saveEXCEL:
-                file_type = re.search(r"([\w-]+)\.(\w+)\b", options.output)
+            if options.save_excel:
+                file_type = re.search(r"([\w-]+)\.(\w+)\b", options.output_file)
                 file_n = file_type.group(1)
                 temp_scenario = set()
                 temp_scenario.add(options.scenario)
                 # make_excel function imported near the top
-                make_excel(options.output, new_dir + os.sep + options.scenario, temp_scenario)
+                make_excel(options.output_file, new_dir + os.sep + options.scenario, temp_scenario)
         # os.system("python data_processing"+os.sep+"DB_to_Excel.py -i \
         #		  ""+options.output+" \
         #		  " -o data_files"+os.sep+options.scenario+" -s "+options.scenario)

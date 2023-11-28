@@ -11,6 +11,9 @@ import re
 import getopt
 from logging import getLogger
 
+from temoa.temoa_model.temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_mode import TemoaMode
+
 logger = getLogger(__name__)
 
 # the tables below are ones in which we might find regional groups which should be captured
@@ -27,7 +30,7 @@ tables_with_regional_groups = {'MaxActivity': 'regions',
                                #'tech_groups': 'region',  # <-- note the odd duck (non plural)
                                }
 # TODO:  Sort out the schema for tech_groups.  RN, US_9R stuff does not comply w/ schema for this table
-def db_2_dat(ifile, ofile, options):
+def db_2_dat(ifile, ofile, options: TemoaConfig):
 
     logger.debug('Starting creation of .dat file from database %s', ifile)
 
@@ -222,16 +225,18 @@ def db_2_dat(ifile, ofile, options):
         for table in table_list:
             if table[1] in table_exist:
                 query_table(table, f)
-        if options.mga_weight == 'integer':
-            write_tech_mga(f)
-        if options.mga_weight == 'normalized':
-            write_tech_sector(f)
+        if options.scenario_mode == TemoaMode.MGA:
+            raise NotImplementedError('mga stuff to do...')
+            # if options.mga_weight == 'integer':
+            #     write_tech_mga(f)
+            # if options.mga_weight == 'normalized':
+            #     write_tech_sector(f)
 
         # construct the RegionalGlobalIndices Set
         construct_RegionalGlobalIndices(tables_in_db=table_exist, f=f)
 
         # Making sure the database is empty from the begining for a myopic solve
-        if options.myopic:
+        if options.myopic_inputs:
             cur.execute(
                 "DELETE FROM Output_CapacityByPeriodAndTech WHERE scenario=" + "'" + str(options.scenario) + "'")
             cur.execute("DELETE FROM Output_Emissions WHERE scenario=" + "'" + str(options.scenario) + "'")

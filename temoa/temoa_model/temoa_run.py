@@ -94,7 +94,7 @@ def temoa_setup(config_filename):
     else:  # Config file already specified, so must be an interface call
         available_solvers, default_solver = get_solvers()
         temoa_config = TemoaConfig(d_solver=default_solver)
-        temoa_config.build(config=config_filename)
+        temoa_config.old_build_config(config=config_filename)
         options = temoa_config
         logger.info('Built a TemoaConfig for scenario %s', options.scenario)
 
@@ -114,12 +114,12 @@ def temoa_checks(options: TemoaConfig):
         # Invoke NEOS solver manager if flag is specified in config file
         optimizer = pyomo.opt.SolverManagerFactory('neos')
     else:
-        optimizer = SolverFactory(options.solver)
+        optimizer = SolverFactory(options.solver_name)
 
     if optimizer:
         options.optimizer = optimizer
-    elif options.solver != 'NONE':
-        SE.write("\nWarning: Unable to initialize solver interface for '{}'\n\n".format(options.solver))
+    elif options.solver_name != 'NONE':
+        SE.write("\nWarning: Unable to initialize solver interface for '{}'\n\n".format(options.solver_name))
         if SE.isatty():
             raise RuntimeError(
                 "unknown intent for this codeblock.  -JH ")  # TODO:  Not clear what the intent of the below lines are, but options is not defined.  #        probably a reference to options?  But intent is still unclear  # SE.write( "Please press enter to continue or Ctrl+C to quit." )  # if os.path.join('temoa_model','config_sample_myopic') not in options.file_location:  # 	raw_input()
@@ -300,7 +300,7 @@ class TemoaSolverInstance(object):
         """Create a single instance of Temoa."""
 
         try:
-            if self.options.keepPyomoLP:
+            if self.options.save_lp_file:
                 yield '\nSolver will write file: {}\n\n'.format(self.options.scenario + '.lp')
                 SE.write('\nSolver will write file: {}\n\n'.format(self.options.scenario + '.lp'))
                 self.txt_file.write('\nSolver will write file: {}\n\n'.format(self.options.scenario + '.lp'))
@@ -374,18 +374,18 @@ class TemoaSolverInstance(object):
             SE.flush()
             self.txt_file.write('Solving.')
             if self.optimizer:
-                logger.info('Starting the solve process using %s solver', self.options.solver)
+                logger.info('Starting the solve process using %s solver', self.options.solver_name)
                 if self.options.neos:
-                    self.result = self.optimizer.solve(self.instance, opt=self.options.solver)
+                    self.result = self.optimizer.solve(self.instance, opt=self.options.solver_name)
                 else:
-                    if self.options.solver == 'cbc':
+                    if self.options.solver_name == 'cbc':
                         # Solver options. Reference: https://genxproject.github.io/GenX/dev/solver_configuration/
                         self.optimizer.options["dualTolerance"] = 1e-6
                         self.optimizer.options["primalTolerance"] = 1e-6
                         self.optimizer.options["zeroTolerance"] = 1e-12
                         self.optimizer.options["crossover"] = 'off'
 
-                    elif self.options.solver == 'cplex':
+                    elif self.options.solver_name == 'cplex':
                         # Note: these parameter values are taken to be the same as those in PyPSA (see: https://pypsa-eur.readthedocs.io/en/latest/configuration.html)
                         self.optimizer.options["lpmethod"] = 4  # barrier
                         self.optimizer.options["solutiontype"] = 2  # non basic solution, ie no crossover
@@ -395,8 +395,8 @@ class TemoaSolverInstance(object):
                     # Note: still need to add gurobi parameters.
 
                     self.result = self.optimizer.solve(self.instance, suffixes=['dual'],  # 'rc', 'slack'],
-                                                       keepfiles=self.options.keepPyomoLP,
-                                                       symbolic_solver_labels=self.options.keepPyomoLP)
+                                                       keepfiles=self.options.save_lp_file,
+                                                       symbolic_solver_labels=self.options.save_lp_file)
                     logger.info('Solve process complete')
                     logger.debug('Solver results: \n %s', self.result)
                 yield '\t\t\t\t\t\t[%8.2f]\n' % duration()
@@ -454,7 +454,7 @@ class TemoaSolverInstance(object):
                 copyfile(self.options.path_to_logs + os.sep + log_name,
                          new_dir + os.sep + self.options.scenario + '_OutputLog.log')
 
-        if isinstance(self.options, TemoaConfig) and self.options.keepPyomoLP:
+        if isinstance(self.options, TemoaConfig) and self.options.save_lp_file:
             for inpu in self.options.dot_dat:
                 file_ty = reg_exp.search(r"\b([\w-]+)\.(\w+)\b", inpu)
 
@@ -565,7 +565,7 @@ def parse_args():
         config_flag = 1  # flag indicates config file was used.
         try:
             temoa_config = TemoaConfig(d_solver=default_solver)
-            temoa_config.build(config=options.config)
+            temoa_config.old_build_config(config=options.config)
             SE.write(repr(temoa_config))
             options = temoa_config
             SE.write('\nPlease press enter to continue or Ctrl+C to quit.\n')
@@ -578,7 +578,7 @@ def parse_args():
     else:
         config_flag = 0  # flag indicates config file was not used.
 
-    s_choice = str(options.solver).upper()
+    s_choice = str(options.solver_name).upper()
     SE.write('Notice: Using the {} solver interface.\n'.format(s_choice))
     SE.flush()
 

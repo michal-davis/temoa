@@ -191,10 +191,10 @@ def solve_ef(p_model, p_data, dummy_temoa_options = None):
             from temoa_config import TemoaConfig
             temoa_options = TemoaConfig()
             temoa_options.config = dummy_temoa_options.config
-            temoa_options.keepPyomoLP = dummy_temoa_options.keepPyomoLP
+            temoa_options.save_lp_file = dummy_temoa_options.save_lp_file
             temoa_options.saveTEXTFILE = dummy_temoa_options.saveTEXTFILE
             temoa_options.path_to_data = dummy_temoa_options.path_to_data
-            temoa_options.saveEXCEL = dummy_temoa_options.saveEXCEL
+            temoa_options.save_excel = dummy_temoa_options.save_excel
             ef_result.solution.Status = 'feasible' # Assume it is feasible
             for s in manager.scenario_tree.scenarios:
                 ins = s._instance
@@ -202,9 +202,9 @@ def solve_ef(p_model, p_data, dummy_temoa_options = None):
                 temoa_options.dot_dat = [ 
                 os.path.join(options.scenario_tree_location, s.name + '.dat') 
                 ]
-                temoa_options.output = os.path.join(
+                temoa_options.output_file = os.path.join(
                     options.scenario_tree_location, 
-                    dummy_temoa_options.output
+                    dummy_temoa_options.output_file
                     )
                 msg = '\nStoring results from scenario {} to database.\n'.format(s.name)
                 sys.stderr.write(msg)
