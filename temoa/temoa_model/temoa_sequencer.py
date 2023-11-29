@@ -97,10 +97,10 @@ class TemoaSequencer:
         # Set up the individual runs & execute
         match self.temoa_mode:
             case TemoaMode.BUILD_ONLY:
-                temoa_instance = build_instance(self.config.dot_dat)
+                temoa_instance = build_instance(self.config.input_file)
                 return temoa_instance
             case TemoaMode.PERFECT_FORESIGHT:
-                instance = build_instance(self.config.dot_dat)
+                instance = build_instance(self.config.input_file)
                 self.pf_solved_instance, self.pf_results = solve_instance(instance,
                                                                           self.config.solver_name,
                                                                           self.config.save_lp_file)
