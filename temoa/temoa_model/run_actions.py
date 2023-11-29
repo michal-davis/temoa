@@ -21,22 +21,22 @@ from temoa.temoa_model.temoa_model import TemoaModel
 logger = getLogger(__name__)
 
 
-def build_instance(dat_files: Iterable[Path], model_name=None) -> TemoaModel:
+def build_instance(dat_file: Path, model_name=None) -> TemoaModel:
     """
     Build a Temoa Instance from data
     :param model_name: Optional name for this instance
-    :param dat_files: A list of .dat files to construct from [PRESUMABLY 1 file!]
+    :param dat_file: The data source
     :return: a built TemoaModel
     """
     model = TemoaModel()
     model_data = DataPortal(model=model)
-    for fname in dat_files:
-        if fname[-4:] != '.dat':
-            logger.error('Attempted to load data from file %d which is not a .dat file', fname)
-            raise TypeError('file loading error occurred, see log')
-        logger.debug('Started loading the DataPortal from the .dat file')
-        model_data.load(filename=fname)
-        logger.debug('Finished reading the .dat file')
+
+    if dat_file.suffix != '.dat':
+        logger.error('Attempted to load data from file %d which is not a .dat file', dat_file)
+        raise TypeError('file loading error occurred, see log')
+    logger.debug('Started loading the DataPortal from the .dat file: %s', dat_file)
+    model_data.load(filename=str(dat_file))
+    logger.debug('Finished reading the .dat file')
 
     # TODO:  Look at this.  There is likely a better way to get the dual than using Suffix (?)
     model.dual = Suffix(direction=Suffix.IMPORT)

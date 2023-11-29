@@ -151,7 +151,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
 
     if hasattr(options, 'file_location') and os.path.join('temoa_model',
                                                           'config_sample_myopic') in options.file_location:
-        original_dbpath = options.output_file
+        original_dbpath = options.output_database
         con = sqlite3.connect(original_dbpath)
         cur = con.cursor()
         time_periods = cur.execute("SELECT t_periods FROM time_periods WHERE flag='f'").fetchall()
@@ -477,7 +477,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                  'LifetimeTech', 'LifetimeProcess', 'Efficiency', 'EmissionActivity', 'ExistingCapacity']
 
     if isinstance(options, TemoaConfig):
-        if not options.output_file:
+        if not options.output_database:
+            # TODO:  What is intent of below ???
             if options.saveTEXTFILE or options.save_lp_file:
                 for inpu in options.dot_dat:
                     print(inpu)
@@ -489,11 +490,11 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             print("No Output File specified.")
             return output
 
-        if not os.path.exists(options.output_file):
-            print("Please put the " + options.output_file + " file in the right Directory")
+        if not os.path.exists(options.output_database):
+            print("Please put the " + options.output_database + " file in the right Directory")
             return output
 
-        con = sqlite3.connect(options.output_file)
+        con = sqlite3.connect(options.output_database)
         cur = con.cursor()  # A database cursor enables traversal over DB records
         con.text_factory = str  # This ensures data is explored with UTF-8 encoding
 
@@ -501,29 +502,30 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         # IF output file is empty database.
         # TODO:  The syntax here is backwards.  is_db_empty is "false" if it is empty???!!!
         cur.execute("SELECT * FROM technologies")
-        is_db_empty = False  # False for empty db file
+        db_has_results = False  # False for empty db file
         for elem in cur:
-            is_db_empty = True  # True for non-empty db file
+            db_has_results = True  # True for non-empty db file
             break
 
-        if is_db_empty:  # This file could be schema with populated results from previous run. Or it could be a normal db file.
+        if db_has_results:  # This file could be schema with populated results from previous run. Or it could be a normal db file.
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='input_file';")
-            does_input_file_table_exist = False
+            input_file_table_exists = False
             for i in cur:  # This means that the 'input_file' table exists in db.
-                does_input_file_table_exist = True
-            if does_input_file_table_exist:  # This block distinguishes normal database from schema.
+                input_file_table_exists = True
+            if input_file_table_exists:  # This block distinguishes normal database from schema.
                 # This is schema file.
                 cur.execute("SELECT file FROM input_file WHERE id is '1';")
                 for i in cur:
                     tagged_file = i[0]
                 tagged_file = re.sub('["]', "", tagged_file)
 
-                if tagged_file == options.dot_dat[0]:
+                if tagged_file == options.input_file:
                     # If Input_file name matches, add output and check tech/comm
-                    dat_to_db(options.dot_dat[0], con)
-                else:
+                    dat_to_db(options.input_file, con)
+                else: # the database was not created from the input file...  ??
                     # If not a match, delete output tables and update input_file. Call dat_to_db
                     for i in db_tables:
+                        # TODO:  This is deleting the data tables ?
                         cur.execute("DELETE FROM " + i + ";")
                         cur.execute("VACUUM;")
 
@@ -531,10 +533,11 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                         cur.execute("DELETE FROM " + tables[i] + ";")
                         cur.execute("VACUUM;")
 
-                    for i in options.dot_dat:
-                        cur.execute("DELETE FROM input_file WHERE id=1;")
-                        cur.execute("INSERT INTO input_file VALUES(1, '" + i + "');")
-                        break
+
+                    cur.execute("DELETE FROM input_file WHERE id=1;")
+                    cur.execute("INSERT INTO input_file VALUES(1, '" + str(options.input_file) +
+                                "');")
+
                     dat_to_db(i, con)
 
         else:  # empty schema db file
@@ -608,12 +611,12 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             os.mkdir(new_dir)
 
             if options.save_excel:
-                file_type = re.search(r"([\w-]+)\.(\w+)\b", options.output_file)
+                file_type = re.search(r"([\w-]+)\.(\w+)\b", options.output_database)
                 file_n = file_type.group(1)
                 temp_scenario = set()
                 temp_scenario.add(options.scenario)
                 # make_excel function imported near the top
-                make_excel(options.output_file, new_dir + os.sep + options.scenario, temp_scenario)
+                make_excel(options.output_database, new_dir + os.sep + options.scenario, temp_scenario)
         # os.system("python data_processing"+os.sep+"DB_to_Excel.py -i \
         #		  ""+options.output+" \
         #		  " -o data_files"+os.sep+options.scenario+" -s "+options.scenario)
@@ -716,37 +719,37 @@ def dat_to_db(input_file, output_schema, run_partial=False):
 
     # Fill time_periods
     for i in parsed_data['time_exist']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO time_periods VALUES(" + i + ", 'e');")
     for i in parsed_data['time_future']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO time_periods VALUES(" + i + ", 'f');")
 
     # Fill time_season
     for i in parsed_data['time_season']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO time_season VALUES('" + i + "');")
 
     # Fill time_of_day
     for i in parsed_data['time_of_day']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO time_of_day VALUES('" + i + "');")
 
     # Fill technologies
     for i in parsed_data['tech_baseload']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'pb', '', '');")
     for i in parsed_data['tech_storage']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'ph', '', '');")
     for i in parsed_data['tech_production']:
-        if i is '':
+        if i == '':
             continue
         if i in parsed_data['tech_storage']:
             continue
@@ -754,27 +757,27 @@ def dat_to_db(input_file, output_schema, run_partial=False):
             continue
         output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'p', '', '');")
     for i in parsed_data['tech_resource']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'r', '', '');")
 
     # Fill commodities
     for i in parsed_data['commodity_demand']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO commodities VALUES('" + i + "', 'd', '');")
     for i in parsed_data['commodity_physical']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO commodities VALUES('" + i + "', 'p', '');")
     for i in parsed_data['commodity_emissions']:
-        if i is '':
+        if i == '':
             continue
         output_schema.execute("INSERT OR REPLACE INTO commodities VALUES('" + i + "', 'e', '');")
 
     # Fill ExistingCapacity
     for i in parsed_data['ExistingCapacity']:
-        if i is '':
+        if i == '':
             continue
         row_data = re.split(" ", i)
         row_data.append('')
@@ -783,7 +786,7 @@ def dat_to_db(input_file, output_schema, run_partial=False):
 
     # Fill Efficiency
     for i in parsed_data['Efficiency']:
-        if i is '':
+        if i == '':
             continue
         row_data = re.split(" ", i)
         row_data.append('')
@@ -791,7 +794,7 @@ def dat_to_db(input_file, output_schema, run_partial=False):
 
     # Fill LifetimeTech
     for i in parsed_data['LifetimeTech']:
-        if i is '':
+        if i == '':
             continue
         row_data = re.split(" ", i)
         row_data.append('')
@@ -799,7 +802,7 @@ def dat_to_db(input_file, output_schema, run_partial=False):
 
     # Fill LifetimeProcess
     for i in parsed_data['LifetimeProcess']:
-        if i is '':
+        if i == '':
             continue
         row_data = re.split(" ", i)
         row_data.append('')
@@ -807,10 +810,10 @@ def dat_to_db(input_file, output_schema, run_partial=False):
 
     # Fill EmissionActivity
     for i in parsed_data['EmissionActivity']:
-        if i is '':
+        if i == '':
             continue
         row_data = re.split(" ", i)
         row_data.append('')
-        if len(row_data) is 7:
+        if len(row_data) == 7:
             row_data.append('')
         output_schema.execute("INSERT OR REPLACE INTO EmissionActivity VALUES(?, ?, ?, ?, ?, ?, ?, ?);", row_data)
