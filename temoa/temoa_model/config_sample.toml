@@ -25,7 +25,7 @@ input_file = "data_files/temoa_utopia.sqlite"
 # The output file must be a existing .sqlite file
 # the user may target the same input file or a separate /
 # copied sqlite file in a different location
-output_database = "output_files/temoa_test_system.sqlite"
+output_database = "output_files/temoa_utopia.sqlite"
 
 # ------------------------------------
 #             SOLVER

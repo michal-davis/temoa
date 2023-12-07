@@ -234,7 +234,7 @@ def db_2_dat(ifile, ofile, options: TemoaConfig):
         construct_RegionalGlobalIndices(tables_in_db=table_exist, f=f)
 
         # Making sure the database is empty from the begining for a myopic solve
-        if options.myopic_inputs:
+        if options.scenario_mode == TemoaMode.MYOPIC:
             cur.execute(
                 "DELETE FROM Output_CapacityByPeriodAndTech WHERE scenario=" + "'" + str(options.scenario) + "'")
             cur.execute("DELETE FROM Output_Emissions WHERE scenario=" + "'" + str(options.scenario) + "'")
