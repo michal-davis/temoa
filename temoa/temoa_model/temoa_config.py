@@ -210,7 +210,7 @@ class TemoaConfig:
         #     else:
         #         msg += '{:>25s}  {}\n'.format(' ', i)
         msg += '{:>{}s}: {}\n'.format('Scenario', width, self.scenario)
-        msg += '{:>{}s}: {}\n'.format('Scenario mode', width, self.scenario_mode)
+        msg += '{:>{}s}: {}\n'.format('Scenario mode', width, self.scenario_mode.name)
         msg += '{:>{}s}: {}\n'.format('Config file', width, self.config_file)
         msg += '{:>{}s}: {}\n'.format('Data source', width, self.input_file)
         msg += '{:>{}s}: {}\n'.format('Output database target', width, self.output_database)
