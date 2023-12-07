@@ -3,6 +3,7 @@ a container for test values from legacy code (Python 3.7 / Pyomo 5.5) captured f
 """
 from enum import Enum
 
+
 # Written by:  J. F. Hyink
 # jeff@westernspark.us
 # https://westernspark.us
@@ -18,15 +19,14 @@ class TestVals(Enum):
 
 
 # these values were captured on base level runs of the .dat files in the tests/testing_data folder
-test_vals = {'config_test_system': {TestVals.OBJ_VALUE: 491977.7000753,
-                                    TestVals.EFF_DOMAIN_SIZE: 30720,
-                                    TestVals.EFF_INDEX_SIZE: 74,
-                                    TestVals.CONSTR_COUNT: 3066,
-                                    TestVals.VAR_COUNT: 1960},
-             'config_utopia': {TestVals.OBJ_VALUE: 36535.631200,
-                               TestVals.EFF_DOMAIN_SIZE: 12312,
-                               TestVals.EFF_INDEX_SIZE: 64,
-                               TestVals.CONSTR_COUNT: 1620,
-                               TestVals.VAR_COUNT: 1104},
+test_vals = {'test_system': {TestVals.OBJ_VALUE: 491977.7000753,
+                             TestVals.EFF_DOMAIN_SIZE: 30720,
+                             TestVals.EFF_INDEX_SIZE: 74,
+                             TestVals.CONSTR_COUNT: 3066,
+                             TestVals.VAR_COUNT: 1960},
+             'utopia': {TestVals.OBJ_VALUE: 36535.631200,
+                        TestVals.EFF_DOMAIN_SIZE: 12312,
+                        TestVals.EFF_INDEX_SIZE: 64,
+                        TestVals.CONSTR_COUNT: 1620,
+                        TestVals.VAR_COUNT: 1104},
              }
-

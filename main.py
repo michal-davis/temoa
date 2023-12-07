@@ -2,6 +2,7 @@
 Entry point for running the model.
 """
 import argparse
+from deprecated import deprecated
 import logging
 import os
 import sys
@@ -20,6 +21,7 @@ from temoa.temoa_model.temoa_sequencer import TemoaMode, TemoaSequencer
 logger = logging.getLogger(__name__)
 
 
+@deprecated("currently deprecated functionality")
 def runModelUI(config_filename):
     """This function launches the model run from the Temoa GUI"""
     raise NotImplementedError
@@ -47,15 +49,14 @@ def runModel(arg_list: list[str] | None = None) -> TemoaModel | None:
 
 def parse_args(arg_list: list[str] | None) -> argparse.Namespace:
     """
-    Parse the command line args (CLA) if None is passed in (normal operation) or the arg_list, if provided
-    :param arg_list: default None --> process sys.argv
-    :return:  options Namespace
+    Parse the command line args (CLA) if None is passed in (normal operation) or the arg_list,
+    if provided :param arg_list: default None --> process sys.argv :return:  options Namespace
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='Path to file containing configuration information.',
                         action='store',
                         dest='config_file', default=None)
-    parser.add_argument('-b', '--build-only',
+    parser.add_argument('-b', '--build_only',
                         help='Build and return an unsolved TemoaModel instance.',
                         action='store_true',
                         dest='build_only')
@@ -108,7 +109,8 @@ def parse_args(arg_list: list[str] | None) -> argparse.Namespace:
     # check for config file existence
     if not options.config_file:
         logger.error(
-            'No config file found in CLA.  Temoa needs a config file to operate, see documentation.')
+            'No config file found in CLA.  '
+            'Temoa needs a config file to operate, see documentation.')
         raise AttributeError('no config file provided.')
     else:
         # convert it to a Path, if it isn't one already
@@ -130,7 +132,7 @@ def create_output_folder() -> Path:
     :return: Path to default folder
     """
     output_path = Path(PROJECT_ROOT, "output_files",
-                               datetime.now().strftime("%Y-%m-%d %H%Mh"))
+                       datetime.now().strftime("%Y-%m-%d %H%Mh"))
     if not output_path.is_dir():
         output_path.mkdir()
     return output_path
@@ -142,7 +144,6 @@ def setup_logging(output_path: Path, debug_level=False):
         level = logging.DEBUG
     else:
         level = logging.INFO
-    logger = logging.getLogger(__name__)
     logging.getLogger("pyomo").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     filename = "log.log"
