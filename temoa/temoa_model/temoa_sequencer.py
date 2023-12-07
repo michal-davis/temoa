@@ -29,7 +29,7 @@ class TemoaSequencer:
 
     def __init__(self, config_file: str | Path,
                  output_path: str | Path,
-                 mode_override: TemoaMode,
+                 mode_override: TemoaMode = None,
                  **kwargs):
         """
         Create a new Sequencer

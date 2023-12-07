@@ -21,34 +21,44 @@ from tests.legacy_test_values import TestVals, test_vals
 
 logger = logging.getLogger(__name__)
 # list of test scenarios for which we have captured results in legacy_test_values.py
-legacy_config_files = ['config_utopia', 'config_test_system', ]
+legacy_config_files = [{'name': 'utopia',
+                        'filename': 'config_utopia.toml'},
+                       {'name': 'test_system',
+                        'filename': 'config_test_system.toml'}]
 
 
-@pytest.fixture(params=legacy_config_files)
-def system_test_run(request):
+@pytest.fixture()
+def system_test_run(request, tmp_path):
     """
     spin up the model, solve it, and hand over the model and result for inspection
     """
-    logger.info('Setting up and solving: %s', request)
-    filename = request.param
+    data_name = request.param['name']
+    logger.info('Setting up and solving: %s', data_name)
+    filename = request.param['filename']
     options = {'silent': True, 'debug': True}
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)
 
-    sequencer = TemoaSequencer(config_file=config_file, mode_override=TemoaMode.PERFECT_FORESIGHT,
+    sequencer = TemoaSequencer(config_file=config_file,
+                               output_path=tmp_path,
+                               mode_override=TemoaMode.PERFECT_FORESIGHT,
                                **options)
     sequencer.start()
     res = sequencer.pf_results
     mdl = sequencer.pf_solved_instance
-    return filename, res, mdl
+    return data_name, res, mdl
 
 
+@pytest.mark.parametrize("system_test_run",
+                         argvalues=legacy_config_files,
+                         indirect=True,
+                         ids=[d['name'] for d in legacy_config_files])
 def test_against_legacy_outputs(system_test_run):
     """
     This test compares tests of legacy models to captured test results
     """
-    filename, res, mdl = system_test_run
-    logger.info("Starting output test on scenario: %s", filename)
-    expected_vals = test_vals.get(filename)  # a dictionary of expected results
+    data_name, res, mdl = system_test_run
+    logger.info("Starting output test on scenario: %s", data_name)
+    expected_vals = test_vals.get(data_name)  # a dictionary of expected results
 
     # inspect some summary results
     assert res['Solution'][0]['Status'] == 'optimal'

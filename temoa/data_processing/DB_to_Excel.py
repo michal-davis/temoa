@@ -2,13 +2,15 @@ import sqlite3
 import sys, itertools
 import re
 import getopt
+from pathlib import Path
+
 import pandas as pd
 import xlsxwriter
 # TODO:  Something with this import is causing logging problems inside of testing modules...
 #        Can we swap over to pandas?
 from pyam import IamDataFrame
 
-def make_excel(ifile, ofile, scenario):
+def make_excel(ifile, ofile: Path, scenario):
 
 	if ifile is None :
 		raise "You did not specify the input file, remember to use '-i' option"
@@ -27,7 +29,9 @@ def make_excel(ifile, ofile, scenario):
 	cur = con.cursor()   # a database cursor is a control structure that enables traversal over the records in a database
 	con.text_factory = str #this ensures data is explored with the correct UTF-8 encoding
 	scenario = scenario.pop()
-	writer = pd.ExcelWriter(ofile+'.xlsx', engine = 'xlsxwriter', engine_kwargs = {'options':{'strings_to_formulas': False}})
+	ofile = ofile.with_suffix('.xlsx')
+	writer = pd.ExcelWriter(ofile, engine = 'xlsxwriter', engine_kwargs = {'options':{
+		'strings_to_formulas': False}})
 
 	workbook  = writer.book
 
@@ -139,7 +143,9 @@ def make_excel(ifile, ofile, scenario):
 	df.aggregate([f'{t}|{s}' for t, s in prod], append=True)
 
 	# write IamDataFrame to xlsx
-	df.to_excel(ofile+'_pyam.xlsx')
+	base_name = ofile.name.split('.')[0]
+	excel_pyam_filename = ofile.with_name(base_name + '_pyam.xlsx')
+	df.to_excel(excel_pyam_filename)
 
 	cur.close()
 	con.close()

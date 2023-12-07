@@ -47,6 +47,7 @@ from temoa.temoa_model.temoa_config import TemoaConfig
 
 from io import StringIO
 
+from temoa.temoa_model.temoa_mode import TemoaMode
 
 logger = getLogger(__name__)
 
@@ -71,7 +72,6 @@ def stringify_data(data, ostream=SO, format='plain'):
 
 
 def pformat_results(pyomo_instance, pyomo_result, options):
-
     logger.info('Starting results processing')
 
     from pyomo.core import Objective, Var, Constraint
@@ -200,7 +200,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 val_out = value(m.V_FlowOutAnnual[r, p, i, t, v, o]) * value(m.SegFrac[s, d])
                 if abs(val_out) < epsilon: continue
                 svars['V_FlowOut'][r, p, s, d, i, t, v, o] = val_out
-                svars['V_FlowIn'][r, p, s, d, i, t, v, o] = val_out / value(m.Efficiency[r, i, t, v, o])
+                svars['V_FlowIn'][r, p, s, d, i, t, v, o] = val_out / value(
+                    m.Efficiency[r, i, t, v, o])
                 if (r, i, t, v, o) not in emission_keys: continue
                 emissions = emission_keys[r, i, t, v, o]
                 for e in emissions:
@@ -211,7 +212,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         val = value(m.V_Curtailment[r, p, s, d, i, t, v, o])
         if abs(val) < epsilon: continue
         svars['V_Curtailment'][r, p, s, d, i, t, v, o] = val
-        svars['V_FlowIn'][r, p, s, d, i, t, v, o] = (val + value(m.V_FlowOut[r, p, s, d, i, t, v, o])) / value(
+        svars['V_FlowIn'][r, p, s, d, i, t, v, o] = (val + value(
+            m.V_FlowOut[r, p, s, d, i, t, v, o])) / value(
             m.Efficiency[r, i, t, v, o])
 
         if (r, i, t, v, o) not in emission_keys: continue
@@ -314,7 +316,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             if abs(fcost) < epsilon: continue
 
             fcost *= value(m.CostFixed[r, p, t, v])
-            svars['Costs']['V_UndiscountedFixedCostsByProcess', r, t, v] += fcost * value(MPL[r, p, t, v])
+            svars['Costs']['V_UndiscountedFixedCostsByProcess', r, t, v] += fcost * value(
+                MPL[r, p, t, v])
 
             fcost *= (
                 value(MPL[r, p, t, v]) if not GDR else
@@ -341,7 +344,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             if abs(vcost) < epsilon: continue
 
             vcost *= value(m.CostVariable[r, p, t, v])
-            svars['Costs']['V_UndiscountedVariableCostsByProcess', r, t, v] += vcost * value(MPL[r, p, t, v])
+            svars['Costs']['V_UndiscountedVariableCostsByProcess', r, t, v] += vcost * value(
+                MPL[r, p, t, v])
             vcost *= (
                 value(MPL[r, p, t, v]) if not GDR else
                 (x ** (P_0 - p + 1) * (1 - x ** (-value(MPL[r, p, t, v]))) / GDR)
@@ -368,54 +372,66 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             try:
                 act_dir1 = value(sum(m.V_FlowOut[reg_dir1, p, s, d, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
-                                     (p < vintage + value(m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
-                                                 p >= vintage)
+                                     (p < vintage + value(
+                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                             p >= vintage)
                                      for s in m.time_season
                                      for d in m.time_of_day
                                      for S_i in m.processInputs[reg_dir1, p, tech, vintage]
-                                     for S_o in m.ProcessOutputsByInput[reg_dir1, p, tech, vintage, S_i]
+                                     for S_o in
+                                     m.ProcessOutputsByInput[reg_dir1, p, tech, vintage, S_i]
                                      ))
                 act_dir2 = value(sum(m.V_FlowOut[reg_dir2, p, s, d, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
-                                     (p < vintage + value(m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
-                                                 p >= vintage)
+                                     (p < vintage + value(
+                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                             p >= vintage)
                                      for s in m.time_season
                                      for d in m.time_of_day
                                      for S_i in m.processInputs[reg_dir2, p, tech, vintage]
-                                     for S_o in m.ProcessOutputsByInput[reg_dir2, p, tech, vintage, S_i]
+                                     for S_o in
+                                     m.ProcessOutputsByInput[reg_dir2, p, tech, vintage, S_i]
                                      ))
             except:
                 act_dir1 = value(sum(m.V_FlowOutAnnual[reg_dir1, p, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
-                                     (p < vintage + value(m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
-                                                 p >= vintage)
+                                     (p < vintage + value(
+                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                             p >= vintage)
                                      for S_i in m.processInputs[reg_dir1, p, tech, vintage]
-                                     for S_o in m.ProcessOutputsByInput[reg_dir1, p, tech, vintage, S_i]
+                                     for S_o in
+                                     m.ProcessOutputsByInput[reg_dir1, p, tech, vintage, S_i]
                                      ))
                 act_dir2 = value(sum(m.V_FlowOutAnnual[reg_dir2, p, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
-                                     (p < vintage + value(m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
-                                                 p >= vintage)
+                                     (p < vintage + value(
+                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                             p >= vintage)
                                      for S_i in m.processInputs[reg_dir2, p, tech, vintage]
-                                     for S_o in m.ProcessOutputsByInput[reg_dir2, p, tech, vintage, S_i]
+                                     for S_o in
+                                     m.ProcessOutputsByInput[reg_dir2, p, tech, vintage, S_i]
                                      ))
 
             for item in list(svars['Costs']):
                 if item[2] == tech:
-                    opposite_dir = item[1][item[1].find("-") + 1:] + "-" + item[1][:item[1].find("-")]
+                    opposite_dir = item[1][item[1].find("-") + 1:] + "-" + item[1][
+                                                                           :item[1].find("-")]
                     if (item[0], opposite_dir, item[2], item[3]) in svars['Costs'].keys():
                         continue  # if both directional entries are already in svars[	'Costs'	], they're left intact.
                     if item[1] == reg_dir1:
                         if (act_dir1 + act_dir2) > 0:
-                            svars['Costs'][(item[0], reg_dir2, item[2], item[3])] = svars['Costs'][item] * act_dir2 / (
+                            svars['Costs'][(item[0], reg_dir2, item[2], item[3])] = svars['Costs'][
+                                                                                        item] * act_dir2 / (
+                                                                                            act_dir1 + act_dir2)
+                            svars['Costs'][item] = svars['Costs'][item] * act_dir1 / (
                                         act_dir1 + act_dir2)
-                            svars['Costs'][item] = svars['Costs'][item] * act_dir1 / (act_dir1 + act_dir2)
 
         # Remove Ri-Rj entries from being populated in the Outputs_Costs. Ri-Rj means a cost
         # for region Rj
         for item in list(svars['Costs']):
             if item[2] in m.tech_exchange:
-                svars['Costs'][(item[0], item[1][item[1].find("-") + 1:], item[2], item[3])] = svars['Costs'][item]
+                svars['Costs'][(item[0], item[1][item[1].find("-") + 1:], item[2], item[3])] = \
+                svars['Costs'][item]
                 del svars['Costs'][item]
 
     if options.save_duals:
@@ -461,20 +477,18 @@ def pformat_results(pyomo_instance, pyomo_result, options):
     # -----------------------------------------------------------------
 
     # Table dictionary below maps variable names to database table names
-    tables = {"V_FlowIn": "Output_VFlow_In", \
-              "V_FlowOut": "Output_VFlow_Out", \
-              "V_Curtailment": "Output_Curtailment", \
-              "V_Capacity": "Output_V_Capacity", \
-              "V_NewCapacity": "Output_V_NewCapacity", \
-              "V_RetiredCapacity": "Output_V_RetiredCapacity", \
-              "V_CapacityAvailableByPeriodAndTech": "Output_CapacityByPeriodAndTech", \
-              "V_EmissionActivityByPeriodAndProcess": "Output_Emissions", \
-              "Objective": "Output_Objective", \
-              "Costs": "Output_Costs"
+    tables = {"V_FlowIn": "Output_VFlow_In", "V_FlowOut": "Output_VFlow_Out",
+              "V_Curtailment": "Output_Curtailment", "V_Capacity": "Output_V_Capacity",
+              "V_NewCapacity": "Output_V_NewCapacity",
+              "V_RetiredCapacity": "Output_V_RetiredCapacity",
+              "V_CapacityAvailableByPeriodAndTech": "Output_CapacityByPeriodAndTech",
+              "V_EmissionActivityByPeriodAndProcess": "Output_Emissions",
+              "Objective": "Output_Objective", "Costs": "Output_Costs"
               }
 
     db_tables = ['time_periods', 'time_season', 'time_of_day', 'technologies', 'commodities', \
-                 'LifetimeTech', 'LifetimeProcess', 'Efficiency', 'EmissionActivity', 'ExistingCapacity']
+                 'LifetimeTech', 'LifetimeProcess', 'Efficiency', 'EmissionActivity',
+                 'ExistingCapacity']
 
     if isinstance(options, TemoaConfig):
         if not options.output_database:
@@ -483,7 +497,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 for inpu in options.dot_dat:
                     print(inpu)
                     file_ty = re.search(r"\b([\w-]+)\.(\w+)\b", inpu)
-                new_dir = options.path_to_data + os.sep + file_ty.group(1) + '_' + options.scenario + '_model'
+                new_dir = options.path_to_data + os.sep + file_ty.group(
+                    1) + '_' + options.scenario + '_model'
                 if os.path.exists(new_dir):
                     rmtree(new_dir)
                 os.mkdir(new_dir)
@@ -522,7 +537,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 if tagged_file == options.input_file:
                     # If Input_file name matches, add output and check tech/comm
                     dat_to_db(options.input_file, con)
-                else: # the database was not created from the input file...  ??
+                else:  # the database was not created from the input file...  ??
                     # If not a match, delete output tables and update input_file. Call dat_to_db
                     for i in db_tables:
                         # TODO:  This is deleting the data tables ?
@@ -533,7 +548,6 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                         cur.execute("DELETE FROM " + tables[i] + ";")
                         cur.execute("VACUUM;")
 
-
                     cur.execute("DELETE FROM input_file WHERE id=1;")
                     cur.execute("INSERT INTO input_file VALUES(1, '" + str(options.input_file) +
                                 "');")
@@ -541,7 +555,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                     dat_to_db(i, con)
 
         else:  # empty schema db file
-            cur.execute("CREATE TABLE IF NOT EXISTS input_file ( id integer PRIMARY KEY, file varchar(30));")
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS input_file ( id integer PRIMARY KEY, file varchar(30));")
 
             for i in tables.keys():
                 cur.execute("DELETE FROM " + tables[i] + ";")
@@ -559,8 +574,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 for val in cur:
                     # If scenario exists, delete unless it's a myopic run (for myopic, the scenario results are deleted
                     # before the run in temoa_config.py)
-                    if hasattr(options, 'file_location') and options.scenario == val[0] and os.path.join('temoa_model',
-                                                                                                         'config_sample_myopic') not in options.file_location:
+                    if options.scenario == val[0] and options.scenario_mode != TemoaMode.MYOPIC:
                         cur.execute("DELETE FROM " + tables[table] + " \
 									WHERE scenario is '" + options.scenario + "'")
                 if table == 'Objective':  # Only table without sector info
@@ -577,7 +591,8 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                         if table != 'Costs':
                             cur.execute("INSERT INTO " + tables[table] + \
                                         " VALUES('" + str(key[0]) + "', '" + options.scenario + "','NULL', \
-											" + key_str[key_str.find(',') + 1:] + "," + str(svars[table][key]) + ");")
+											" + key_str[key_str.find(',') + 1:] + "," + str(
+                                svars[table][key]) + ");")
                         else:
                             key_str = str((key[0], key[2], key[3]))
                             key_str = key_str[1:-1]  # Remove parentheses
@@ -592,34 +607,26 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         if (options.save_duals):
             if (len(duals) != 0):
                 overwrite_keys = [str(tuple(x)) for x in
-                                  duals.reset_index()[['constraint_name', 'scenario']].to_records(index=False)]
+                                  duals.reset_index()[['constraint_name', 'scenario']].to_records(
+                                      index=False)]
                 # delete records that will be overwritten by new duals dataframe
-                cur.execute("DELETE FROM Output_Duals WHERE (constraint_name, scenario) IN (VALUES " + ','.join(
-                    overwrite_keys) + ")")
+                cur.execute(
+                    "DELETE FROM Output_Duals WHERE (constraint_name, scenario) IN (VALUES " + ','.join(
+                        overwrite_keys) + ")")
                 # write new records from new duals dataframe
                 duals.to_sql('Output_Duals', con, if_exists='append')
 
         con.commit()
         con.close()
 
-        if options.save_excel or options.saveTEXTFILE or options.save_lp_file:
-            for inpu in options.dot_dat:
-                file_ty = re.search(r"\b([\w-]+)\.(\w+)\b", inpu)
-            new_dir = options.path_to_data + os.sep + file_ty.group(1) + '_' + options.scenario + '_model'
-            if os.path.exists(new_dir):
-                rmtree(new_dir)
-            os.mkdir(new_dir)
-
+        if options.save_excel or options.save_lp_file:
+            # TODO:  It isn't clear why we are screening for save_lp_file here ... ?
             if options.save_excel:
-                file_type = re.search(r"([\w-]+)\.(\w+)\b", options.output_database)
-                file_n = file_type.group(1)
                 temp_scenario = set()
                 temp_scenario.add(options.scenario)
                 # make_excel function imported near the top
-                make_excel(options.output_database, new_dir + os.sep + options.scenario, temp_scenario)
-        # os.system("python data_processing"+os.sep+"DB_to_Excel.py -i \
-        #		  ""+options.output+" \
-        #		  " -o data_files"+os.sep+options.scenario+" -s "+options.scenario)
+                excel_filename = options.output_path / options.scenario
+                make_excel(str(options.output_database), excel_filename, temp_scenario)
 
     logger.info('Finished results processing')
     return output
@@ -743,11 +750,13 @@ def dat_to_db(input_file, output_schema, run_partial=False):
     for i in parsed_data['tech_baseload']:
         if i == '':
             continue
-        output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'pb', '', '');")
+        output_schema.execute(
+            "INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'pb', '', '');")
     for i in parsed_data['tech_storage']:
         if i == '':
             continue
-        output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'ph', '', '');")
+        output_schema.execute(
+            "INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'ph', '', '');")
     for i in parsed_data['tech_production']:
         if i == '':
             continue
@@ -755,11 +764,13 @@ def dat_to_db(input_file, output_schema, run_partial=False):
             continue
         if i in parsed_data['tech_baseload']:
             continue
-        output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'p', '', '');")
+        output_schema.execute(
+            "INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'p', '', '');")
     for i in parsed_data['tech_resource']:
         if i == '':
             continue
-        output_schema.execute("INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'r', '', '');")
+        output_schema.execute(
+            "INSERT OR REPLACE INTO technologies VALUES('" + i + "', 'r', '', '');")
 
     # Fill commodities
     for i in parsed_data['commodity_demand']:
@@ -782,7 +793,8 @@ def dat_to_db(input_file, output_schema, run_partial=False):
         row_data = re.split(" ", i)
         row_data.append('')
         row_data.append('')
-        output_schema.execute("INSERT OR REPLACE INTO ExistingCapacity VALUES(?, ?, ?, ?, ?);", row_data)
+        output_schema.execute("INSERT OR REPLACE INTO ExistingCapacity VALUES(?, ?, ?, ?, ?);",
+                              row_data)
 
     # Fill Efficiency
     for i in parsed_data['Efficiency']:
@@ -790,7 +802,8 @@ def dat_to_db(input_file, output_schema, run_partial=False):
             continue
         row_data = re.split(" ", i)
         row_data.append('')
-        output_schema.execute("INSERT OR REPLACE INTO Efficiency VALUES(?, ?, ?, ?, ?, ?);", row_data)
+        output_schema.execute("INSERT OR REPLACE INTO Efficiency VALUES(?, ?, ?, ?, ?, ?);",
+                              row_data)
 
     # Fill LifetimeTech
     for i in parsed_data['LifetimeTech']:
@@ -806,7 +819,8 @@ def dat_to_db(input_file, output_schema, run_partial=False):
             continue
         row_data = re.split(" ", i)
         row_data.append('')
-        output_schema.execute("INSERT OR REPLACE INTO LifetimeProcess VALUES(?, ?, ?, ?);", row_data)
+        output_schema.execute("INSERT OR REPLACE INTO LifetimeProcess VALUES(?, ?, ?, ?);",
+                              row_data)
 
     # Fill EmissionActivity
     for i in parsed_data['EmissionActivity']:
@@ -816,4 +830,5 @@ def dat_to_db(input_file, output_schema, run_partial=False):
         row_data.append('')
         if len(row_data) == 7:
             row_data.append('')
-        output_schema.execute("INSERT OR REPLACE INTO EmissionActivity VALUES(?, ?, ?, ?, ?, ?, ?, ?);", row_data)
+        output_schema.execute(
+            "INSERT OR REPLACE INTO EmissionActivity VALUES(?, ?, ?, ?, ?, ?, ?, ?);", row_data)
