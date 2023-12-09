@@ -15,7 +15,7 @@ from temoa.temoa_model.temoa_sequencer import TemoaSequencer
 # jeff@westernspark.us
 # https://westernspark.us
 # Created on:  12/6/23
-@pytest.mark.skip('not yet clear if this is needed/required ATT, researching mpi4py')
+@pytest.mark.skip('not yet clear if this is needed/required ATT, researching mpi4py options...')
 def test_pickle():
     """
     Test to ensure the model pickles properly.  This is used when employing mpi4py which requires

@@ -101,11 +101,16 @@ possibility.
         for S_i in M.processInputs[r, p, t, v]
         for S_o in M.ProcessOutputsByInput[r, p, t, v, S_i]
     )
+    if (r, s, d, t, v) in M.CapacityFactorProcess:
+        # use the data provided
+        capacity = value(M.CapacityFactorProcess[r, s, d, t, v])
+    else: # use the capacity factor for the tech
+        capacity = value(M.CapacityFactorTech[r, s, d, t])
 
     if t in M.tech_curtailment:
         # If technologies are present in the curtailment set, then enough
         # capacity must be available to cover both activity and curtailment.
-        return value(M.CapacityFactorProcess[r, s, d, t, v]) \
+        return capacity \
             * value(M.CapacityToActivity[r, t]) * value(M.SegFrac[s, d]) \
             * value(M.ProcessLifeFrac[r, p, t, v]) \
             * M.V_Capacity[r, p, t, v] == useful_activity + sum( \
@@ -113,7 +118,7 @@ possibility.
                 for S_i in M.processInputs[r, p, t, v] \
                 for S_o in M.ProcessOutputsByInput[r, p, t, v, S_i])
     else:
-        return value(M.CapacityFactorProcess[r, s, d, t, v]) \
+        return capacity \
             * value(M.CapacityToActivity[r, t]) \
             * value(M.SegFrac[s, d]) \
             * value(M.ProcessLifeFrac[r, p, t, v]) \

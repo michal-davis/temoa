@@ -20,14 +20,17 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+from itertools import product
+
 from pyomo.core import BuildCheck
 from pyomo.environ import Any, NonNegativeReals
 
 from temoa.temoa_model import validators
-from temoa.temoa_model.pricing_check import progress_check, price_checker
+from temoa.temoa_model.pricing_check import price_checker, logger
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
-from temoa.temoa_model.validators import validate_linked_tech, region_check
+from temoa.temoa_model.validators import validate_linked_tech, region_check, \
+    validate_CapacityFactorProcess
 
 
 class TemoaModel(AbstractModel):
@@ -37,7 +40,11 @@ class TemoaModel(AbstractModel):
     def __init__(M, name='Temoa', *args, **kwds):
         AbstractModel.__init__(M, *args, **kwds)
 
-        # Internally used sets (not formal model elements)
+        ################################################
+        #       Internally used Data Containers        #
+        #       (not formal model elements             #
+        ################################################
+
         M.processInputs = dict()
         M.processOutputs = dict()
         M.processLoans = dict()
@@ -71,11 +78,12 @@ class TemoaModel(AbstractModel):
         M.flex_commodities = set()
 
 
-        # ---------------------------------------------------------------
-        # Define sets.
-        # Sets are collections of items used to index parameters and variables
-        # ---------------------------------------------------------------
-        M.ba1 = BuildAction(['starting_sets'], rule=progress_check)
+        ################################################
+        #                 Model Sets                   #
+        #    (used for indexing model elements)        #
+        ################################################
+
+        M.progress_marker_1 = BuildAction(['Starting to build Sets'], rule=progress_check)
 
         # Define time periods
         M.time_exist = Set(ordered=True)
@@ -136,8 +144,14 @@ class TemoaModel(AbstractModel):
         M.tech_residential = Set(within=M.tech_all)
         M.tech_PowerPlants = Set(within=M.tech_all)
 
+
+        ################################################
+        #              Model Parameters                #
+        #    (data gathered/derived from source)       #
+        ################################################
+
         # ---------------------------------------------------------------
-        # Define parameters.
+        # Dev Note:
         # In order to increase model efficiency, we use sparse
         # indexing of parameters, variables, and equations to prevent the
         # creation of indices for which no data exists. While basic model sets
@@ -150,7 +164,9 @@ class TemoaModel(AbstractModel):
         # The complete index set is: psditvo, where p=period, s=season, d=day,
         # i=input commodity, t=technology, v=vintage, o=output commodity.
         # ---------------------------------------------------------------
-        M.ba2 = BuildAction(['starting params'], rule=progress_check )
+
+        M.progress_marker_2 = BuildAction(['Starting to build Params'], rule=progress_check )
+
         M.GlobalDiscountRate = Param()
 
         # Define time-related parameters
@@ -179,35 +195,44 @@ class TemoaModel(AbstractModel):
         )
         M.validate_UsedEfficiencyIndices = BuildAction(rule=CheckEfficiencyIndices)
 
-        M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
-        M.CapacityFactorProcess = Param(M.CapacityFactor_rsdtv, mutable=True)
+        # TODO:  working on not filling CapacityFactorProcess with defaults...
+        #        may be able to use a validator here and alleviate the need for the index set
+        #        also
+        # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
+        M.CapacityFactorProcess = Param(M.regions, M.time_season,
+                                        M.time_of_day, M.tech_all, M.vintage_all,
+                                        validate=validate_CapacityFactorProcess)
 
         M.CapacityFactor_rsdt = Set(dimen=4, initialize=CapacityFactorTechIndices)
         M.CapacityFactorTech = Param(M.CapacityFactor_rsdt, default=1)
 
-        M.initialize_CapacityFactors = BuildAction(rule=CreateCapacityFactors)
+        # M.initialize_CapacityFactors = BuildAction(rule=CreateCapacityFactors)
 
         M.LifetimeTech = Param(M.RegionalIndices, M.tech_all, default=40)
         M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
 
         M.LifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeProcessIndices)
         M.LifetimeProcess = Param(M.LifetimeProcess_rtv)
-        # devnote:  The param below is derived from LifetimeProcess and LifetimeTech by the initializer
-        #           The name is unfortunate, as it would be better to change the others, but they are locked
-        #           to the database schema.  It is all needed to make the param IMMUTABLE to support the
-        #           LinkedEmissionsTech_Constraint.  Possible future change to schema or do the lifetime verification
-        #           in data/db with query before build and get rid of LifetimeTech altogether.
-        M.LifetimeProcess_final = Param(M.LifetimeProcess_rtv, initialize=initialize_process_lifetimes)
+        # devnote:  The param below is derived from LifetimeProcess and LifetimeTech by the
+        # initializer The name is unfortunate, as it would be better to change the others,
+        # but they are locked to the database schema.  It is all needed to make the param
+        # IMMUTABLE to support the LinkedEmissionsTech_Constraint.  Possible future change to
+        # schema or do the lifetime verification in data/db with query before build and get rid
+        # of LifetimeTech altogether.
+        M.LifetimeProcess_final = Param(M.LifetimeProcess_rtv,
+                                        initialize=initialize_process_lifetimes)
         M.clear_helper_params = BuildAction(rule=clear_unused_params)
 
         M.LifetimeLoanProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
         M.LifetimeLoanProcess = Param(M.LifetimeLoanProcess_rtv, mutable=True)
         M.initialize_Lifetimes = BuildAction(rule=CreateLifetimes)
 
-
-        M.TechInputSplit = Param(M.regions, M.time_optimize, M.commodity_physical, M.tech_all)
-        M.TechInputSplitAverage = Param(M.regions, M.time_optimize, M.commodity_physical, M.tech_variable)
-        M.TechOutputSplit = Param(M.regions, M.time_optimize, M.tech_all, M.commodity_carrier)
+        M.TechInputSplit = Param(M.regions, M.time_optimize,
+                                 M.commodity_physical, M.tech_all)
+        M.TechInputSplitAverage = Param(M.regions, M.time_optimize,
+                                        M.commodity_physical, M.tech_variable)
+        M.TechOutputSplit = Param(M.regions, M.time_optimize,
+                                  M.tech_all, M.commodity_carrier)
 
         M.RenewablePortfolioStandard = Param(M.regions, M.time_optimize)
 
@@ -237,7 +262,7 @@ class TemoaModel(AbstractModel):
         M.CostVariableVintageDefault = Param(M.CostVariableVintageDefault_rtv)
 
         M.initialize_Costs = BuildAction(rule=CreateCosts)
-        M.validate_pricing = BuildAction(rule=price_checker)
+        # M.validate_pricing = BuildAction(rule=price_checker)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
@@ -254,9 +279,6 @@ class TemoaModel(AbstractModel):
         M.ProcessLifeFrac = Param(
             M.ProcessLifeFrac_rptv, initialize=ParamProcessLifeFraction_rule
         )
-
-        M.ba3 = BuildAction(['starting params for user-defined constraints'], rule=progress_check)
-        # Define parameters associated with user-defined constraints
 
         M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
         M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
@@ -291,7 +313,6 @@ class TemoaModel(AbstractModel):
         M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions, within=Any)
         M.validate_LinkedTech_lifetimes = BuildCheck(rule=validate_linked_tech)
 
-        M.ba31 = BuildAction(['starting electric sector params'], rule=progress_check)
         # Define parameters associated with electric sector operation
         M.RampUp = Param(M.regions, M.tech_ramping)
         M.RampDown = Param(M.regions, M.tech_ramping)
@@ -306,8 +327,13 @@ class TemoaModel(AbstractModel):
 
         M.MyopicBaseyear = Param(default=0, mutable=True)
 
+        ################################################
+        #                 Model Variables              #
+        #               (assigned by solver)           #
+        ################################################
+
         # ---------------------------------------------------------------
-        # Define Decision Variables.
+        # Dev Note:
         # Decision variables are optimized in order to minimize cost.
         # Base decision variables represent the lowest-level variables
         # in the model. Derived decision variables are calculated for
@@ -315,15 +341,19 @@ class TemoaModel(AbstractModel):
         # summed over.
         # ---------------------------------------------------------------
 
-        M.ba32 = BuildAction(['starting variables'], rule=progress_check)
+        M.progress_marker_3 = BuildAction(['Starting to build Variables'],
+                                          rule=progress_check)
+
         # Define base decision variables
         M.FlowVar_rpsditvo = Set(dimen=8, initialize=FlowVariableIndices)
         M.V_FlowOut = Var(M.FlowVar_rpsditvo, domain=NonNegativeReals)
+
         M.FlowVarAnnual_rpitvo = Set(dimen=6, initialize=FlowVariableAnnualIndices)
         M.V_FlowOutAnnual = Var(M.FlowVarAnnual_rpitvo, domain=NonNegativeReals)
 
         M.FlexVar_rpsditvo = Set(dimen=8, initialize=FlexVariablelIndices)
         M.V_Flex = Var(M.FlexVar_rpsditvo, domain=NonNegativeReals)
+
         M.FlexVarAnnual_rpitvo = Set(dimen=6, initialize=FlexVariableAnnualIndices)
         M.V_FlexAnnual = Var(M.FlexVarAnnual_rpitvo, domain=NonNegativeReals)
 
@@ -332,6 +362,7 @@ class TemoaModel(AbstractModel):
 
         M.FlowInStorage_rpsditvo = Set(dimen=8, initialize=FlowInStorageVariableIndices)
         M.V_FlowIn = Var(M.FlowInStorage_rpsditvo, domain=NonNegativeReals)
+
         M.StorageLevel_rpsdtv = Set(dimen=6, initialize=StorageVariableIndices)
         M.V_StorageLevel = Var(M.StorageLevel_rpsdtv, domain=NonNegativeReals)
         M.V_StorageInit = Var(M.StorageInit_rtv, domain=NonNegativeReals)
@@ -345,30 +376,37 @@ class TemoaModel(AbstractModel):
         M.V_NewCapacity = Var(M.NewCapacityVar_rtv, domain=NonNegativeReals, initialize=0)
 
         M.RetiredCapacityVar_rptv = Set(dimen=4, initialize=RetiredCapacityVariableIndices)
-        M.V_RetiredCapacity = Var(M.RetiredCapacityVar_rptv, domain=NonNegativeReals, initialize=0)
+        M.V_RetiredCapacity = Var(M.RetiredCapacityVar_rptv, domain=NonNegativeReals,
+                                  initialize=0)
 
-        M.CapacityAvailableVar_rpt = Set(
-            dimen=3, initialize=CapacityAvailableVariableIndices
-        )
-        M.V_CapacityAvailableByPeriodAndTech = Var(
-            M.CapacityAvailableVar_rpt, domain=NonNegativeReals
-        )
+        M.CapacityAvailableVar_rpt = Set(dimen=3,
+                                         initialize=CapacityAvailableVariableIndices)
+        M.V_CapacityAvailableByPeriodAndTech = Var(M.CapacityAvailableVar_rpt,
+                                                   domain=NonNegativeReals)
 
-        # ---------------------------------------------------------------
-        # Declare the Objective Function.
-        # ---------------------------------------------------------------
+        ################################################
+        #              Objective Function              #
+        #             (minimize total cost)            #
+        ################################################
+
         M.TotalCost = Objective(rule=TotalCost_rule, sense=minimize)
 
+        ################################################
+        #                   Constraints                #
+        #                                              #
+        ################################################
+
         # ---------------------------------------------------------------
-        # Declare the Constraints.
+        # Dev Note:
         # Constraints are specified to ensure proper system behavior,
         # and also to calculate some derived quantities. Note that descriptions
         # of these constraints are provided in the associated comment blocks
         # in temoa_rules.py, where the constraints are defined.
         # ---------------------------------------------------------------
-        M.ba4 = BuildAction(['starting constraints'], rule=progress_check)
-        # Declare constraints to calculate derived decision variables
+        M.progress_marker_4 = BuildAction(['Starting to build Constraints'],
+                                          rule=progress_check)
 
+        # Declare constraints to calculate derived decision variables
         M.CapacityConstraint_rpsdtv = Set(dimen=6, initialize=CapacityConstraintIndices)
         M.CapacityConstraint = Constraint(
             M.CapacityConstraint_rpsdtv, rule=Capacity_Constraint)
@@ -387,7 +425,8 @@ class TemoaModel(AbstractModel):
         M.AdjustedCapacityConstraint = Constraint(
             M.CostFixed_rptv, rule=AdjustedCapacity_Constraint
         )
-        M.ba5 = BuildAction(['finished capacity constraints'], rule=progress_check)
+        M.progress_marker_5 = BuildAction(['Finished Capacity Constraints'],
+                                          rule=progress_check)
 
         # Declare core model constraints that ensure proper system functioning
         # In driving order, starting with the need to meet end-use demands
@@ -436,7 +475,8 @@ class TemoaModel(AbstractModel):
         M.RegionalExchangeCapacityConstraint = Constraint(
             M.RegionalExchangeCapacityConstraint_rrptv, rule=RegionalExchangeCapacity_Constraint)
 
-        M.ba6 = BuildAction(['starting storage constraints'], rule=progress_check)
+        M.progress_marker_6 = BuildAction(['Starting Storage Constraints'],
+                                          rule=progress_check)
         # This set works for all the storage-related constraints
         M.StorageConstraints_rpsdtv = Set(dimen=6, initialize=StorageVariableIndices)
         M.StorageEnergyConstraint = Constraint(
@@ -503,8 +543,8 @@ class TemoaModel(AbstractModel):
         M.EmissionLimitConstraint = Constraint(
             M.EmissionLimitConstraint_rpe, rule=EmissionLimit_Constraint
         )
-        M.ba7 = BuildAction(['starting growth constraints'], rule=progress_check)
-        from itertools import product
+        M.progress_marker_7 = BuildAction(['Starting Growth and Activity Constraints'],
+                                          rule=progress_check)
 
         M.GrowthRateMaxConstraint_rtv = Set(
             dimen=3,
@@ -628,7 +668,9 @@ class TemoaModel(AbstractModel):
             M.MaxNewCapacityShareConstraint_rptg, rule=MaxNewCapacityShare_Constraint
         )
 
-        M.ba8 = BuildAction(['starting Max/Min Resource constraints'], rule=progress_check)
+        M.progress_marker_8 = BuildAction(['Starting Max/Min Capacity and Tech Split '
+                                           'Constraints'],
+                                          rule=progress_check)
         M.MaxResourceConstraint_rt = Set(
             dimen=2, initialize=lambda M: M.MaxResource.sparse_iterkeys()
         )
@@ -657,7 +699,6 @@ class TemoaModel(AbstractModel):
             M.MinAnnualCapacityFactorConstraint_rpto, rule=MinAnnualCapacityFactor_Constraint
         )
 
-        # TODO:  Look at removing the lambda below and just init'ing from .sparse_keys()
         M.MaxAnnualCapacityFactorConstraint_rpto = Set(
             dimen=4, initialize=lambda M: M.MaxAnnualCapacityFactor.sparse_iterkeys()
         )
@@ -711,3 +752,8 @@ class TemoaModel(AbstractModel):
         M.LinkedEmissionsTechConstraint = Constraint(
             M.LinkedEmissionsTechConstraint_rpsdtve, rule=LinkedEmissionsTech_Constraint)
 
+        M.progress_marker_9 = BuildAction(['Finished Constraints'], rule=progress_check)
+
+
+def progress_check(M, checkpoint: str):
+    logger.debug('here: %s', checkpoint)
