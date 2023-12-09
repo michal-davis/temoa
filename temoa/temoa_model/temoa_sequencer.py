@@ -1,8 +1,8 @@
 """
-The Temoa Sequencer's job is to sequence the actions needed to execute a scenario.  Each scenario has a declared
-processing mode (regular, myopic, mga, etc.) and the Temoa Sequencer sets up the necessary run(s) to
-accomplish that.  Several processing requirements have requirements for multiple runs, each of which will have
-a possibly unique sequencer based on the processing mode selected
+The Temoa Sequencer's job is to sequence the actions needed to execute a scenario.  Each
+scenario has a declared processing mode (regular, myopic, mga, etc.) and the Temoa Sequencer sets
+up the necessary run(s) to accomplish that.  Several processing modes have requirements
+for multiple runs, and the Temoa Sequencer may hand off to a mode-specific sequencer
 """
 import sys
 from logging import getLogger
@@ -24,37 +24,46 @@ from temoa.temoa_model.temoa_run import temoa_checks
 
 logger = getLogger(__name__)
 
+
 class TemoaSequencer:
     """A Sequencer instance to control all runs for a scenario based on the TemoaMode"""
 
     def __init__(self, config_file: str | Path,
                  output_path: str | Path,
-                 mode_override: TemoaMode = None,
+                 mode_override: TemoaMode | None = None,
+                 silent: bool = False,
                  **kwargs):
         """
         Create a new Sequencer
-        :param config_file: Optional path to config file.  If not provided, it will be read from Command Line Args
-        :param mode_override: Optional override to execution mode.  If not provided, it will be read from config file
+        :param config_file: Optional path to config file.  If not provided, it will be read
+        from Command Line Args
+        :param mode_override: Optional override to execution mode.  If not provided,
+        it will be read from config file
+        :param silent:  boolean to indicate whether to silence run-time feedback
         """
         self.config: TemoaConfig | None = None
         self.temoa_mode: TemoaMode
+
         self.config_file: Path = Path(config_file)
         # check it...
         if not self.config_file.is_file():
             logger.error('Config file location passed %s does not point to a file',
                          self.config_file)
             raise FileNotFoundError(f'Invalid config file: {self.config_file}')
+
         self.output_path: Path = Path(output_path)
         # check it...
         if not self.output_path.is_dir():
             logger.error('Output directory does not exist: %s', self.output_path)
             raise FileNotFoundError(f'Invalid output directory: {self.output_path}')
+
+        self.temoa_mode: TemoaMode = TemoaMode.BUILD_ONLY  # placeholder, over-written in start()
         self.mode_override: TemoaMode = mode_override
 
         # for feedback to user
-        self.silent = kwargs.get('silent', False)
+        self.silent = silent
 
-        # for results catching
+        # for results catching for perfect_foresight
         self.pf_results: pyomo.opt.SolverResults | None = None
         self.pf_solved_instance: TemoaModel | None = None
 
@@ -64,13 +73,23 @@ class TemoaSequencer:
         # Run the preliminaries...
         # Build a TemoaConfig
         self.config = TemoaConfig.build_config(config_file=self.config_file,
-                                                output_path=self.output_path)
+                                               output_path=self.output_path)
 
         # TODO:  Screen this vs. what is already done at this point
         temoa_checks(self.config)
 
+        # Engage silent mode, if provided as CLA:
+        self.config.silent = self.silent
+
         # Distill the TemoaMode
         self.temoa_mode = self.mode_override if self.mode_override else self.config.scenario_mode
+        if self.mode_override and self.mode_override != self.config.scenario_mode:
+            # capture and log the override...
+            self.temoa_mode = self.mode_override
+            logger.info('Temoa Mode overridden to be:  %s', self.temoa_mode)
+        else:
+            self.temoa_mode = self.config.scenario_mode
+        # check it...
         if not isinstance(self.temoa_mode, TemoaMode):
             logger.error('Temoa Mode not set properly.  Override: %d, Config File: %d',
                          self.mode_override, self.config.scenario_mode)
