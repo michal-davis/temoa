@@ -27,12 +27,11 @@ tables_with_regional_groups = {'MaxActivity': 'regions',
                                'MaxActivityGroup': 'regions',
                                'MinCapacityGroup': 'regions',
                                'MaxCapacityGroup': 'regions',
-                               #'tech_groups': 'region',  # <-- note the odd duck (non plural)
                                }
 # TODO:  Sort out the schema for tech_groups.  RN, US_9R stuff does not comply w/ schema for this table
 def db_2_dat(ifile, ofile, options: TemoaConfig):
 
-    logger.debug('Starting creation of .dat file from database %s', ifile)
+    logger.info('Converting %s database file to .dat format', ifile)
 
     def construct_RegionalGlobalIndices(tables_in_db, f) -> None:
         """
@@ -46,11 +45,11 @@ def db_2_dat(ifile, ofile, options: TemoaConfig):
         tables_to_parse = set(tables_in_db) & tables_with_regional_groups.keys()
         # make the query
         query = ' UNION '.join(('SELECT ' + tables_with_regional_groups[table] + ' FROM ' + table for table in tables_to_parse))
-        logger.info('using query:\n  %s', query)
         cur.execute(query)
         count = 0
         f.write('set RegionalGlobalIndices :=\n')
-        for row in cur:
+        sorted_entries = sorted(cur)  # sorting to guarantee consistent ordering going into model
+        for row in sorted_entries:
             f.write(row[0])
             f.write('\n')
             count += 1

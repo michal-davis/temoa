@@ -106,8 +106,9 @@ def temoa_setup(config_filename):
 
 def temoa_checks(options: TemoaConfig):
     # TODO:  Clean up the neos stuff
-    if version_info < (3, 10):
-        logger.warning('Model is being run with python %d.%d.  Expecting version 3.10 or later.  Model may not run properly!', version_info.major, version_info.minor)
+    if version_info < (3, 11):
+        logger.warning('Model is being run with python %d.%d.  Expecting version 3.11 or later.  '
+                       'Model may not run properly!', version_info.major, version_info.minor)
 
     # TODO:  Add a check here to see if the SolverFactory can make the solver
     if options.neos is True:

@@ -26,7 +26,6 @@ from pyomo.core import BuildCheck
 from pyomo.environ import Any, NonNegativeReals
 
 from temoa.temoa_model import validators
-from temoa.temoa_model.pricing_check import price_checker, logger
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.validators import validate_linked_tech, region_check, \
@@ -37,7 +36,8 @@ class TemoaModel(AbstractModel):
     """
     An instance of the abstract Temoa model
     """
-    def __init__(M, name='Temoa', *args, **kwds):
+
+    def __init__(M, *args, **kwds):
         AbstractModel.__init__(M, *args, **kwds)
 
         ################################################
@@ -77,7 +77,6 @@ class TemoaModel(AbstractModel):
         M.importRegions = dict()
         M.flex_commodities = set()
 
-
         ################################################
         #                 Model Sets                   #
         #    (used for indexing model elements)        #
@@ -92,7 +91,7 @@ class TemoaModel(AbstractModel):
         # Define time period vintages to track capacity installation
         M.vintage_exist = Set(ordered=True, initialize=init_set_vintage_exist)
         M.vintage_optimize = Set(ordered=True, initialize=init_set_vintage_optimize)
-        M.vintage_all = Set(initialize= M.time_exist | M.time_optimize)
+        M.vintage_all = Set(initialize=M.time_exist | M.time_optimize)
         # Perform some basic validation on the specified time periods.
         M.validate_time = BuildAction(rule=validate_time)
 
@@ -102,10 +101,10 @@ class TemoaModel(AbstractModel):
 
         # Define regions
         M.regions = Set(validate=region_check)
-        # RegionalIndices is the set of all the possible combinations of interregional
-        # exhanges plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
+        # RegionalIndices is the set of all the possible combinations of interregional exhanges
+        # plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
         M.RegionalIndices = Set(initialize=CreateRegionalIndices)
-        M.RegionalGlobalIndices = Set(validate=validators.region_group_check) # Set(initialize=RegionalGlobalInitializedIndices)
+        M.RegionalGlobalIndices = Set(validate=validators.region_group_check)
 
         # Define technology-related sets
         M.tech_resource = Set()
@@ -118,15 +117,22 @@ class TemoaModel(AbstractModel):
         M.tech_capacity_min = Set(within=M.tech_all)
         M.tech_capacity_max = Set(within=M.tech_all)
         M.tech_curtailment = Set(within=M.tech_all)
-        M.tech_rps = Set(within=M.regions * M.tech_all, doc='region-tech pairs for all technologies')
+        M.tech_rps = Set(within=M.regions * M.tech_all,
+                         doc='region-tech pairs for all technologies')
         M.tech_flex = Set(within=M.tech_all)
         M.tech_exchange = Set(within=M.tech_all)
-        M.groups = Set(dimen=1)  # Define groups for technologies
+        # Define groups for technologies
+        M.groups = Set(dimen=1)
         M.tech_groups = Set(within=M.RegionalGlobalIndices * M.groups * M.tech_all)
-        M.tech_annual = Set(within=M.tech_all)  # Define techs with constant output
+        # Define techs with constant output
+        M.tech_annual = Set(within=M.tech_all)
+        # Define techs for use with TechInputSplitAverage constraint,
+        # where techs have variable annual output but the user wishes to constrain them annually
         M.tech_variable = Set(
-            within=M.tech_all)  # Define techs for use with TechInputSplitAverage constraint, where techs have variable annual output but the user wishes to constrain them annually
-        M.tech_retirement = Set(within=M.tech_all)  # Define techs for which economic retirement is an option
+            within=M.tech_all)
+        # Define techs for which economic retirement is an option
+        M.tech_retirement = Set(
+            within=M.tech_all)
 
         # Define commodity-related sets
         M.commodity_demand = Set()
@@ -143,7 +149,6 @@ class TemoaModel(AbstractModel):
         M.tech_commercial = Set(within=M.tech_all)
         M.tech_residential = Set(within=M.tech_all)
         M.tech_PowerPlants = Set(within=M.tech_all)
-
 
         ################################################
         #              Model Parameters                #
@@ -165,7 +170,7 @@ class TemoaModel(AbstractModel):
         # i=input commodity, t=technology, v=vintage, o=output commodity.
         # ---------------------------------------------------------------
 
-        M.progress_marker_2 = BuildAction(['Starting to build Params'], rule=progress_check )
+        M.progress_marker_2 = BuildAction(['Starting to build Params'], rule=progress_check)
 
         M.GlobalDiscountRate = Param()
 
@@ -289,8 +294,10 @@ class TemoaModel(AbstractModel):
         M.MaxCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
         M.MaxActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
         M.MinActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
-        M.MinAnnualCapacityFactor = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all, M.commodity_carrier)
-        M.MaxAnnualCapacityFactor = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all, M.commodity_carrier)
+        M.MinAnnualCapacityFactor = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all,
+                                          M.commodity_carrier)
+        M.MaxAnnualCapacityFactor = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all,
+                                          M.commodity_carrier)
         M.GrowthRateMax = Param(M.RegionalIndices, M.tech_all)
         M.GrowthRateSeed = Param(M.RegionalIndices, M.tech_all)
         M.EmissionLimit = Param(M.RegionalGlobalIndices, M.time_optimize, M.commodity_emissions)
@@ -316,7 +323,8 @@ class TemoaModel(AbstractModel):
         # Define parameters associated with electric sector operation
         M.RampUp = Param(M.regions, M.tech_ramping)
         M.RampDown = Param(M.regions, M.tech_ramping)
-        M.CapacityCredit = Param(M.RegionalIndices, M.time_optimize, M.tech_all, M.vintage_all, default=0)
+        M.CapacityCredit = Param(M.RegionalIndices, M.time_optimize, M.tech_all, M.vintage_all,
+                                 default=0)
         M.PlanningReserveMargin = Param(M.regions, default=0.2)
         # Storage duration is expressed in hours
         M.StorageDuration = Param(M.regions, M.tech_storage, default=4)
@@ -748,7 +756,8 @@ class TemoaModel(AbstractModel):
             M.RenewablePortfolioStandardConstraint_rpt, rule=RenewablePortfolioStandard_Constraint
         )
 
-        M.LinkedEmissionsTechConstraint_rpsdtve = Set(dimen=7, initialize=LinkedTechConstraintIndices)
+        M.LinkedEmissionsTechConstraint_rpsdtve = Set(dimen=7,
+                                                      initialize=LinkedTechConstraintIndices)
         M.LinkedEmissionsTechConstraint = Constraint(
             M.LinkedEmissionsTechConstraint_rpsdtve, rule=LinkedEmissionsTech_Constraint)
 
@@ -756,4 +765,5 @@ class TemoaModel(AbstractModel):
 
 
 def progress_check(M, checkpoint: str):
-    logger.debug('here: %s', checkpoint)
+    """ A quick widget which is called by BuildAction in order to log creation progress"""
+    logger.debug('Model build progress: %s', checkpoint)
