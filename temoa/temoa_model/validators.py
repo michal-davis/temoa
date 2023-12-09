@@ -73,7 +73,7 @@ def validate_linked_tech(M: "TemoaModel") -> bool:
             # make sure they have the SAME eligible vintages
             if tech_vintages and linked_tech_vintages:
                 vintage_disparities = (
-                    lifetimes[r, t].keys() ^ lifetimes[r, linked_tech].keys()
+                        lifetimes[r, t].keys() ^ lifetimes[r, linked_tech].keys()
                 )
                 if vintage_disparities:
                     logger.error(
@@ -98,6 +98,7 @@ def validate_linked_tech(M: "TemoaModel") -> bool:
         logger.error('Temoa Exiting...')
         return False
 
+
 def region_check(M: 'TemoaModel', region) -> bool:
     """
     Validate the region name (letters + numbers only + underscore)
@@ -110,6 +111,7 @@ def region_check(M: 'TemoaModel', region) -> bool:
     # if this matches, return is true, fail -> false
     return re.match(r'[a-zA-Z0-9_]+\Z', region)  # string that has only letters and numbers
 
+
 def linked_region_check(M: 'TemoaModel', region_pair) -> bool:
     """
     Validate a pair of regions (r-r format where r ∈ M.R )
@@ -118,9 +120,11 @@ def linked_region_check(M: 'TemoaModel', region_pair) -> bool:
     if linked_regions:
         r1 = linked_regions.group(1)
         r2 = linked_regions.group(2)
-        if all(r in M.regions for r in (r1, r2)) and r1 != r2:  # both captured regions are in the set of M.R
+        if all(r in M.regions for r in
+               (r1, r2)) and r1 != r2:  # both captured regions are in the set of M.R
             return True
     return False
+
 
 def region_group_check(M: 'TemoaModel', rg) -> bool:
     """
@@ -134,11 +138,12 @@ def region_group_check(M: 'TemoaModel', rg) -> bool:
             # break up the group
             contained_regions = rg.strip().split('+')
             if all(t in M.regions for t in contained_regions) and \
-                len(set(contained_regions)) == len(contained_regions):  # no dupes
+                    len(set(contained_regions)) == len(contained_regions):  # no dupes
                 return True
         else:  # it is a singleton
             return (rg in M.regions) or rg == 'global'
     return False
+
 
 def tech_groups_set_check(M: 'TemoaModel', rg, g, t) -> bool:
     """
@@ -155,6 +160,11 @@ def tech_groups_set_check(M: 'TemoaModel', rg, g, t) -> bool:
         t in M.tech_all
     ))
 
+# TODO:  Several of these param checkers below are not in use because the params cannot
+# accept new values for the indexing sets that aren't in a recognized set.  Now that we are
+# making the GlobalRegionalIndices, we can probably come back and employ them instead of using
+# the buildAction approach
+
 def activity_param_check(M: 'TemoaModel', val, rg, p, t) -> bool:
     """
     Validate the index and the value for an entry into an activity param indexed with region-groups
@@ -166,11 +176,12 @@ def activity_param_check(M: 'TemoaModel', val, rg, p, t) -> bool:
     :return: True if all OK
     """
     return all((
-        val in NonNegativeReals,    # the value should be in this set
+        val in NonNegativeReals,  # the value should be in this set
         region_group_check(M, rg),
         p in M.time_optimize,
         t in M.tech_all
     ))
+
 
 def capacity_param_check(M: 'TemoaModel', val, rg, p, t, carrier) -> bool:
     """
@@ -191,6 +202,7 @@ def capacity_param_check(M: 'TemoaModel', val, rg, p, t, carrier) -> bool:
         carrier in M.commodity_carrier
     ))
 
+
 def activity_group_param_check(M: 'TemoaModel', val, rg, p, g) -> bool:
     """
     validate entries into capacity groups
@@ -208,6 +220,7 @@ def activity_group_param_check(M: 'TemoaModel', val, rg, p, g) -> bool:
         g in M.groups
     ))
 
+
 def emission_limit_param_check(M: 'TemoaModel', val, rg, p, e) -> bool:
     """
     validate entries into EmissionLimit param
@@ -222,4 +235,26 @@ def emission_limit_param_check(M: 'TemoaModel', val, rg, p, e) -> bool:
         region_group_check(M, rg),
         p in M.time_optimize,
         e in M.commodity_emissions
+    ))
+
+
+def validate_CapacityFactorProcess(M: 'TemoaModel', val, r, s, d, t, v) -> bool:
+    """
+    validate the rsdtv index
+    :param val: the parameter value
+    :param M: the model
+    :param r: region
+    :param s: season
+    :param d: time of day
+    :param t: tech
+    :param v: vintage
+    :return:
+    """
+    return all((
+        r in M.regions,
+        s in M.time_season,
+        d in M.time_of_day,
+        t in M.tech_all,
+        v in M.vintage_all,
+        0 <= val <= 1.0
     ))

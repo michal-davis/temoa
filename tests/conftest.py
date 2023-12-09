@@ -5,7 +5,7 @@ import shutil
 from definitions import PROJECT_ROOT
 
 # set the target folder for output from testing
-output_path = os.path.join(PROJECT_ROOT, "tests", "test_log")
+output_path = os.path.join(PROJECT_ROOT, "tests", "testing_log")
 if not os.path.exists(output_path):
     os.mkdir(output_path)
 

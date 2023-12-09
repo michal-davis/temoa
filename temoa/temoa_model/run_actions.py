@@ -12,6 +12,7 @@ from sys import stderr as SE
 from time import time
 from typing import Iterable, Tuple
 
+import pyomo.environ
 from pyomo.environ import DataPortal, Suffix, Var, Constraint, value, UnknownSolver, SolverFactory
 from pyomo.opt import SolverResults
 
@@ -108,6 +109,9 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool) -> Tu
                 optimizer.options["feasopt tolerance"] = 1.e-6
 
             # TODO: still need to add gurobi parameters.
+
+            # solver = pyomo.environ.SolverFactory('appsi_highs')
+            # result = solver.solve(instance, tee=True)
 
             result = optimizer.solve(instance, suffixes=['dual'],  # 'rc', 'slack'],
                                      keepfiles=keep_LP_files,

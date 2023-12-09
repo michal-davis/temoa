@@ -29,8 +29,6 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-def progress_check(M, checkpoint: str):
-    logger.info('here: %s', checkpoint)
 
 def price_checker(M: 'TemoaModel'):
     logger.info('Started price checking model: %s', M.name)

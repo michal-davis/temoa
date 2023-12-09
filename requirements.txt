@@ -43,5 +43,6 @@ sphinxcontrib-serializinghtml
 # new requirements
 pytest~=7.4.3
 Deprecated
+highspy
 
 openpyxl~=3.1.2
