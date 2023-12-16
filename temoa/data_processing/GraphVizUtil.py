@@ -1,7 +1,4 @@
-import sys
-import getopt
-import re
-import os
+
 import argparse
 
 

@@ -26,6 +26,7 @@ from pyomo.core import BuildCheck
 from pyomo.environ import Any, NonNegativeReals
 
 from temoa.temoa_model import validators
+from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.validators import validate_linked_tech, region_check, \
@@ -267,7 +268,7 @@ class TemoaModel(AbstractModel):
         M.CostVariableVintageDefault = Param(M.CostVariableVintageDefault_rtv)
 
         M.initialize_Costs = BuildAction(rule=CreateCosts)
-        # M.validate_pricing = BuildAction(rule=price_checker)
+        M.validate_pricing = BuildAction(rule=price_checker)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
