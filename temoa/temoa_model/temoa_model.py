@@ -23,14 +23,15 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 from itertools import product
 
 from pyomo.core import BuildCheck
-from pyomo.environ import Any, NonNegativeReals
+from pyomo.environ import (Any, NonNegativeReals, AbstractModel, BuildAction, Param, Set, Var,
+                           Objective, minimize)
 
 from temoa.temoa_model import validators
 from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
-from temoa.temoa_model.validators import validate_linked_tech, region_check, \
-    validate_CapacityFactorProcess
+from temoa.temoa_model.validators import (validate_linked_tech, region_check,
+                                          validate_CapacityFactorProcess)
 
 
 class TemoaModel(AbstractModel):
@@ -43,7 +44,7 @@ class TemoaModel(AbstractModel):
 
         ################################################
         #       Internally used Data Containers        #
-        #       (not formal model elements             #
+        #       (not formal model elements)            #
         ################################################
 
         M.processInputs = dict()
@@ -119,7 +120,7 @@ class TemoaModel(AbstractModel):
         M.tech_capacity_max = Set(within=M.tech_all)
         M.tech_curtailment = Set(within=M.tech_all)
         M.tech_rps = Set(within=M.regions * M.tech_all,
-                         doc='region-tech pairs for all technologies')
+                         doc='Regional Portfolio Standard Technologies')
         M.tech_flex = Set(within=M.tech_all)
         M.tech_exchange = Set(within=M.tech_all)
         # Define groups for technologies
@@ -171,6 +172,7 @@ class TemoaModel(AbstractModel):
         # i=input commodity, t=technology, v=vintage, o=output commodity.
         # ---------------------------------------------------------------
 
+        # these "progress markers" report build progress in the log, if the level == debug
         M.progress_marker_2 = BuildAction(['Starting to build Params'], rule=progress_check)
 
         M.GlobalDiscountRate = Param()
