@@ -19,9 +19,9 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-from operator import itemgetter as iget
 from itertools import product as cross_product
-from sys import argv, stderr as SE, stdout as SO
+from operator import itemgetter as iget
+from sys import stderr as SE
 from typing import TYPE_CHECKING
 
 from deprecated import deprecated
@@ -31,18 +31,8 @@ if TYPE_CHECKING:
 
 from io import StringIO
 
-try:
-    from pyomo.core import (AbstractModel, BuildAction, Constraint, NonNegativeReals, Reals,
-                            Objective, Param, Set, Var,
-                            minimize, value)
+from pyomo.environ import value
 
-except:
-    msg = """
-Unable to find 'pyomo.core.' Check to make sure pyomo is installed, and that
-you are running a version compatible with Temoa.
-"""
-
-    raise ImportError(msg)
 from logging import getLogger
 
 logger = getLogger(__name__)
@@ -75,7 +65,9 @@ def get_str_padding(obj):
 
 
 def CommodityBalanceConstraintErrorCheck(vflow_out, vflow_in, r, p, s, d, c):
-    if int is type(vflow_out):
+    # TODO:  This needs a deep-dive.  Not clear why we are triggering on an instance of int to do
+    #  "stuff"
+    if isinstance(vflow_out, int):
         flow_in_expr = StringIO()
         vflow_in.pprint(ostream=flow_in_expr)
         msg = ("Unable to meet an interprocess '{}' transfer in ({}, {}, {}).\n"
@@ -94,7 +86,9 @@ def CommodityBalanceConstraintErrorCheck(vflow_out, vflow_in, r, p, s, d, c):
 
 
 def CommodityBalanceConstraintErrorCheckAnnual(vflow_out, vflow_in, r, p, c):
-    if int is type(vflow_out):
+    # TODO:  This needs a deep-dive.  Not clear what this is intended to do or significance of
+    #  'int' type
+    if isinstance(vflow_out, int):
         flow_in_expr = StringIO()
         vflow_in.pprint(ostream=flow_in_expr)
         msg = ("Unable to meet an interprocess '{}' transfer in ({}, {}, {}).\n"
@@ -113,6 +107,7 @@ def CommodityBalanceConstraintErrorCheckAnnual(vflow_out, vflow_in, r, p, c):
 
 
 def DemandConstraintErrorCheck(supply, r, p, s, d, dem):
+    # TODO:  Same:  This needs a deep-dive.  Unclear why we are triggering on int
     if int is type(supply):
         msg = ("Error: Demand '{}' for ({}, {}, {}) unable to be met by any "
                'technology.\n\tPossible reasons:\n'
@@ -125,7 +120,7 @@ def DemandConstraintErrorCheck(supply, r, p, s, d, dem):
 
 def validate_time(M: 'TemoaModel'):
     """
-    We check for integer status here, rather then asking Pyomo to do this via
+    We check for integer status here, rather than asking Pyomo to do this via
     a 'within=Integers' clause in the definition so that we can have a very
     specific error message.  If we instead use Pyomo's mechanism, the
     python invocation of Temoa throws an error (including a traceback)
@@ -133,28 +128,30 @@ def validate_time(M: 'TemoaModel'):
     """
     logger.debug('Started validating time index')
     for year in M.time_exist:
-        if isinstance(year, int): continue
+        if isinstance(year, int):
+            continue
 
-        msg = ('Set "time_exist" requires integer-only elements.\n\n  Invalid '
-               'element: "{}"')
+        msg = (f'Set "time_exist" requires integer-only elements.\n\n  '
+               f'Invalid element: "{year}"')
         logger.error(msg)
-        raise Exception(msg.format(year))
+        raise Exception(msg)
 
     for year in M.time_future:
-        if isinstance(year, int): continue
+        if isinstance(year, int):
+            continue
 
-        msg = ('Set "time_future" requires integer-only elements.\n\n  Invalid '
-               'element: "{}"')
-        logger.error(msg.format(year))
-        raise Exception(msg.format(year))
+        msg = (f'Set "time_future" requires integer-only elements.\n\n '
+               f'invalid element: "{year}"')
+        logger.error(msg)
+        raise Exception(msg)
 
     if len(M.time_future) < 2:
         msg = ('Set "time_future" needs at least 2 specified years.  Temoa '
                'treats the integer numbers specified in this set as boundary years '
                'between periods, and uses them to automatically ascertain the length '
                '(in years) of each period.  Note that this means that there will be '
-               'one less optimization period than the number of elements in this set.'
-               )
+               'one less optimization period than the number of elements in this set.')
+
         logger.error(msg)
         raise Exception(msg)
 
@@ -163,14 +160,16 @@ def validate_time(M: 'TemoaModel'):
     min_horizon = min(M.time_future)
 
     if not (max_exist < min_horizon):
-        msg = ('All items in time_future must be larger than in time_exist.\n'
-               'time_exist max:   {}\ntime_future min: {}')
+        msg = ('All items in time_future must be larger than in time_exist.'
+               '\ntime_exist max:   {}'
+               '\ntime_future min: {}')
         logger.error(msg.format(max_exist, min_horizon))
         raise Exception(msg.format(max_exist, min_horizon))
     logger.debug('Finished validating time')
 
 
 def validate_SegFrac(M: 'TemoaModel'):
+    """Ensure that the segment fractions adds up to 1"""
     total = sum(i for i in M.SegFrac.values())
 
     if abs(float(total) - 1.0) > 0.001:
@@ -180,11 +179,11 @@ def validate_SegFrac(M: 'TemoaModel'):
 
         key_padding = max(map(get_str_padding, M.SegFrac.sparse_iterkeys()))
 
-        format = "%%-%ds = %%s" % key_padding
+        fmt = "%%-%ds = %%s" % key_padding
         # Works out to something like "%-25s = %s"
 
         items = sorted(M.SegFrac.items())
-        items = '\n   '.join(format % (str(k), v) for k, v in items)
+        items = '\n   '.join(fmt % (str(k), v) for k, v in items)
 
         msg = ('The values of the SegFrac parameter do not sum to 1.  Each item '
                'in SegFrac represents a fraction of a year, so they must total to '
@@ -209,7 +208,7 @@ def CheckEfficiencyIndices(M: 'TemoaModel'):
         symdiff = (str(i) for i in symdiff)
         f_msg = msg.format(', '.join(symdiff))
         logger.error(f_msg)
-        raise Exception(f_msg)
+        raise ValueError(f_msg)
 
     symdiff = techs.symmetric_difference(M.tech_all)
     if symdiff:
@@ -219,7 +218,7 @@ def CheckEfficiencyIndices(M: 'TemoaModel'):
         symdiff = (str(i) for i in symdiff)
         f_msg = msg.format(', '.join(symdiff))
         logger.error(f_msg)
-        raise Exception(f_msg)
+        raise ValueError(f_msg)
 
     diff = M.commodity_demand - c_outputs
     if diff:
@@ -229,7 +228,7 @@ def CheckEfficiencyIndices(M: 'TemoaModel'):
         diff = (str(i) for i in diff)
         f_msg = msg.format(', '.join(diff))
         logger.error(f_msg)
-        raise Exception(f_msg)
+        raise ValueError(f_msg)
 
 
 @deprecated("should not be needed.  We are pulling the default on-the-fly where used")
@@ -325,7 +324,8 @@ def initialize_process_lifetimes(M: 'TemoaModel', r, t, v):
 def clear_unused_params(M: 'TemoaModel'):
     """
     Intent is to clear the LifetimeTech and LifetimeProcess params that were used above to fill
-    LifetimeProcess_final.  These "helper" params should not be used anywhere else, and this is a failsafe.
+    LifetimeProcess_final.  These "helper" params should not be used anywhere else, and this is a
+    failsafe.
     :param M:
     :return: None
     """
@@ -341,7 +341,7 @@ def CreateDemands(M: 'TemoaModel'):
     on the associated SegFrac slice.
     3. Validate that the DemandDefaultDistribution sums to 1.
     4. Find any per-demand DemandSpecificDistribution values not set, and set
-    set them from DemandDefaultDistribution.  Note that this only sets a
+    them from DemandDefaultDistribution.  Note that this only sets a
     distribution for an end-use demand if the user has *not* specified _any_
     anything for that end-use demand.  Thus, it is up to the user to fully
     specify the distribution, or not.  No in-between.
@@ -364,7 +364,7 @@ def CreateDemands(M: 'TemoaModel'):
     unused_dems = sorted(M.commodity_demand.difference(used_dems))
     if unused_dems:
         for dem in unused_dems:
-            msg = ("Warning: Demand '{}' is unused\n")
+            msg = "Warning: Demand '{}' is unused\n"
             logger.warning(msg.format(dem))
             SE.write(msg.format(dem))
 
@@ -390,11 +390,11 @@ def CreateDemands(M: 'TemoaModel'):
 
         key_padding = max(map(get_str_padding, DDD.sparse_iterkeys()))
 
-        format = "%%-%ds = %%s" % key_padding
+        fmt = "%%-%ds = %%s" % key_padding
         # Works out to something like "%-25s = %s"
 
         items = sorted(DDD.items())
-        items = '\n   '.join(format % (str(k), v) for k, v in items)
+        items = '\n   '.join(fmt % (str(k), v) for k, v in items)
 
         msg = ('The values of the DemandDefaultDistribution parameter do not '
                'sum to 1.  The DemandDefaultDistribution specifies how end-use '
@@ -402,7 +402,7 @@ def CreateDemands(M: 'TemoaModel'):
                'time_of_day), so together, the data must total to 1.  Current '
                'values:\n   {}\n\tsum = {}')
         logger.error(msg.format(items, total))
-        raise Exception(msg.format(items, total))
+        raise ValueError(msg.format(items, total))
 
     # Step 4
     DSD = M.DemandSpecificDistribution
@@ -436,11 +436,11 @@ def CreateDemands(M: 'TemoaModel'):
                     DSD_dem_getter(k) == dem and DSD_region_getter(k) == r]
             key_padding = max(map(get_str_padding, keys))
 
-            format = "%%-%ds = %%s" % key_padding
+            fmt = "%%-%ds = %%s" % key_padding
             # Works out to something like "%-25s = %s"
 
             items = sorted((k, DSD[k]) for k in keys)
-            items = '\n   '.join(format % (str(k), v) for k, v in items)
+            items = '\n   '.join(fmt % (str(k), v) for k, v in items)
 
             msg = ('The values of the DemandSpecificDistribution parameter do not '
                    'sum to 1.  The DemandSpecificDistribution specifies how end-use '
@@ -449,7 +449,7 @@ def CreateDemands(M: 'TemoaModel'):
                    'must total to 1.\n\n   Demand-specific distribution in error: '
                    ' {}\n\n   {}\n\tsum = {}')
             logger.error(msg.format(dem, items, total))
-            raise Exception(msg.format(dem, items, total))
+            raise ValueError(msg.format(dem, items, total))
     logger.debug('Finished creating demand distributions')
 
 
@@ -515,7 +515,7 @@ def CreateRegionalIndices(M: 'TemoaModel'):
     for r_i in M.regions:
         if "-" in r_i:
             logger.error("Individual region names can not have '-' in their names: %s", str(r_i))
-            raise Exception("Individual region names can not have '-' in their names: " + str(r_i))
+            raise ValueError("Individual region names can not have '-' in their names: " + str(r_i))
         for r_j in M.regions:
             if r_i == r_j:
                 regional_indices.add(r_i)
@@ -553,10 +553,10 @@ def CreateSparseDicts(M: 'TemoaModel'):
                  len(M.Efficiency))
     for r, i, t, v, o in M.Efficiency.sparse_iterkeys():
         if "-" in r and t not in M.tech_exchange:
-            msg = "Technology " + str(t) + " seems to be an exchange \
-				technology but it is not specified in tech_exchange set"
+            msg = (f'Technology {t} seems to be an exchange technology '
+                   f'but it is not specified in tech_exchange set')
             logger.error(msg)
-            raise Exception(msg)
+            raise ValueError(msg)
         l_process = (r, t, v)
         l_lifetime = value(M.LifetimeProcess_final[l_process])
         # Do some error checking for the user.
@@ -598,7 +598,8 @@ def CreateSparseDicts(M: 'TemoaModel'):
         # table.
         for p in M.time_optimize:
             # Can't build a vintage before it's been invented
-            if p < v: continue
+            if p < v:
+                continue
 
             pindex = (r, p, t, v)
 
@@ -608,7 +609,8 @@ def CreateSparseDicts(M: 'TemoaModel'):
                     M.processLoans[pindex] = True
 
             # if tech is no longer active, don't include it
-            if v + l_lifetime <= p: continue
+            if v + l_lifetime <= p:
+                continue
 
             # Here we utilize the indices in a given iteration of the loop to
             # create the dictionary keys, and initialize the associated values
@@ -626,7 +628,7 @@ def CreateSparseDicts(M: 'TemoaModel'):
                 M.ProcessInputsByOutput[r, p, t, v, o] = set()
             if (r, t) not in M.processTechs:
                 M.processTechs[r, t] = set()
-            # While the dictionary just above indentifies the vintage (v)
+            # While the dictionary just above identifies the vintage (v)
             # associated with each (r,p,t) we need to do the same below for various
             # technology subsets.
             if (r, p, t) not in M.processVintages:
@@ -640,23 +642,25 @@ def CreateSparseDicts(M: 'TemoaModel'):
             if t in M.tech_ramping and (r, p, t) not in M.rampVintages:
                 M.rampVintages[r, p, t] = set()
             if (r, p, i, t) in M.TechInputSplit.sparse_iterkeys() and (
-            r, p, i, t) not in M.inputsplitVintages:
+                    r, p, i, t) not in M.inputsplitVintages:
                 M.inputsplitVintages[r, p, i, t] = set()
             if (r, p, i, t) in M.TechInputSplitAverage.sparse_iterkeys() and (
                     r, p, i, t) not in M.inputsplitaverageVintages:
                 M.inputsplitaverageVintages[r, p, i, t] = set()
             if (r, p, t, o) in M.TechOutputSplit.sparse_iterkeys() and (
-            r, p, t, o) not in M.outputsplitVintages:
+                    r, p, t, o) not in M.outputsplitVintages:
                 M.outputsplitVintages[r, p, t, o] = set()
             if t in M.tech_resource and (r, p, o) not in M.ProcessByPeriodAndOutput:
                 M.ProcessByPeriodAndOutput[r, p, o] = set()
             if t in M.tech_reserve and (r, p) not in M.processReservePeriods:
                 M.processReservePeriods[r, p] = set()
-            # TODO:  This construct is goofy.  Using regex to split a string.  Perhaps consider a SQL query
-            #        to a table that has exchange members by tech (future growth?)
+            # TODO:  This construct is goofy.  Using regex to split a string.  Perhaps consider a
+            #  SQL query to a table that has exchange members by tech (future growth?)
+
+            # since t is in M.tech_exchange, r here has *-* format (e.g. 'US-Mexico').  # r[
+            # :r.find("-")] extracts the region index before the "-".
             if t in M.tech_exchange and (r[:r.find("-")], p, i) not in M.exportRegions:
-                M.exportRegions[r[:r.find(
-                    "-")], p, i] = set()  # since t is in M.tech_exchange, r here has *-* format (e.g. 'US-Mexico').  # r[:r.find("-")] extracts the region index before the "-".
+                M.exportRegions[r[:r.find("-")], p, i] = set()
             if t in M.tech_exchange and (r[r.find("-") + 1:], p, o) not in M.importRegions:
                 M.importRegions[r[r.find("-") + 1:], p, o] = set()
 
@@ -702,16 +706,18 @@ def CreateSparseDicts(M: 'TemoaModel'):
                     for p in M.time_optimize:
                         if (r1, p, o1) not in M.commodityDStreamProcess:
                             msg = ('The {} process in region {} has no downstream process other '
-                                   'than a transport ({}) process. This will cause the commodity balance '
-                                   'constraint to fail. Add a dummy technology downstream of the {} '
-                                   'process to the Efficiency table to avoid this issue. '
-                                   'The dummy technology should have the same region and vintage as the {} process, '
-                                   'an efficiency of 100%, with the {} commodity as the input and output. '
-                                   'The dummy technology may also need a corresponding row in the ExistingCapacity '
-                                   'table with capacity values that equal the {} technology.')
+                                   'than a transport ({}) process. This will cause the commodity '
+                                   'balance constraint to fail. Add a dummy technology downstream '
+                                   'of the {} process to the Efficiency table to avoid this '
+                                   'issue.  The dummy technology should have the same region and '
+                                   'vintage as the {} process, an efficiency of 100%, with the {} '
+                                   'commodity as the input and output.'
+                                   'The dummy technology may also need a corresponding row in the '
+                                   'ExistingCapacity table with capacity values that equal the {} '
+                                   'technology.')
                             f_msg = msg.format(t1, r1, t, t1, t1, o1, t1)
                             logger.error(f_msg)
-                            raise Exception(f_msg)
+                            raise ValueError(f_msg)
 
     l_unused_techs = M.tech_all - l_used_techs
     if l_unused_techs:
@@ -833,7 +839,7 @@ def CostInvestIndices(M: 'TemoaModel'):
     return indices
 
 
-# @deprecated('No longer used.  See the region_group_check in validators.py')
+@deprecated('No longer used.  See the region_group_check in validators.py')
 def RegionalGlobalInitializedIndices(M: 'TemoaModel'):
     from itertools import permutations
     indices = set()
@@ -1023,6 +1029,8 @@ DemandActivity constraint. It returns a tuple of the form:
 and "first_d" are the reference season and time-of-day, respectively used to
 ensure demand activity remains consistent across time slices.
 """
+    # TODO:  This probably needs to be looked at in detail, with some understanding
+    #        of the intent.
 
     # First, we only want to run this for demands for which there are more than
     # one technology that meet it.
@@ -1050,9 +1058,13 @@ ensure demand activity remains consistent across time slices.
 
         # Find the first time step where the DSD is not 0
         # Set the time_season and time_of_day to s0 and d0.
+        # TODO:  These should probably be sorted
         for s0 in M.time_season:
+            # TODO:  We are trying to ID first, but how are the time-of-day blocks
+            #        sorted?  we could miss the first here, no?
             for d0 in M.time_of_day:
                 if (r, s0, d0, dem) in M.DemandSpecificDistribution.sparse_keys():
+                    # TODO:  this could probably just be a loop w/ break.  Try-except?
                     try:
                         if value(M.DemandSpecificDistribution[r, s0, d0, dem]) > eps:
                             break
@@ -1066,7 +1078,7 @@ ensure demand activity remains consistent across time slices.
         for s in M.time_season:
             for d in M.time_of_day:
                 if s != s0 or d != d0:
-                    yield (r, p, s, d, t, v, dem, s0, d0)
+                    yield r, p, s, d, t, v, dem, s0, d0
 
 
 def DemandConstraintIndices(M: 'TemoaModel'):

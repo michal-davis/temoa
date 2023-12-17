@@ -475,6 +475,7 @@ could satisfy both an end-use and internal system demand, then the output from
 
     DemandConstraintErrorCheck(supply + supply_annual, r, p, s, d, dem)
 
+    # TODO:  Could this become a GTE constraint?  It would make the model more elastic...?
     expr = supply + supply_annual == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
 
     return expr
@@ -664,10 +665,14 @@ reduces computational burden.
       either be in tech_annual or not in tech_annual')
 
     CommodityBalanceConstraintErrorCheck(vflow_out + interregional_imports,
-                                         vflow_in_ToStorage + vflow_in_ToNonStorage + vflow_in_ToNonStorageAnnual + interregional_exports + v_out_excess,
+                                         vflow_in_ToStorage + vflow_in_ToNonStorage +
+                                         vflow_in_ToNonStorageAnnual + interregional_exports +
+                                         v_out_excess,
                                          r, p, s, d, c)
 
-    expr = vflow_out + interregional_imports == vflow_in_ToStorage + vflow_in_ToNonStorage + vflow_in_ToNonStorageAnnual + interregional_exports + v_out_excess
+    expr = (vflow_out + interregional_imports == vflow_in_ToStorage +
+            vflow_in_ToNonStorage + vflow_in_ToNonStorageAnnual +
+            interregional_exports + v_out_excess)
 
     return expr
 
