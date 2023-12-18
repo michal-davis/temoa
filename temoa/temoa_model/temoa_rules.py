@@ -55,7 +55,7 @@ def AdjustedCapacity_Constraint(M: 'TemoaModel', r, p, t, v):
 
     else:
         retired_cap = sum(
-            M.V_RetiredCapacity[r, S_p, t, v] for S_p in M.time_optimize if S_p <= p and S_p > v
+            M.V_RetiredCapacity[r, S_p, t, v] for S_p in M.time_optimize if p >= S_p > v
         )
         if v in M.time_exist:
             return M.V_Capacity[r, p, t, v] == M.ExistingCapacity[r, t, v] - retired_cap
@@ -233,7 +233,8 @@ throughout the period.
 .. math::
    :label: CapacityAvailable
 
-   \textbf{CAPAVL}_{r, p, t} = \sum_{v, p_i \leq p} {PLF}_{r, p, t, v} \cdot \left ( \textbf{CAP}_{r, t, v} - \textbf{CAPRET}_{r, p_i, t, v} \right )
+   \textbf{CAPAVL}_{r, p, t} = \sum_{v, p_i \leq p} {PLF}_{r, p, t, v} \cdot \left
+   ( \textbf{CAP}_{r, t, v} - \textbf{CAPRET}_{r, p_i, t, v} \right )
 
    \\
    \forall p \in \text{P}^o, r \in R, t \in T
@@ -1203,9 +1204,9 @@ def StorageInit_Constraint(M: 'TemoaModel', r, t, v):
 This constraint is used if the users wishes to force a specific initial storage charge level
 for certain storage technologies and vintages. In this case, the value of the decision variable
 :math:`\textbf{SI}_{r,t,v}` is set by this constraint rather than being optimized.
-User-specified initial storage charge levels that are sufficiently different from the optimial
+User-specified initial storage charge levels that are sufficiently different from the optimal
 :math:`\textbf{SI}_{r,t,v}` could impact the cost-effectiveness of storage. For example, if the
-optimial initial charge level happens to be 50% of the full energy capacity, forced initial
+optimal initial charge level happens to be 50% of the full energy capacity, forced initial
 charge levels (specified by parameter :math:`SIF_{r,t,v}`) equal to 10% or 90% of the full energy
 capacity could lead to more expensive solutions.
 
@@ -1222,7 +1223,7 @@ capacity could lead to more expensive solutions.
       \\
       \forall \{r, t, v\} \in \Theta_{\text{StorageInit}}
 """
-
+    # TODO:  This is invalid with the "for p..." construct
     s = M.time_season.first()
     energy_capacity = (
         M.V_Capacity[r, p, t, v]
