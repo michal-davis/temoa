@@ -521,7 +521,8 @@ def CreateRegionalIndices(M: 'TemoaModel'):
                 regional_indices.add(r_i)
             else:
                 regional_indices.add(r_i + "-" + r_j)
-    return regional_indices
+    # dev note:  Sorting these passed them to pyomo in an ordered container and prevents warnings
+    return sorted(regional_indices)
 
 
 # ---------------------------------------------------------------
