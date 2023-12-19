@@ -2,60 +2,74 @@
 Quick utility to capture set values from a pyomo model to enable later comparison.
 
 This file should not need to be run again unless model schema changes
+
+Written by:  J. F. Hyink
+jeff@westernspark.us
+https://westernspark.us
+Created on:  8/26/23
+
+Tools for Energy Model Optimization and Analysis (Temoa):
+An open source framework for energy systems optimization modeling
+
+Copyright (C) 2015,  NC State University
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+A complete copy of the GNU General Public License v2 (GPLv2) is available
+in LICENSE.txt.  Users uncompressing this from an archive may not have
+received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
-# Written by:  J. F. Hyink
-# jeff@westernspark.us
-# https://westernspark.us
-# Created on:  8/26/2023
 
 import json
 import sys
-from os import path
+from pathlib import Path
+
 import pyomo.environ as pyo
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_model import TemoaModel, TemoaModel
-from temoa.temoa_model.temoa_run import TemoaSolver
+from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 
-print("WARNING:  Continuing to execute this file will update the cached values in the testing_data folder"
-      " from the sqlite databases in the same folder.  This should only need to be done if the schema or"
-      " model have changed and that database has been updated.")
+print(
+    "WARNING:  Continuing to execute this file will "
+    "update the cached values in the testing_data folder"
+    "from the sqlite databases in the same folder.  "
+    "This should only need to be done if the schema or"
+    "model have changed and that database has been updated.")
 
 t = input('Type "Y" to continue, any other key to exit now.')
 if t not in {'y', 'Y'}:
     sys.exit(0)
-output_file = path.join(PROJECT_ROOT, 'tests', 'testing_data', 'utopia_sets.json')
-config_file = path.join(PROJECT_ROOT, 'tests', 'utilities', 'config_utopia_for_utility')
 
-model = TemoaModel('utility')
-temoa_solver = TemoaSolver(model=model, config_filename=config_file)
-# override the location of the .dat file in the config
-temoa_solver.options
-for _ in temoa_solver.createAndSolve():
-    pass
-instance_object = temoa_solver.instance_hook
-model_sets = instance_object.instance.component_map(ctype=pyo.Set)
-sets_dict = {k: list(v) for k, v in model_sets.items()}
+output_path = Path(PROJECT_ROOT, 'tests', 'testing_log')  # capture the log here
 
-# stash the result in a json file...
-with open(output_file, 'w') as f_out:
-    json.dump(sets_dict, f_out, indent=2)
+scenarios = [
+    {
+        'output_file': Path(PROJECT_ROOT, 'tests', 'testing_data', 'utopia_sets.json'),
+        'config_file': Path(PROJECT_ROOT, 'tests', 'utilities', 'config_utopia.toml')
+    },
+    {
+        'output_file': Path(PROJECT_ROOT, 'tests', 'testing_data', 'test_system_sets.json'),
+        'config_file': Path(PROJECT_ROOT, 'tests', 'utilities',
+                            'config_test_system.toml')
+    }
+]
+for scenario in scenarios:
+    ts = TemoaSequencer(config_file=scenario['config_file'],
+                        output_path=output_path)
 
-# do the same for the test_system
+    built_instance = ts.start()  # catch the built model
 
-output_file = path.join(PROJECT_ROOT, 'tests', 'testing_data', 'test_system_sets.json')
-config_file = path.join(PROJECT_ROOT, 'tests', 'utilities', 'config_test_system_for_utility')
+    model_sets = built_instance.component_map(ctype=pyo.Set)
+    sets_dict = {k: list(v) for k, v in model_sets.items()}
 
-model = TemoaModel('utility')
-temoa_solver = TemoaSolver(model=model, config_filename=config_file)
-# override the location of the .dat file in the config
-temoa_solver.options
-for _ in temoa_solver.createAndSolve():
-    pass
-instance_object = temoa_solver.instance_hook
-model_sets = instance_object.instance.component_map(ctype=pyo.Set)
-sets_dict = {k: list(v) for k, v in model_sets.items()}
-
-# stash the result in a json file...
-with open(output_file, 'w') as f_out:
-    json.dump(sets_dict, f_out, indent=2)
+    # stash the result in a json file...
+    with open(scenario['output_file'], 'w') as f_out:
+        json.dump(sets_dict, f_out, indent=2)

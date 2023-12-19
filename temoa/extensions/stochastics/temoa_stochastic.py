@@ -144,7 +144,7 @@ def solve_ef(p_model, p_data, temoa_options=None):
 
         ef_instance.dual = Suffix(direction=Suffix.IMPORT)
 
-        with SolverFactory(temoa_options.solver) as opt:
+        with SolverFactory(temoa_options.solver_name) as opt:
 
             ef_result = opt.solve(ef_instance)
 

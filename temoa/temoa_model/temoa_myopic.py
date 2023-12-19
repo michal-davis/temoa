@@ -43,7 +43,7 @@ from definitions import PROJECT_ROOT
 
 def myopic_db_generator_solver(self):
     global db_path_org
-    db_path_org = self.options.output
+    db_path_org = self.options.output_file
     # original database specified in the ../config_sample file
     con_org = sqlite3.connect(db_path_org)
     cur_org = con_org.cursor()
@@ -53,10 +53,10 @@ def myopic_db_generator_solver(self):
     cur_org.execute("DELETE FROM MyopicBaseyear")
     cur_org.execute("INSERT INTO MyopicBaseyear (year) VALUES (" + str(time_periods[0][0]) + ")")
     con_org.commit()
-    loc1 = max(loc for loc, val in enumerate(self.options.output) if val == '/' or val == '\\')
-    loc2 = max(loc for loc, val in enumerate(self.options.output) if val == '.')
-    db_name = self.options.output[loc1 + 1:loc2]
-    copyfile(db_path_org, os.path.join(self.options.path_to_data, db_name) + "_blank" + self.options.output[loc2:])
+    loc1 = max(loc for loc, val in enumerate(self.options.output_file) if val == '/' or val == '\\')
+    loc2 = max(loc for loc, val in enumerate(self.options.output_file) if val == '.')
+    db_name = self.options.output_file[loc1 + 1:loc2]
+    copyfile(db_path_org, os.path.join(self.options.path_to_data, db_name) + "_blank" + self.options.output_file[loc2:])
 
     # group 1 consists of non output tables in which "periods" is a column name
     tables_group1 = ['CostFixed', 'CostVariable', 'Demand', 'EmissionLimit', 'MaxActivity', 'MaxCapacity',
@@ -90,8 +90,8 @@ def myopic_db_generator_solver(self):
         for j in range(i - (N - 1), i + 1):
             new_myopic_name += "_" + str(time_periods[j][0])
 
-        new_db_loc = os.path.join(self.options.path_to_data, db_name) + new_myopic_name + self.options.output[loc2:]
-        copyfile(os.path.join(self.options.path_to_data, db_name) + "_blank" + self.options.output[loc2:], new_db_loc)
+        new_db_loc = os.path.join(self.options.path_to_data, db_name) + new_myopic_name + self.options.output_file[loc2:]
+        copyfile(os.path.join(self.options.path_to_data, db_name) + "_blank" + self.options.output_file[loc2:], new_db_loc)
         con = sqlite3.connect(new_db_loc)
         cur = con.cursor()
         table_list.sort()
@@ -409,11 +409,9 @@ def myopic_db_generator_solver(self):
         # the database is ready. It is run via a temporary config file in
         # a perfect foresight fashion.
         # ---------------------------------------------------------------
-        new_config = os.path.join(os.getcwd(), "temoa_model", "config_sample") + new_myopic_name
-        if version < 3:
-            ifile = io.open(os.path.join(os.getcwd(), "temoa_model", "config_sample"), encoding='utf-8')
-        else:
-            ifile = open(os.path.join(os.getcwd(), "temoa_model", "config_sample"), encoding='utf-8')
+        new_config = self.options.file_location + new_myopic_name
+
+        ifile = open(self.options.file_location, encoding='utf-8')
 
         ofile = open(new_config, 'w')
         for line in ifile:
@@ -429,11 +427,11 @@ def myopic_db_generator_solver(self):
         ifile.close()
         ofile.close()
         executable_target = os.path.join(PROJECT_ROOT, 'main.py')  # temp fix to keep it all working....
-        os.system(f"python {executable_target} --config=temoa_model/config_sample" + new_myopic_name)
+        os.system(f"python {executable_target} --config={new_config}")
         # delete the temporary config file
         os.remove(new_config)
         if not self.options.KeepMyopicDBs:
             os.remove(new_db_loc)
             os.remove(os.path.join(self.options.path_to_data, db_name) + new_myopic_name + ".dat")
 
-    os.remove(os.path.join(self.options.path_to_data, db_name) + "_blank" + self.options.output[loc2:])
+    os.remove(os.path.join(self.options.path_to_data, db_name) + "_blank" + self.options.output_file[loc2:])

@@ -18,8 +18,8 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have 
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+from pyomo.environ import value
 
-from pyomo.core.kernel.numvalue import value
 from temoa.temoa_model.temoa_rules import TotalCost_rule
 
 

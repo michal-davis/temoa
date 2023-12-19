@@ -3,14 +3,58 @@ Utility to convert sqlite database file to a pyomo-friendly .dat file.
 
 The original contents below were originally located in the temoa_config file
 """
+import logging
+# Adapted from DB_to_DAT.py
+import sqlite3
+import sys
+import re
+import getopt
+from logging import getLogger
 
+from temoa.temoa_model.temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_mode import TemoaMode
 
-def db_2_dat(ifile, ofile, options):
-    # Adapted from DB_to_DAT.py
-    import sqlite3
-    import sys
-    import re
-    import getopt
+logger = getLogger(__name__)
+
+# the tables below are ones in which we might find regional groups which should be captured
+# to make the members of the RegionalGlobalIndices Set in the model.  They need to aggregated
+tables_with_regional_groups = {'MaxActivity': 'regions',
+                               'MinActivity': 'regions',
+                               'MinAnnualCapacityFactor': 'regions',
+                               'MaxAnnualCapacityFactor': 'regions',
+                               'EmissionLimit': 'regions',
+                               'MinActivityGroup': 'regions',
+                               'MaxActivityGroup': 'regions',
+                               'MinCapacityGroup': 'regions',
+                               'MaxCapacityGroup': 'regions',
+                               }
+# TODO:  Sort out the schema for tech_groups.  RN, US_9R stuff does not comply w/ schema for this table
+def db_2_dat(ifile, ofile, options: TemoaConfig):
+
+    logger.info('Converting %s database file to .dat format', ifile)
+
+    def construct_RegionalGlobalIndices(tables_in_db, f) -> None:
+        """
+        go through all tables that may include regional groups that exist within this db and:
+        select the region/regions column based on table info, union the results together,
+        write the set to the .dat file with appropriate name
+        :param tables_in_db: the tables that exist in the db
+        :param f: the output stream to write to
+        :return:
+        """
+        tables_to_parse = set(tables_in_db) & tables_with_regional_groups.keys()
+        # make the query
+        query = ' UNION '.join(('SELECT ' + tables_with_regional_groups[table] + ' FROM ' + table for table in tables_to_parse))
+        cur.execute(query)
+        count = 0
+        f.write('set RegionalGlobalIndices :=\n')
+        sorted_entries = sorted(cur)  # sorting to guarantee consistent ordering going into model
+        for row in sorted_entries:
+            f.write(row[0])
+            f.write('\n')
+            count += 1
+        f.write(';\n\n')
+        logger.debug('Located total of %d entries for RegionalGlobalIndices', count)
 
     def write_tech_mga(f):
         cur.execute("SELECT tech FROM technologies")
@@ -69,7 +113,6 @@ def db_2_dat(ifile, ofile, options):
             for line in cur:
                 str_row = str(line[0]) + "\n"
                 f.write(str_row)
-                print(str_row)
         else:
             for line in cur:
                 before_comments = line[:t_index + 1]
@@ -84,7 +127,6 @@ def db_2_dat(ifile, ofile, options):
                 else:
                     str_row = before_comments + "\n"
                 f.write(str_row)
-                print(str_row)
         f.write(';\n\n')
 
     #[set or param, table_name, DAT fieldname, flag (if any), index (where to insert '#')
@@ -180,13 +222,18 @@ def db_2_dat(ifile, ofile, options):
         for table in table_list:
             if table[1] in table_exist:
                 query_table(table, f)
-        if options.mga_weight == 'integer':
-            write_tech_mga(f)
-        if options.mga_weight == 'normalized':
-            write_tech_sector(f)
+        if options.scenario_mode == TemoaMode.MGA:
+            raise NotImplementedError('mga stuff to do...')
+            # if options.mga_weight == 'integer':
+            #     write_tech_mga(f)
+            # if options.mga_weight == 'normalized':
+            #     write_tech_sector(f)
+
+        # construct the RegionalGlobalIndices Set
+        construct_RegionalGlobalIndices(tables_in_db=table_exist, f=f)
 
         # Making sure the database is empty from the begining for a myopic solve
-        if options.myopic:
+        if options.scenario_mode == TemoaMode.MYOPIC:
             cur.execute(
                 "DELETE FROM Output_CapacityByPeriodAndTech WHERE scenario=" + "'" + str(options.scenario) + "'")
             cur.execute("DELETE FROM Output_Emissions WHERE scenario=" + "'" + str(options.scenario) + "'")
@@ -204,3 +251,5 @@ def db_2_dat(ifile, ofile, options):
 
         cur.close()
         con.close()
+
+    logger.debug('Finished creation of .dat file')
