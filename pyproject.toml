@@ -1,0 +1,10 @@
+[tool.ruff]
+
+line-length = 100
+indent-width = 4
+
+[tool.ruff.format]
+# Single quote strings
+quote-style = "single"
+
+

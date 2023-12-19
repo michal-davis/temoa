@@ -28,6 +28,9 @@ logger = getLogger(__name__)
 
 
 class TemoaConfig:
+    """
+    The overall configuration for a Temoa Scenario
+    """
 
     def __init__(self,
                  scenario: str,

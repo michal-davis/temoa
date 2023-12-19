@@ -1,5 +1,29 @@
 """
 A series of tests focused on the model entity.
+
+Written by:  J. F. Hyink
+jeff@westernspark.us
+https://westernspark.us
+Created on:  12/6/23
+
+Tools for Energy Model Optimization and Analysis (Temoa):
+An open source framework for energy systems optimization modeling
+
+Copyright (C) 2015,  NC State University
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+A complete copy of the GNU General Public License v2 (GPLv2) is available
+in LICENSE.txt.  Users uncompressing this from an archive may not have
+received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 import pathlib
 import pickle
@@ -11,10 +35,6 @@ from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_sequencer import TemoaSequencer
 
 
-# Written by:  J. F. Hyink
-# jeff@westernspark.us
-# https://westernspark.us
-# Created on:  12/6/23
 @pytest.mark.skip('not yet clear if this is needed/required ATT, researching mpi4py options...')
 def test_pickle():
     """
@@ -25,10 +45,12 @@ def test_pickle():
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', config_file)
     output_path = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_outputs')
     options = {'silent': True, 'debug': True}
-    ts = TemoaSequencer(config_file=config_file,
-                        output_path=output_path,
-                        mode_override=TemoaMode.BUILD_ONLY,
-                        **options)
+    ts = TemoaSequencer(
+        config_file=config_file,
+        output_path=output_path,
+        mode_override=TemoaMode.BUILD_ONLY,
+        **options,
+    )
 
     built_instance = ts.start()
 
