@@ -36,14 +36,14 @@ def test_parse_args(tmp_path, capsys):
 
     # missing config
     with pytest.raises(AttributeError) as e:
-        main.parse_args(''.split())
+        main.parse_args(f'--output_path {tmp_path}'.split())
 
     # bad file
     with pytest.raises(FileNotFoundError) as e:
-        main.parse_args('--config sasquatch_bait.toml'.split())
+        main.parse_args(f'--config sasquatch_bait.toml --output_path {tmp_path}'.split())
 
     # good file
-    main.parse_args(f'--config {config_file}'.split())
+    main.parse_args(f'--config {config_file} --output_path {tmp_path}'.split())
 
     # good output path
     options = main.parse_args(f'--config {config_file} --output_path {tmp_path}'.split())
@@ -54,5 +54,5 @@ def test_parse_args(tmp_path, capsys):
         main.parse_args(f'--config {config_file} --output_path big_bird'.split())
 
     # options setting
-    options = main.parse_args(f'--config {config_file} -s -d -b'.split())
+    options = main.parse_args(f'--config {config_file} --output_path {tmp_path} -s -d -b'.split())
     assert all((options.silent, options.debug, options.build_only))
