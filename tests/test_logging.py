@@ -1,7 +1,8 @@
 """
-# this is a placeholder that shows that something (IamDataFrame) inside of
+this is a placeholder that shows that something (IamDataFrame) inside of
 make_excel is causing a logging issue where stuff isn't making it to log due to some
 kooky failure with that module in pyam
+
 """
 
 import logging
@@ -19,7 +20,6 @@ me = make_excel
 
 
 def test_log_entry(caplog):
-    # will not show up in logfile...  :(
+    # will NOT show up in logfile...  :(
     logger.warning('Effective Logging!')
     assert 'Effective Logging!' in caplog.messages
-
