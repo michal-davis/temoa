@@ -44,7 +44,7 @@ solver_name = "cbc"
 # ------------------------------------
 
 # generate an Excel file in the output_files folder
-save_excel = false
+save_excel = true
 
 # save the duals in the output .sqlite database
 save_duals = false
