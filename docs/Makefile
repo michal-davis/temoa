@@ -5,7 +5,9 @@
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 PAPER         =
-BUILDDIR      = /tmp/TemoaDocumentationBuild
+BUILDDIR      = build
+# The below doesn't seem to work properly....  changed to 'build' directory (above) within the docs folder
+# BUILDDIR      = /tmp/TemoaDocumentationBuild
 
 # Internal variables.
 PAPEROPT_a4     = -D latex_paper_size=a4
