@@ -27,7 +27,7 @@ copyright = '2020, NC State University'
 author = 'Joe DeCarolis, Kevin Hunter'
 
 # The short X.Y version
-version = ''
+version = '3.0'
 # The full version, including alpha/beta/rc tags
 release = time.strftime( "%F", time.gmtime() )
 
