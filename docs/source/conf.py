@@ -3,10 +3,21 @@
 import sys, os
 import time
 
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute
-sys.path.insert(0, os.path.abspath('../../temoa_model/'))
+
+# TODO:  There's gotta be a better way to do this.  Seems quite fragile.
+
+# this first import is to provide path the temoa package, which is referenced thoughout
+# and must be included separately from path the source files so that it is properly recognized
+sys.path.insert(0, os.path.abspath('../../'))
+# this addition provided direct abbreviated link to the modules in the model
+sys.path.insert(1, os.path.abspath('../../temoa/temoa_model'))
+
+
+
 
 
 # -- Project information -----------------------------------------------------
@@ -60,7 +71,7 @@ master_doc = 'index'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.

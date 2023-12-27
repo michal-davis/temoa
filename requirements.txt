@@ -31,8 +31,10 @@ pyam-iamc  # <-- different name on PyPi
 # Below required to update documentation
 sphinx
 # sphisphinx_rtd_theme <-- not available on PyPi
+sphinx-rtd-theme
 sphinxcontrib-htmlhelp
 sphinxcontrib-serializinghtml
+sphinxcontrib-bibtex
 # nxcontrib-bibtex <-- not available on pypi
 # cbc <-- solver should be installed separately, not available on PyPi
 
