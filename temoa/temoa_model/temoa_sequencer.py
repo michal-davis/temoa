@@ -142,6 +142,13 @@ class TemoaSequencer:
                                                                           self.config.solver_name,
                                                                           self.config.save_lp_file,
                                                                           silent=self.config.silent)
+                # TODO:  put optimality checker in here somewhere to prevent processing invalid results
                 handle_results(self.pf_solved_instance, self.pf_results, self.config)
+
+                # self.pf_solved_instance.StorageEnergyUpperBoundConstraint.pprint()
+                # self.pf_solved_instance.StorageEnergyUpperBoundConstraint.display()
+                # self.pf_solved_instance.V_Capacity.display()
+                # self.pf_solved_instance.V_StorageLevel.display()
+                # self.pf_solved_instance.TotalCost.display()
             case _:
                 raise NotImplementedError('not yet built')

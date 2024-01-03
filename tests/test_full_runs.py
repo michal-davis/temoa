@@ -39,36 +39,12 @@ from definitions import PROJECT_ROOT
 from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 from tests.legacy_test_values import TestVals, test_vals
 
-
 logger = logging.getLogger(__name__)
 # list of test scenarios for which we have captured results in legacy_test_values.py
 legacy_config_files = [
     {'name': 'utopia', 'filename': 'config_utopia.toml'},
     {'name': 'test_system', 'filename': 'config_test_system.toml'},
 ]
-
-
-@pytest.fixture()
-def system_test_run(request, tmp_path):
-    """
-    spin up the model, solve it, and hand over the model and result for inspection
-    """
-    data_name = request.param['name']
-    logger.info('Setting up and solving: %s', data_name)
-    filename = request.param['filename']
-    options = {'silent': True, 'debug': True}
-    config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)
-
-    sequencer = TemoaSequencer(
-        config_file=config_file,
-        output_path=tmp_path,
-        mode_override=TemoaMode.PERFECT_FORESIGHT,
-        **options,
-    )
-    sequencer.start()
-    res = sequencer.pf_results
-    mdl = sequencer.pf_solved_instance
-    return data_name, res, mdl
 
 
 @pytest.mark.parametrize(
@@ -95,12 +71,12 @@ def test_against_legacy_outputs(system_test_run):
     efficiency_param: pyo.Param = mdl.Efficiency
     # check the set membership
     assert (
-        len(tuple(efficiency_param.sparse_iterkeys())) == expected_vals[TestVals.EFF_INDEX_SIZE]
+            len(tuple(efficiency_param.sparse_iterkeys())) == expected_vals[TestVals.EFF_INDEX_SIZE]
     ), 'should match legacy numbers'
 
     # check the size of the domain.  NOTE:  The build of the domain here may be "expensive" for large models
     assert (
-        len((efficiency_param.index_set().domain)) == expected_vals[TestVals.EFF_DOMAIN_SIZE]
+            len((efficiency_param.index_set().domain)) == expected_vals[TestVals.EFF_DOMAIN_SIZE]
     ), 'should match legacy numbers'
 
     # inspect the total variable and constraint counts
@@ -153,6 +129,5 @@ def test_myopic_utopia():
     # assert abs(diesel_emissions_by_year[2000] - 2.4549) < eps
     # assert abs(diesel_emissions_by_year[2010] - 5.4539) < eps
     # os.remove(output_db)
-
 
 # TODO:  add additional tests for myopic that have retirement eligible things in them
