@@ -133,8 +133,9 @@ class TemoaModel(AbstractModel):
         M.tech_variable = Set(
             within=M.tech_all)
         # Define techs for which economic retirement is an option
-        M.tech_retirement = Set(
-            within=M.tech_all)
+        # Note:  Storage techs cannot (currently) be retired due to linkage to initialization
+        #        process, which is currently incapable of reducing initializations on retirements.
+        M.tech_retirement = Set(within=M.tech_all - M.tech_storage)
 
         # Define commodity-related sets
         M.commodity_demand = Set()
@@ -199,7 +200,8 @@ class TemoaModel(AbstractModel):
         M.ExistingCapacity = Param(M.RegionalIndices, M.tech_all, M.vintage_exist)
 
         M.Efficiency = Param(
-            M.RegionalIndices, M.commodity_physical, M.tech_all, M.vintage_all, M.commodity_carrier
+            M.RegionalIndices, M.commodity_physical, M.tech_all, M.vintage_all, M.commodity_carrier,
+            within=NonNegativeReals
         )
         M.validate_UsedEfficiencyIndices = BuildAction(rule=CheckEfficiencyIndices)
 

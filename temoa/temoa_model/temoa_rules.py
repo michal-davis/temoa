@@ -46,7 +46,7 @@ def AdjustedCapacity_Constraint(M: 'TemoaModel', r, p, t, v):
     This constraint updates the capacity of a process by taking into account retirements.
     For a given :code:`(r,p,t,v)` index, this constraint sets the capacity equal to
     the amount installed in period :code:`v` and subtracts from it any and all retirements
-    that occured up until the period in question, :code:`p`."""
+    that occurred up until the period in question, :code:`p`."""
     if t not in M.tech_retirement:
         if v in M.time_exist:
             return M.V_Capacity[r, p, t, v] == M.ExistingCapacity[r, t, v]
@@ -1225,17 +1225,17 @@ capacity could lead to more expensive solutions.
 """
     # TODO:  This is invalid with the "for p..." construct
     s = M.time_season.first()
+    vintage_period = v  # the only capacity of concern here is for the vintage year for initialization
+    # devnote:  storage techs are currently excluded from the tech_retirements, so no change in
+    #           capacity should ever occur
     energy_capacity = (
-        M.V_Capacity[r, p, t, v]
+        M.V_Capacity[r, vintage_period, t, v]
         * M.CapacityToActivity[r, t]
         * (M.StorageDuration[r, t] / 8760)
         * sum(M.SegFrac[s, S_d] for S_d in M.time_of_day)
         * 365
         * value(M.ProcessLifeFrac[r, v, t, v])
-        for p in M.time_optimize
-        if p >= v
     )
-
     expr = M.V_StorageInit[r, t, v] == energy_capacity * M.StorageInitFrac[r, t, v]
 
     return expr
