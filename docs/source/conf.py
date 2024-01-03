@@ -10,7 +10,7 @@ import time
 
 # TODO:  There's gotta be a better way to do this.  Seems quite fragile.
 
-# this first import is to provide path the temoa package, which is referenced thoughout
+# this first import is to provide path the temoa package, which is referenced throughout
 # and must be included separately from path the source files so that it is properly recognized
 sys.path.insert(0, os.path.abspath('../../'))
 # this addition provided direct abbreviated link to the modules in the model
