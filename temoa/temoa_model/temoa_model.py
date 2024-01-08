@@ -222,16 +222,10 @@ class TemoaModel(AbstractModel):
         M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
 
         M.LifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeProcessIndices)
-        M.LifetimeProcess = Param(M.LifetimeProcess_rtv)
-        # devnote:  The param below is derived from LifetimeProcess and LifetimeTech by the
-        # initializer The name is unfortunate, as it would be better to change the others,
-        # but they are locked to the database schema.  It is all needed to make the param
-        # IMMUTABLE to support the LinkedEmissionsTech_Constraint.  Possible future change to
-        # schema or do the lifetime verification in data/db with query before build and get rid
-        # of LifetimeTech altogether.
-        M.LifetimeProcess_final = Param(M.LifetimeProcess_rtv,
-                                        initialize=initialize_process_lifetimes)
-        M.clear_helper_params = BuildAction(rule=clear_unused_params)
+        M.LifetimeProcess_z = Param(M.LifetimeProcess_rtv)
+
+        M.LifetimeProcess = Param(M.LifetimeProcess_rtv,
+                                  default=get_default_process_lifetime)
 
         M.LifetimeLoanProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
         M.LifetimeLoanProcess = Param(M.LifetimeLoanProcess_rtv, mutable=True)

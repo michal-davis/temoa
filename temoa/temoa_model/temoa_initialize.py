@@ -301,7 +301,7 @@ def CreateLifetimes(M: 'TemoaModel'):
     # LLN._constructed = True
 
 
-def initialize_process_lifetimes(M: 'TemoaModel', r, t, v):
+def get_default_process_lifetime(M: 'TemoaModel', r, t, v):
     """
     This initializer is split off and derived from the CreateLifetimes above in order
     to initialize the final value for LifetimeProcess_final
@@ -316,22 +316,7 @@ def initialize_process_lifetimes(M: 'TemoaModel', r, t, v):
     :param v: vintage
     :return: the final lifetime value
     """
-    if (r, t, v) in M.LifetimeProcess:
-        return M.LifetimeProcess[r, t, v]
     return M.LifetimeTech[r, t]
-
-
-def clear_unused_params(M: 'TemoaModel'):
-    """
-    Intent is to clear the LifetimeTech and LifetimeProcess params that were used above to fill
-    LifetimeProcess_final.  These "helper" params should not be used anywhere else, and this is a
-    failsafe.
-    :param M:
-    :return: None
-    """
-    M.LifetimeTech.clear()
-    M.LifetimeProcess.clear()
-
 
 def CreateDemands(M: 'TemoaModel'):
     """
@@ -559,7 +544,7 @@ def CreateSparseDicts(M: 'TemoaModel'):
             logger.error(msg)
             raise ValueError(msg)
         l_process = (r, t, v)
-        l_lifetime = value(M.LifetimeProcess_final[l_process])
+        l_lifetime = value(M.LifetimeProcess[l_process])
         # Do some error checking for the user.
         if v in M.vintage_exist:
             if l_process not in l_exist_indices:

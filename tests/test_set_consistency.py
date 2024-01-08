@@ -91,6 +91,7 @@ def test_set_consistency(data_name, config_file, set_file, tmp_path):
         for k, v in overage_in_model.items():
             if len(v) > 0:
                 print(k, v)
+
     assert (
         not shortage_in_model and not overage_in_model
     ), f'The {data_name} run-produced sets did not match cached values'

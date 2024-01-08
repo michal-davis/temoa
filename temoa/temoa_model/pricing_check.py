@@ -203,7 +203,7 @@ def price_checker(M: 'TemoaModel'):
             continue
 
         # get the lifetime of the tech, or default
-        lifetime = M.LifetimeProcess_final[region, tech, vintage]
+        lifetime = M.LifetimeProcess[region, tech, vintage]
         # get all applicable future periods that should be priced for this item
         expected_periods = {p for p in M.time_optimize if vintage <= p < vintage + lifetime}
         missing_fixed_costs = (
