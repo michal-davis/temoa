@@ -871,23 +871,6 @@ def EmissionActivityIndices(M: 'TemoaModel'):
 
     return indices
 
-
-def EnergyConsumptionByPeriodInputAndTechVariableIndices(M: 'TemoaModel'):
-    indices = set((p, i, t)
-
-                  for i, t, v, o in M.Efficiency.sparse_iterkeys() for p in M.time_optimize)
-
-    return indices
-
-
-def ActivityByPeriodTechAndOutputVariableIndices(M: 'TemoaModel'):
-    indices = set((p, t, o)
-
-                  for i, t, v, o in M.Efficiency.sparse_iterkeys() for p in M.time_optimize)
-
-    return indices
-
-
 def EmissionActivityByPeriodAndTechVariableIndices(M: 'TemoaModel'):
     indices = set((e, p, t)
 
@@ -940,6 +923,8 @@ CostInvest parameter.
 # ---------------------------------------------------------------
 
 def CapacityVariableIndices(M: 'TemoaModel'):
+    # TODO:  verify that this is all possible (r, t, v) combos and maybe relabel this for general use
+    #        such as verifying the lifetime and capacity params
     return M.activeCapacity_rtv
 
 
