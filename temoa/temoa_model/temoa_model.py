@@ -246,25 +246,14 @@ class TemoaModel(AbstractModel):
 
         # Define technology cost parameters
         M.CostFixed_rptv = Set(dimen=4, initialize=CostFixedIndices)
-        M.CostFixed = Param(M.CostFixed_rptv, mutable=True)
-
-        M.CostFixedVintageDefault_rtv = Set(
-            dimen=3, initialize=lambda M: set((r, t, v) for r, p, t, v in M.CostFixed_rptv)
-        )
-        M.CostFixedVintageDefault = Param(M.CostFixedVintageDefault_rtv)
+        M.CostFixed = Param(M.CostFixed_rptv)
 
         M.CostInvest_rtv = Set(dimen=3, initialize=CostInvestIndices)
         M.CostInvest = Param(M.CostInvest_rtv)
 
         M.CostVariable_rptv = Set(dimen=4, initialize=CostVariableIndices)
-        M.CostVariable = Param(M.CostVariable_rptv, mutable=True)
+        M.CostVariable = Param(M.CostVariable_rptv)
 
-        M.CostVariableVintageDefault_rtv = Set(
-            dimen=3, initialize=lambda M: set((r, t, v) for r, p, t, v in M.CostVariable_rptv)
-        )
-        M.CostVariableVintageDefault = Param(M.CostVariableVintageDefault_rtv)
-
-        M.initialize_Costs = BuildAction(rule=CreateCosts)
         M.validate_pricing = BuildAction(rule=price_checker)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
