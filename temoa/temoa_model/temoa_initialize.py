@@ -303,11 +303,10 @@ def CreateLifetimes(M: 'TemoaModel'):
 
 def get_default_process_lifetime(M: 'TemoaModel', r, t, v):
     """
-    This initializer is split off and derived from the CreateLifetimes above in order
-    to initialize the final value for LifetimeProcess_final
+    This initializer used to initialize the LifetimeProcess parameter from LifetimeTech where needed
 
     Priority:
-        1.  Specified in LifetimeProcess data
+        1.  Specified in LifetimeProcess data (provided as a fill and would not call this function)
         2.  Specified in LifetimeTech data
         3.  The default value from the LifetimeTech param (automatic)
     :param M: generic model reference (not used)
@@ -317,6 +316,24 @@ def get_default_process_lifetime(M: 'TemoaModel', r, t, v):
     :return: the final lifetime value
     """
     return M.LifetimeTech[r, t]
+
+def get_default_capacity_factor(M: 'TemoaModel', r, s, d, t, v):
+    """
+    This initializer is used to fill the CapacityFactorProcess from the CapacityFactorTech where needed.
+
+    Priority:
+        1.  As specified in data input (this function not called)
+        2.  Here
+        3.  The default from CapacityFactorTech param
+    :param M: generic model reference
+    :param r: region
+    :param s: season
+    :param d: time-of-day slice
+    :param t: tech
+    :param v: vintage
+    :return: the capacity factor
+    """
+    return M.CapacityFactorTech[r,s,d,t]
 
 def CreateDemands(M: 'TemoaModel'):
     """
