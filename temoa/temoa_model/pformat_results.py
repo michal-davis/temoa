@@ -296,9 +296,9 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             if abs(icost) < epsilon: continue
             icost *= value(m.CostInvest[r, t, v]) * (
                     (
-                            1 - x ** (-min(value(m.LifetimeProcess_final[r, t, v]), P_e - v))
+                            1 - x ** (-min(value(m.LifetimeProcess[r, t, v]), P_e - v))
                     ) / (
-                            1 - x ** (-value(m.LifetimeProcess_final[r, t, v]))
+                            1 - x ** (-value(m.LifetimeProcess[r, t, v]))
                     )
             )
             svars['Costs']['V_UndiscountedInvestmentByProcess', r, t, v] += icost
@@ -373,7 +373,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir1 = value(sum(m.V_FlowOut[reg_dir1, p, s, d, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for s in m.time_season
                                      for d in m.time_of_day
@@ -384,7 +384,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir2 = value(sum(m.V_FlowOut[reg_dir2, p, s, d, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for s in m.time_season
                                      for d in m.time_of_day
@@ -396,7 +396,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir1 = value(sum(m.V_FlowOutAnnual[reg_dir1, p, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for S_i in m.processInputs[reg_dir1, p, tech, vintage]
                                      for S_o in
@@ -405,7 +405,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir2 = value(sum(m.V_FlowOutAnnual[reg_dir2, p, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for S_i in m.processInputs[reg_dir2, p, tech, vintage]
                                      for S_o in

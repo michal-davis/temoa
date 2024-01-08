@@ -50,8 +50,8 @@ def validate_linked_tech(M: 'TemoaModel') -> bool:
 
     # get the lifetimes by (r, t) and v for comparison
     lifetimes: dict[tuple, dict] = defaultdict(dict)
-    for r, t, v in M.LifetimeProcess_final:
-        lifetimes[r, t][v] = M.LifetimeProcess_final[r, t, v]
+    for r, t, v in M.LifetimeProcess:
+        lifetimes[r, t][v] = M.LifetimeProcess[r, t, v]
     # compare the dictionary of v: lifetime for each pair
     success = all(
         (lifetimes[r, t] == lifetimes[r, linked_tech] for (r, t, linked_tech) in tech_pairs)

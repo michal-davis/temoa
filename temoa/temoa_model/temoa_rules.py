@@ -377,8 +377,8 @@ def PeriodCost_rule(M: 'TemoaModel', p):
             )
         )
         * (
-            (1 - x ** (-min(value(M.LifetimeProcess_final[r, S_t, S_v]), P_e - S_v)))
-            / (1 - x ** (-value(M.LifetimeProcess_final[r, S_t, S_v])))
+            (1 - x ** (-min(value(M.LifetimeProcess[r, S_t, S_v]), P_e - S_v)))
+            / (1 - x ** (-value(M.LifetimeProcess[r, S_t, S_v])))
         )
         for r, S_t, S_v in M.CostInvest.sparse_iterkeys()
         if S_v == p
@@ -2790,7 +2790,7 @@ def RenewablePortfolioStandard_Constraint(M: 'TemoaModel', r, p):
 # Define rule-based parameters
 # ---------------------------------------------------------------
 def ParamModelProcessLife_rule(M: 'TemoaModel', r, p, t, v):
-    life_length = value(M.LifetimeProcess_final[r, t, v])
+    life_length = value(M.LifetimeProcess[r, t, v])
     tpl = min(v + life_length - p, value(M.PeriodLength[p]))
 
     return tpl
@@ -2820,7 +2820,7 @@ that will cease operation (rust out, be decommissioned, etc.) between periods,
 calculate the fraction of the period that the technology is able to
 create useful output.
 """
-    eol_year = v + value(M.LifetimeProcess_final[r, t, v])
+    eol_year = v + value(M.LifetimeProcess[r, t, v])
     frac = eol_year - p
     period_length = value(M.PeriodLength[p])
     if frac >= period_length:

@@ -37,7 +37,7 @@ import pyomo.opt
 import pytest
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.katie_temoa_initialize import TemoaModel
+from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_sequencer import TemoaSequencer
 
