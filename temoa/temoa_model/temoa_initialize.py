@@ -454,7 +454,7 @@ def CreateDemands(M: 'TemoaModel'):
             raise ValueError(msg.format(dem, items, total))
     logger.debug('Finished creating demand distributions')
 
-
+@deprecated(reason='vintage defaults are no longer available, so this should not be needed')
 def CreateCosts(M: 'TemoaModel'):
     """
     Steps to creating fixed and variable costs:
