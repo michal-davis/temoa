@@ -26,12 +26,12 @@ from pyomo.core import BuildCheck
 from pyomo.environ import (Any, NonNegativeReals, AbstractModel, BuildAction, Param, Set, Var,
                            Objective, minimize)
 
-from temoa.temoa_model import validators
+
 from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.validators import (validate_linked_tech, region_check,
-                                          validate_CapacityFactorProcess)
+                                          validate_CapacityFactorProcess, region_group_check)
 
 
 class TemoaModel(AbstractModel):
@@ -89,7 +89,7 @@ class TemoaModel(AbstractModel):
         # Define time periods
         M.time_exist = Set(ordered=True)
         M.time_future = Set(ordered=True)
-        M.time_optimize = Set(ordered=True, initialize=init_set_time_optimize)
+        M.time_optimize = Set(ordered=True, initialize=init_set_time_optimize, within=M.time_future)
         # Define time period vintages to track capacity installation
         M.vintage_exist = Set(ordered=True, initialize=init_set_vintage_exist)
         M.vintage_optimize = Set(ordered=True, initialize=init_set_vintage_optimize)
@@ -103,10 +103,10 @@ class TemoaModel(AbstractModel):
 
         # Define regions
         M.regions = Set(validate=region_check)
-        # RegionalIndices is the set of all the possible combinations of interregional exhanges
+        # RegionalIndices is the set of all the possible combinations of interregional exchanges
         # plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
         M.RegionalIndices = Set(initialize=CreateRegionalIndices)
-        M.RegionalGlobalIndices = Set(validate=validators.region_group_check)
+        M.RegionalGlobalIndices = Set(validate=region_group_check)
 
         # Define technology-related sets
         M.tech_resource = Set()
@@ -192,6 +192,7 @@ class TemoaModel(AbstractModel):
         M.Demand = Param(M.regions, M.time_optimize, M.commodity_demand)
         M.initialize_Demands = BuildAction(rule=CreateDemands)
 
+        # TODO:  Revive this with the DB schema and refactor the associated constraint
         M.ResourceBound = Param(M.regions, M.time_optimize, M.commodity_physical)
 
         # Define technology performance parameters
@@ -209,23 +210,21 @@ class TemoaModel(AbstractModel):
         M.CapacityFactorTech = Param(M.CapacityFactor_rsdt, default=1)
 
         # Devnote:  using a default function below alleviates need to make this set.
-        # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
+        M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
         M.CapacityFactorProcess = Param(M.regions, M.time_season,
                                         M.time_of_day, M.tech_all, M.vintage_all,
                                         validate=validate_CapacityFactorProcess,
                                         default=get_default_capacity_factor)
 
-
         # M.initialize_CapacityFactors = BuildAction(rule=CreateCapacityFactors)
 
         M.LifetimeTech = Param(M.RegionalIndices, M.tech_all, default=40)
-        M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
 
         M.LifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeProcessIndices)
-
         M.LifetimeProcess = Param(M.LifetimeProcess_rtv,
                                   default=get_default_process_lifetime)
 
+        M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
         M.LifetimeLoanProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
         M.LifetimeLoanProcess = Param(M.LifetimeLoanProcess_rtv, mutable=True)
         M.initialize_Lifetimes = BuildAction(rule=CreateLifetimes)
