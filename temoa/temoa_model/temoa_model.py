@@ -26,7 +26,6 @@ from pyomo.core import BuildCheck
 from pyomo.environ import (Any, NonNegativeReals, AbstractModel, BuildAction, Param, Set, Var,
                            Objective, minimize)
 
-
 from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
@@ -210,7 +209,7 @@ class TemoaModel(AbstractModel):
         M.CapacityFactorTech = Param(M.CapacityFactor_rsdt, default=1)
 
         # Devnote:  using a default function below alleviates need to make this set.
-        M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
+        # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
         M.CapacityFactorProcess = Param(M.regions, M.time_season,
                                         M.time_of_day, M.tech_all, M.vintage_all,
                                         validate=validate_CapacityFactorProcess,
