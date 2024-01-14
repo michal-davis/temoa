@@ -35,7 +35,8 @@ from pathlib import Path
 import pyomo.opt
 
 from temoa.temoa_model.dat_file_maker import db_2_dat
-from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results
+from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
+    check_solve_status
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -143,7 +144,13 @@ class TemoaSequencer:
                                                                           self.config.solver_name,
                                                                           self.config.save_lp_file,
                                                                           silent=self.config.silent)
-                # TODO:  put optimality checker in here somewhere to prevent processing invalid results
+                good_solve, msg = check_solve_status(self.pf_results)
+                if not good_solve:
+                    logger.error('The solve result is reported as %s.  Aborting', msg)
+                    logger.error('This may be the result of the output messaging of the chosen solver'
+                                 'If this is deemed an acceptable status, adjustment may be needed to the '
+                                 'function check_solve_status in run_actions.py')
+                    sys.exit(-1)
                 handle_results(self.pf_solved_instance, self.pf_results, self.config)
 
                 # self.pf_solved_instance.StorageEnergyUpperBoundConstraint.pprint()

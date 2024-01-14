@@ -28,25 +28,21 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 
 __all__ = ('pformat_results', 'stringify_data')
 
-from collections import defaultdict
-from sys import stderr as SE, stdout as SO
-from shutil import rmtree
-import sqlite3
 import os
 import re
-import subprocess
-import sys
-import pandas as pd
-
+import sqlite3
+from collections import defaultdict
+from io import StringIO
 from logging import getLogger
+from shutil import rmtree
+from sys import stderr as SE, stdout as SO
 
+import pandas as pd
+from pyomo.core import Objective
 from pyomo.environ import value
 
 from temoa.data_processing.DB_to_Excel import make_excel
 from temoa.temoa_model.temoa_config import TemoaConfig
-
-from io import StringIO
-
 from temoa.temoa_model.temoa_mode import TemoaMode
 
 logger = getLogger(__name__)
@@ -71,98 +67,44 @@ def stringify_data(data, ostream=SO, format='plain'):
         ostream.write(fmt.format(*row))
 
 
-def pformat_results(pyomo_instance, pyomo_result, options):
-    logger.info('Starting results processing')
+def collect_result_data(cgroup, clist, epsilon):
+    # cgroup = "Component group"; i.e., Vars or Cons
+    # clist = "Component list"; i.e., where to store the data
+    # epsilon = absolute value below which to ignore a result
+    results = defaultdict(list)
+    for name, data in cgroup.items():
+        if 'Value' not in data.keys() or (abs(data['Value']) < epsilon): continue
 
-    from pyomo.core import Objective, Var, Constraint
+        # name looks like "Something[some,index]"
+        group, index = name[:-1].split('[')
+        results[group].append((name.replace("'", ''), data['Value']))
+    clist.extend(t for i in sorted(results) for t in sorted(results[i]))
 
-    output = StringIO()
+    supp_outputs_df = pd.DataFrame.from_dict(cgroup, orient='index')
+    supp_outputs_df = supp_outputs_df.loc[(supp_outputs_df != 0).any(axis=1)]
+    if 'Dual' in supp_outputs_df.columns:
+        duals = supp_outputs_df['Dual'].copy()
+        duals = duals[abs(duals) > 1e-5]
+        duals.index.name = 'constraint_name'
+        duals = duals.to_frame()
+        if (hasattr(options, 'scenario')) & (len(duals) > 0):
+            duals.loc[:, 'scenario'] = options.scenario
+            return duals
+        else:
+            return []
 
-    m = pyomo_instance  # lazy typist
-    result = pyomo_result
 
-    soln = result['Solution']
-    solv = result['Solver']  # currently unused, but may want it later
-    prob = result['Problem']  # currently unused, but may want it later
-
-    optimal_solutions = (
-        'feasible', 'globallyOptimal', 'locallyOptimal', 'optimal'
-    )
-    if str(soln.Status) not in optimal_solutions:
-        output.write('No solution found.')
-        # TODO:  We should stop the train here, log something and kill the program
-        return output
-
-    objs = list(m.component_data_objects(Objective))
-    if len(objs) > 1:
-        msg = '\nWarning: More than one objective.  Using first objective.\n'
-        SE.write(msg)
-
-    Cons = soln.Constraint
-
-    def collect_result_data(cgroup, clist, epsilon):
-        # cgroup = "Component group"; i.e., Vars or Cons
-        # clist = "Component list"; i.e., where to store the data
-        # epsilon = absolute value below which to ignore a result
-        results = defaultdict(list)
-        for name, data in cgroup.items():
-            if 'Value' not in data.keys() or (abs(data['Value']) < epsilon): continue
-
-            # name looks like "Something[some,index]"
-            group, index = name[:-1].split('[')
-            results[group].append((name.replace("'", ''), data['Value']))
-        clist.extend(t for i in sorted(results) for t in sorted(results[i]))
-
-        supp_outputs_df = pd.DataFrame.from_dict(cgroup, orient='index')
-        supp_outputs_df = supp_outputs_df.loc[(supp_outputs_df != 0).any(axis=1)]
-        if 'Dual' in supp_outputs_df.columns:
-            duals = supp_outputs_df['Dual'].copy()
-            duals = duals[abs(duals) > 1e-5]
-            duals.index.name = 'constraint_name'
-            duals = duals.to_frame()
-            if (hasattr(options, 'scenario')) & (len(duals) > 0):
-                duals.loc[:, 'scenario'] = options.scenario
-                return duals
-            else:
-                return []
-
+def gather_variable_data(m: 'TemoaModel', epsilon: float, capacity_epsilon: float) -> dict[
+    str, dict[tuple[str, ...], float]]:
+    """
+    Gather the variable values from the necessary model items into a dictionary
+    :param m: the solved instance
+    :param epsilon: an epsilon value for non-capacity variables to distinguish from zero
+    :param capacity_epsilon: an epsilon value for capacity variables
+    :return:
+    """
     # Create a dictionary in which to store "solved" variable values
     svars = defaultdict(lambda: defaultdict(float))
-
-    con_info = list()
-    epsilon = 1e-5  # threshold for "so small it's zero"
-    # we want a stricter threshold for printing out capacity values.
-    # This is primarily for numerical reasons. In myopic runs, optimal capacities
-    # are fed forward into the subsequent myopic solve as existing capacities. If
-    # those capacities are very small, then certain equations/inequalities can have
-    # very small or very large numbers. This results in a poorly conditioned problem
-    # and can lead to numeric instabilities.
-    capacity_epsilon = 0.001
-
-    emission_keys = {(r, i, t, v, o): set() for r, e, i, t, v, o in m.EmissionActivity}
-    for r, e, i, t, v, o in m.EmissionActivity:
-        emission_keys[(r, i, t, v, o)].add(e)
-    P_0 = min(m.time_optimize)
-    P_e = m.time_future.last()
-    GDR = value(m.GlobalDiscountRate)
-    MPL = m.ModelProcessLife
-    LLN = m.LifetimeLoanProcess
-    x = 1 + GDR  # convenience variable, nothing more
-
-    if hasattr(options, 'file_location') and os.path.join('temoa_model',
-                                                          'config_sample_myopic') in options.file_location:
-        original_dbpath = options.output_database
-        con = sqlite3.connect(original_dbpath)
-        cur = con.cursor()
-        time_periods = cur.execute("SELECT t_periods FROM time_periods WHERE flag='f'").fetchall()
-        P_0 = time_periods[0][0]
-        P_e = time_periods[-1][0]
-        # We need to know if a myopic run is the last run or not.
-        P_e_time_optimize = time_periods[-2][0]
-        P_e_current = int(options.file_location.split("_")[-1])
-        con.commit()
-        con.close()
-
     # Extract optimal decision variable values related to commodity flow:
     for r, p, s, d, t, v in m.V_StorageLevel:
         val = value(m.V_StorageLevel[r, p, s, d, t, v])
@@ -176,6 +118,12 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         if abs(val_in) < epsilon: continue
 
         svars['V_FlowIn'][r, p, s, d, i, t, v, o] = val_in
+
+    # we need to pre-identify the keys for emissions to pluck them out in the course of
+    # inspecting the flows below...
+    emission_keys = {(r, i, t, v, o): set() for r, e, i, t, v, o in m.EmissionActivity}
+    for r, e, i, t, v, o in m.EmissionActivity:
+        emission_keys[(r, i, t, v, o)].add(e)
 
     for r, p, s, d, i, t, v, o in m.V_FlowOut:
         val_out = value(m.V_FlowOut[r, p, s, d, i, t, v, o])
@@ -282,7 +230,64 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         if abs(val) < epsilon: continue
         svars['V_CapacityAvailableByPeriodAndTech'][r, p, t] = val
 
+    return svars
+
+
+def pformat_results(pyomo_instance: 'TemoaModel', options: TemoaConfig):
+    """
+    The main function to initiate the processing of results
+    :param pyomo_instance: the solved instance
+    :param options: the TemoaConfig object
+    :return:
+    """
+    logger.info('Starting results processing')
+
+    output = StringIO()
+
+    m = pyomo_instance  # lazy typist
+
+    objs = list(m.component_data_objects(Objective))
+    if len(objs) > 1:
+        msg = '\nWarning: More than one objective.  Using first objective.\n'
+        SE.write(msg)
+
+    con_info = list()
+    epsilon = 1e-5  # threshold for "so small it's zero"
+    # we want a stricter threshold for printing out capacity values.
+    # This is primarily for numerical reasons. In myopic runs, optimal capacities
+    # are fed forward into the subsequent myopic solve as existing capacities. If
+    # those capacities are very small, then certain equations/inequalities can have
+    # very small or very large numbers. This results in a poorly conditioned problem
+    # and can lead to numeric instabilities.
+    capacity_epsilon = 0.001
+
+    svars = gather_variable_data(m, epsilon=epsilon, capacity_epsilon=capacity_epsilon)
+
+
+    P_0 = min(m.time_optimize)
+    P_e = m.time_future.last()
+    GDR = value(m.GlobalDiscountRate)
+    MPL = m.ModelProcessLife
+    LLN = m.LifetimeLoanProcess
+    x = 1 + GDR  # convenience variable, nothing more
+
+    if hasattr(options, 'file_location') and os.path.join('temoa_model',
+                                                          'config_sample_myopic') in options.file_location:
+        original_dbpath = options.output_database
+        con = sqlite3.connect(original_dbpath)
+        cur = con.cursor()
+        time_periods = cur.execute("SELECT t_periods FROM time_periods WHERE flag='f'").fetchall()
+        P_0 = time_periods[0][0]
+        P_e = time_periods[-1][0]
+        # We need to know if a myopic run is the last run or not.
+        P_e_time_optimize = time_periods[-2][0]
+        P_e_current = int(options.file_location.split("_")[-1])
+        con.commit()
+        con.close()
+
     # Calculate model costs:
+    # TODO:  The 'file_location' variable in the old config was the path to the config file, and it was used
+    #        to key some operations (as below) and also to determine the running mode (myopic or not)
     if hasattr(options, 'file_location') and os.path.join('temoa_model',
                                                           'config_sample_myopic') not in options.file_location:
         # This is a generic workaround.  Not sure how else to automatically discover
@@ -424,14 +429,14 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                                                                                         item] * act_dir2 / (
                                                                                             act_dir1 + act_dir2)
                             svars['Costs'][item] = svars['Costs'][item] * act_dir1 / (
-                                        act_dir1 + act_dir2)
+                                    act_dir1 + act_dir2)
 
         # Remove Ri-Rj entries from being populated in the Outputs_Costs. Ri-Rj means a cost
         # for region Rj
         for item in list(svars['Costs']):
             if item[2] in m.tech_exchange:
                 svars['Costs'][(item[0], item[1][item[1].find("-") + 1:], item[2], item[3])] = \
-                svars['Costs'][item]
+                    svars['Costs'][item]
                 del svars['Costs'][item]
 
     if options.save_duals:
