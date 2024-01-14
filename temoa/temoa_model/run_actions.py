@@ -178,6 +178,28 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
     return instance, result
 
 
+def check_solve_status(result: SolverResults) -> tuple[bool, str]:
+    """
+    Check the status of the solve.
+    :param result: the results object returned by the solver
+    :return: tuple of status boolean (True='optimal', others False), and string message if not optimal
+    """
+    soln = result['Solution']
+    solv = result['Solver']  # currently unused, but may want it later
+    prob = result['Problem']  # currently unused, but may want it later
+
+    # TODO:  need to consider other terms that the solver may return for acceptable solutions
+    #        these are not currently used, but were included in legacy code...
+    lesser_responses = (
+        'feasible', 'globallyOptimal', 'locallyOptimal'
+    )
+    logger.info('The solver reported status as: %s', soln.Status)
+    if soln.Status == 'optimal':
+        return True, ''
+    else:
+        return False, f'{soln.Status} was returned from solve'
+
+
 def handle_results(instance: TemoaModel, results, options: TemoaConfig):
     hack = time()
     if not options.silent:
