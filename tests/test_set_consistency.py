@@ -43,6 +43,7 @@ from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 params = [
     ('utopia', 'config_utopia.toml', 'utopia_sets.json'),
     ('test_system', 'config_test_system.toml', 'test_system_sets.json'),
+    ('mediumville', 'config_mediumville.toml', 'mediumville_sets.json')
 ]
 
 

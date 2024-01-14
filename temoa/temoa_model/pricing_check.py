@@ -130,7 +130,7 @@ def price_checker(M: 'TemoaModel'):
                     err += f'      ({r}, {v})\n'
                 err += '    available (r, v):\n'
                 for r, tt, v in compaprable_fc:
-                    err += f'       ({r}, {v}): {M.CostFixed[r, v, tt, v].value}\n'
+                    err += f'       ({r}, {v}): {M.CostFixed[r, v, tt, v]}\n'
             if err:
                 logger.warning(err)
 

@@ -483,7 +483,8 @@ def Demand_Constraint(M: 'TemoaModel', r, p, s, d, dem):
 
     DemandConstraintErrorCheck(supply + supply_annual, r, p, s, d, dem)
 
-    # TODO:  Could this become a GTE constraint?  It would make the model more elastic...?
+    # TODO:  Could this become a GTE constraint?  It would make the model more elastic...?  Probably not...
+    #        Would lead to possible blow-through of ramping constraints, for example
     expr = (
         supply + supply_annual == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
     )
@@ -1785,6 +1786,7 @@ output in separate terms.
         + actual_emissions_curtail
         + actual_emissions_flex_annual
     ):
+        # TODO:  make this a logger warning
         msg = (
             "Warning: No technology produces emission '%s', though limit was " 'specified as %s.\n'
         )
