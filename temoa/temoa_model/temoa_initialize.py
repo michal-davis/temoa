@@ -436,6 +436,7 @@ def CreateDemands(M: 'TemoaModel'):
 
             keys = [k for k in DSD.sparse_iterkeys() if
                     DSD_dem_getter(k) == dem and DSD_region_getter(k) == r]
+            # TODO:  This could be a little cleaner, the getting of the max length for spacing...
             key_padding = max(map(get_str_padding, keys))
 
             fmt = "%%-%ds = %%s" % key_padding

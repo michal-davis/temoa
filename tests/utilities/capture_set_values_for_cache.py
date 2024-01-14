@@ -35,14 +35,16 @@ from pathlib import Path
 import pyomo.environ as pyo
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
+from temoa.temoa_model.temoa_sequencer import TemoaSequencer
 
 print(
     "WARNING:  Continuing to execute this file will "
     "update the cached values in the testing_data folder"
     "from the sqlite databases in the same folder.  "
     "This should only need to be done if the schema or"
-    "model have changed and that database has been updated.")
+    "model have changed and that database has been updated."
+    "\nRunning this basically resets the expected value sets"
+    "for Utopia, TestSystem, and Mediumville")
 
 t = input('Type "Y" to continue, any other key to exit now.')
 if t not in {'y', 'Y'}:
@@ -59,7 +61,11 @@ scenarios = [
         'output_file': Path(PROJECT_ROOT, 'tests', 'testing_data', 'test_system_sets.json'),
         'config_file': Path(PROJECT_ROOT, 'tests', 'utilities',
                             'config_test_system.toml')
-    }
+    },
+{
+        'output_file': Path(PROJECT_ROOT, 'tests', 'testing_data', 'mediumville_sets.json'),
+        'config_file': Path(PROJECT_ROOT, 'tests', 'utilities', 'config_mediumville.toml')
+    },
 ]
 for scenario in scenarios:
     ts = TemoaSequencer(config_file=scenario['config_file'],

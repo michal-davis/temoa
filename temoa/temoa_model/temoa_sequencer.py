@@ -40,6 +40,7 @@ from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_run import temoa_checks
+
 logger = getLogger(__name__)
 
 
@@ -100,7 +101,7 @@ class TemoaSequencer:
         self.config.silent = self.silent
 
         # Distill the TemoaMode
-        self.temoa_mode = self.mode_override if self.mode_override else self.config.scenario_mode
+        # self.temoa_mode = self.mode_override if self.mode_override else self.config.scenario_mode
         if self.mode_override and self.mode_override != self.config.scenario_mode:
             # capture and log the override...
             self.temoa_mode = self.mode_override
@@ -150,5 +151,6 @@ class TemoaSequencer:
                 # self.pf_solved_instance.V_Capacity.display()
                 # self.pf_solved_instance.V_StorageLevel.display()
                 # self.pf_solved_instance.TotalCost.display()
+                # self.pf_solved_instance.V_Capacity.display()
             case _:
                 raise NotImplementedError('not yet built')
