@@ -208,14 +208,14 @@ def handle_results(instance: TemoaModel, results, options: TemoaConfig):
         SE.write(msg)
         SE.flush()
 
-    formatted_results = pformat_results(instance, results, options)
+    output_stream = pformat_results(instance, results, options)
 
     if not options.silent:
         SE.write('\r[%8.2f] Results processed.\n' % (time() - hack))
         SE.flush()
 
-    if formatted_results.getvalue() == 'No solution found.':
-        SE.write(formatted_results.getvalue() + '\n')
+    if options.stream_output:
+        print(output_stream.getvalue())
     # normal (non-MGA) run will have a TotalCost as the OBJ:
     if hasattr(instance, 'TotalCost'):
         logger.info("TotalCost value: %0.2f", value(instance.TotalCost))
