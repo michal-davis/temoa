@@ -43,11 +43,15 @@ solver_name = "cbc"
 # select desired output products/files
 # ------------------------------------
 
+# streaming output will stream the results in string format to the std output stream
+# This should probably only be used for "small" models
+stream_output = true
+
 # generate an Excel file in the output_files folder
 save_excel = true
 
 # save the duals in the output .sqlite database
-save_duals = false
+save_duals = true
 
 # save a copy of the pyomo-generated lp file to the outputs folder (may be large file!)
 save_lp_file = false
