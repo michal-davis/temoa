@@ -35,6 +35,7 @@ from pathlib import Path
 import pyomo.opt
 
 from temoa.temoa_model.dat_file_maker import db_2_dat
+from temoa.temoa_model.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
     check_solve_status
 from temoa.temoa_model.temoa_config import TemoaConfig
@@ -93,13 +94,12 @@ class TemoaSequencer:
         # Run the preliminaries...
         # Build a TemoaConfig
         self.config = TemoaConfig.build_config(config_file=self.config_file,
-                                               output_path=self.output_path)
+                                               output_path=self.output_path,
+                                               silent=self.silent)
 
         # TODO:  Screen this vs. what is already done at this point
         temoa_checks(self.config)
 
-        # Engage silent mode, if provided as CLA:
-        self.config.silent = self.silent
 
         # Distill the TemoaMode
         # self.temoa_mode = self.mode_override if self.mode_override else self.config.scenario_mode
@@ -115,12 +115,6 @@ class TemoaSequencer:
                          self.mode_override, self.config.scenario_mode)
             raise RuntimeError('Problem with mode selection, see log file.')
 
-        # convert the input file from .sqlite -> .dat if needed
-        if self.config.input_file.suffix == '.sqlite':
-            dat_file = self.config.input_file.with_suffix('.dat')
-            db_2_dat(self.config.input_file, dat_file, self.config)
-            # update the config to point to the .dat file newly created
-            self.config.input_file = dat_file
 
         # Get user confirmation if not silent
         if not self.silent:
@@ -136,10 +130,24 @@ class TemoaSequencer:
         # Set up the individual runs & execute
         match self.temoa_mode:
             case TemoaMode.BUILD_ONLY:
-                temoa_instance = build_instance(self.config.input_file, silent=self.config.silent)
+                # convert the input file from .sqlite -> .dat if needed
+                if self.config.input_file.suffix == '.sqlite':
+                    dat_file = self.config.input_file.with_suffix('.dat')
+                    db_2_dat(self.config.input_file, dat_file, self.config)
+                    # update the config to point to the .dat file newly created
+                    self.config.dat_file = dat_file
+
+                temoa_instance = build_instance(self.config.dat_file, silent=self.config.silent)
                 return temoa_instance
             case TemoaMode.PERFECT_FORESIGHT:
-                instance = build_instance(self.config.input_file, silent=self.config.silent)
+                # convert the input file from .sqlite -> .dat if needed
+                if self.config.input_file.suffix == '.sqlite':
+                    dat_file = self.config.input_file.with_suffix('.dat')
+                    db_2_dat(self.config.input_file, dat_file, self.config)
+                    # update the config to point to the .dat file newly created
+                    self.config.dat_file = dat_file
+
+                instance = build_instance(self.config.dat_file, silent=self.config.silent)
                 self.pf_solved_instance, self.pf_results = solve_instance(instance,
                                                                           self.config.solver_name,
                                                                           self.config.save_lp_file,
@@ -159,5 +167,9 @@ class TemoaSequencer:
                 # self.pf_solved_instance.V_StorageLevel.display()
                 # self.pf_solved_instance.TotalCost.display()
                 # self.pf_solved_instance.V_Capacity.display()
+            case TemoaMode.MYOPIC:
+                # create a myopic sequencer and shift control to it
+                myopic_sequencer = MyopicSequencer(config=self.config)
+                myopic_sequencer.start()
             case _:
                 raise NotImplementedError('not yet built')

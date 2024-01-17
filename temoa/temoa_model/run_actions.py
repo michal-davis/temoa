@@ -54,7 +54,7 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
     model_data = DataPortal(model=model)
 
     if dat_file.suffix != '.dat':
-        logger.error('Attempted to load data from file %d which is not a .dat file', dat_file)
+        logger.error('Attempted to load data from file %s which is not a .dat file', dat_file)
         raise TypeError('file loading error occurred, see log')
     hack = time()
     if not silent:
