@@ -35,14 +35,14 @@ from sqlite3 import Connection, Cursor
 from sys import stderr as SE
 
 import definitions
+from temoa.temoa_model import run_actions
 from temoa.temoa_model.myopic.myopic_loader import LoadStatementGenerator
 from temoa.temoa_model.temoa_config import TemoaConfig
-from temoa.temoa_model.temoa_model import TemoaModel
 
 logger = logging.getLogger(__name__)
 
 MyopicIndex = namedtuple('MyopicIndex', ['base_year', 'depth', 'last_year'])
-table_script_file = Path(definitions.PROJECT_ROOT, 'temoa/temoa_model', 'make_myopic_tables.sql')
+table_script_file = Path(definitions.PROJECT_ROOT, 'temoa/temoa_model/myopic', 'make_myopic_tables.sql')
 
 
 class MyopicSequencer:
@@ -54,7 +54,7 @@ class MyopicSequencer:
     myopic_tables = [
         'MyopicCapacity',
         'MyopicCost',
-        'MyopicEmissions',
+        'MyopicEmission',
         'MyopicCurtailment',
         'MyopicRetirement',
         'MyopicFlowIn',
@@ -132,11 +132,19 @@ class MyopicSequencer:
     def start(self):
         # load up the instance queue
         self.characterize_run()
+
+        # clear out the old riff-raff
+        self.drop_old_results()
+
         # create the Myopic Output tables
         self.execute_script(table_script_file)
-        first_model = TemoaModel()
-        data_loader = LoadStatementGenerator(self.config.input_file, M=first_model)
-        data_loader.load_data_portal()
+
+        # make and load the Data Portal
+        data_loader = LoadStatementGenerator(self.config.input_file)
+        data_portal = data_loader.load_data_portal()
+
+        instance = run_actions.build_instance(data_portal, model_name=self.config.scenario)
+
 
     def characterize_run(self):
         """
@@ -171,6 +179,15 @@ class MyopicSequencer:
             sql_commands = table_script.read()
         logger.debug('Executing sql from file: %s on connection: %s', script_file, self.con)
         self.cursor.executescript(sql_commands)
+
+    def drop_old_results(self):
+        """
+        Drop old results tables
+        :return:
+        """
+        logger.debug('Dropping old myopic result tables...')
+        for table in self.myopic_tables:
+            self.cursor.execute(f'DROP TABLE IF EXISTS {table};')
 
     def __del__(self):
         """ensure the connection is closed when destructor is called."""
