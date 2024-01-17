@@ -48,11 +48,17 @@ ParamStatement = namedtuple('ParamStatement', ['file_path', 'param_ref','query']
 
 class LoadStatementGenerator:
 
-    def __init__(self, file_path: Path, M: TemoaModel, start_year=-1, end_year=1000000):
+    def __init__(self, input_db_path: Path, start_year=-1, end_year=1000000):
+        """
+        A framework to load a data portal with data for a Temoa model
+        :param input_db_path: the path to the .sqlite database
+        :param start_year:
+        :param end_year:
+        """
         self.start_year = start_year
         self.end_year = end_year
-        self.file_path: str = str(file_path)  # pyomo wants string name for loading portal
-        self.M = M
+        self.file_path: str = str(input_db_path)  # pyomo wants string name for loading portal
+        self.M = TemoaModel()  # just an empty to get references to the sets
 
     def load_data_portal(self, portal: DataPortal | None = None) -> DataPortal:
         if portal is None:
@@ -67,9 +73,23 @@ class LoadStatementGenerator:
         for item in portal.items():
             print(item)
 
+        return portal
+
     def generate_set_statements(self) -> list[SetStatement]:
+        sy = self.start_year
+        ey = self.end_year
         result: list[SetStatement] = []
         query_set_pairs = (
+            # time based sets
+            (self.M.time_exist,         f"SELECT t_periods from main.time_periods WHERE flag = 'e'"),
+            # note:  We still want to screen for "f" to ensure we can never bring "existing" into scope.
+            (self.M.time_future,        f"SELECT t_periods from main.time_periods WHERE flag = 'f' AND t_periods >= {sy} AND t_periods <= {ey}"),
+            (self.M.time_of_day,        "SELECT t_day FROM main.time_of_day"),
+            (self.M.time_season,        "SELECT t_season FROM main.time_season"),
+
+            # regions...
+            (self.M.regions,            "SELECT regions FROM main.regions"),
+            # TODO:  will need to do RegionalGlobalIndices later as we did in db_to_dat, by scanning tables...
             # TODO:  The below is janky way to build all tech, but this is how model runs RN.
             (self.M.tech_resource,      "SELECT tech FROM main.technologies WHERE flag = 'r'" ),
             (self.M.tech_production,    "SELECT tech FROM main.technologies WHERE flag LIKE 'p%'"),
@@ -103,11 +123,9 @@ class LoadStatementGenerator:
              "SELECT regions, season_name, time_of_day_name, demand_name, dds FROM "
              "main.DemandSpecificDistribution"),
 
-            # Dev Note:  using .format() here instead of f-string appears to preserve linkage of
-            # field names to schema for auto-complete and visibility during refactor
             (self.M.Demand,
-             "SELECT regions, periods, demand_comm, demand FROM main.Demand "
-             "WHERE %d <= Demand.periods and %d >= Demand.periods".format(sy, ey)),
+             f"SELECT regions, periods, demand_comm, demand FROM main.Demand "
+             f"WHERE {sy} <= Demand.periods and {ey} >= Demand.periods"),
 
             # ResourceBound
 
@@ -115,10 +133,10 @@ class LoadStatementGenerator:
              "SELECT regions, tech, c2a FROM main.CapacityToActivity"),
 
             (self.M.ExistingCapacity,
-             "SELECT regions, tech, vintage, exist_cap  FROM main.ExistingCapacity WHERE vintage <= {}".format(ey)),
+             f"SELECT regions, tech, vintage, exist_cap  FROM main.ExistingCapacity WHERE vintage <= {ey}"),
 
             (self.M.Efficiency,
-             "SELECT regions, input_comm, tech, vintage, output_comm, efficiency FROM main.Efficiency WHERE vintage <= {}".format(ey)),
+             f"SELECT regions, input_comm, tech, vintage, output_comm, efficiency FROM main.Efficiency WHERE vintage <= {ey}"),
 
             (self.M.CapacityFactorTech,
              "SELECT regions, season_name, time_of_day_name, tech, cf_tech from main.CapacityFactorTech"),
@@ -134,14 +152,20 @@ class LoadStatementGenerator:
 
             (self.M.CostFixed,
              "SELECT regions, periods, tech, vintage, cost_fixed FROM main.CostFixed "
-             "WHERE vintage <= %d".format(ey)),
+             f"WHERE vintage <= {ey}"),
 
             (self.M.CostInvest,
              "SELECT regions, tech, vintage, cost_invest FROM main.CostInvest "
-             "WHERE %d <= vintage <= %d".format(sy, ey)),
+             f"WHERE {sy} <= vintage <= {ey}"),
 
             (self.M.CostVariable,
-             "SELECT regions, periods, tech, vintage FROM main.CostVariable")
+             "SELECT regions, periods, tech, vintage, cost_variable FROM main.CostVariable "
+             f"WHERE {sy} <= vintage <= {ey}"),
+
+            # Discount Rate
+            # ...
+
+
         )
 
         result = [ParamStatement(fp, q, s) for (fp, (q, s)) in zip(cycle((self.file_path,)),
@@ -149,8 +173,6 @@ class LoadStatementGenerator:
 
         return result
 
-
-bob = "SELECT regions, periods, tech, vintage FROM main.CostVariable WHERE vintage <= {}"
 
 
 

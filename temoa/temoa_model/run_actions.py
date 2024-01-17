@@ -41,17 +41,8 @@ from temoa.temoa_model.temoa_model import TemoaModel
 
 logger = getLogger(__name__)
 
-
-def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
-    """
-    Build a Temoa Instance from data
-    :param silent: Run silently
-    :param model_name: Optional name for this instance
-    :param dat_file: The data source
-    :return: a built TemoaModel
-    """
-    model = TemoaModel()
-    model_data = DataPortal(model=model)
+def load_portal_from_dat(dat_file: Path, silent: bool = False) -> DataPortal:
+    loaded_portal = DataPortal(model=TemoaModel())
 
     if dat_file.suffix != '.dat':
         logger.error('Attempted to load data from file %s which is not a .dat file', dat_file)
@@ -62,11 +53,22 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
         SE.flush()
 
     logger.debug('Started loading the DataPortal from the .dat file: %s', dat_file)
-    model_data.load(filename=str(dat_file))
+    loaded_portal.load(filename=str(dat_file))
 
     if not silent:
         SE.write('\r[%8.2f] Data read.\n' % (time() - hack))
-    logger.debug('Finished reading the .dat file')
+    logger.debug('Finished creating the DataPortal from the .dat')
+    return loaded_portal
+
+def build_instance(loaded_portal: DataPortal, model_name=None, silent=False) -> TemoaModel:
+    """
+    Build a Temoa Instance from data
+    :param silent: Run silently
+    :param model_name: Optional name for this instance
+    :param dat_file: The data source
+    :return: a built TemoaModel
+    """
+    model = TemoaModel()
 
     # TODO:  Look at this.  HiGHS doesn't support this yet, others do.
     model.dual = Suffix(direction=Suffix.IMPORT)
@@ -78,7 +80,7 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
         SE.write('[        ] Creating model instance.')
         SE.flush()
     logger.info('Started creating model instance from data')
-    instance = model.create_instance(model_data, name=model_name)
+    instance = model.create_instance(loaded_portal, name=model_name)
     if not silent:
         SE.write('\r[%8.2f] Instance created.\n' % (time() - hack))
         SE.flush()

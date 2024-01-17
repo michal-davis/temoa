@@ -33,11 +33,12 @@ from logging import getLogger
 from pathlib import Path
 
 import pyomo.opt
+from pyomo.dataportal import DataPortal
 
 from temoa.temoa_model.dat_file_maker import db_2_dat
 from temoa.temoa_model.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
-    check_solve_status
+    check_solve_status, load_portal_from_dat
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -136,9 +137,10 @@ class TemoaSequencer:
                     db_2_dat(self.config.input_file, dat_file, self.config)
                     # update the config to point to the .dat file newly created
                     self.config.dat_file = dat_file
+                data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
+                instance = build_instance(data_portal, silent=self.config.silent)
+                return instance
 
-                temoa_instance = build_instance(self.config.dat_file, silent=self.config.silent)
-                return temoa_instance
             case TemoaMode.PERFECT_FORESIGHT:
                 # convert the input file from .sqlite -> .dat if needed
                 if self.config.input_file.suffix == '.sqlite':
@@ -147,7 +149,8 @@ class TemoaSequencer:
                     # update the config to point to the .dat file newly created
                     self.config.dat_file = dat_file
 
-                instance = build_instance(self.config.dat_file, silent=self.config.silent)
+                data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, self.config.silent)
+                instance = build_instance(data_portal, silent=self.config.silent)
                 self.pf_solved_instance, self.pf_results = solve_instance(instance,
                                                                           self.config.solver_name,
                                                                           self.config.save_lp_file,
