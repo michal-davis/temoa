@@ -21,6 +21,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 import tomllib
 from logging import getLogger
 from pathlib import Path
+from sys import stderr as SE
 
 from temoa.temoa_model.temoa_mode import TemoaMode
 
@@ -91,6 +92,13 @@ class TemoaConfig:
         if self.output_database.suffix != '.sqlite':
             logger.error('Output DB does not appear to be a sqlite db')
             raise AttributeError(f'Output DB should be .sqlite type')
+
+        # create a placeholder for .dat file.  If conversion is needed, this
+        # is the destination...
+        self.dat_file: Path | None
+        if self.input_file.suffix == '.dat':
+            self.dat_file = self.input_file
+
         self.output_path = output_path
         self.neos = neos
 
@@ -104,6 +112,14 @@ class TemoaConfig:
         self.silent = silent
         self.stream_output = stream_output
 
+        # warn if output db != input db
+        if self.input_file.suffix == self.output_database.suffix: # they are both .db/.sqlite
+            if self.input_file != self.output_database: # they are not the same db
+                msg =   ('Input file, which is a database, does not match the output file\n User '
+                         'is responsible to ensure the data ~ results congruency in the output db')
+                logger.warning(msg)
+                if not self.silent:
+                    SE.write("Warning: " + msg)
     @staticmethod
     def validate_schema(data: dict):
         """
@@ -148,9 +164,10 @@ class TemoaConfig:
                 )
 
     @staticmethod
-    def build_config(config_file: Path, output_path: Path) -> 'TemoaConfig':
+    def build_config(config_file: Path, output_path: Path, silent=False) -> 'TemoaConfig':
         """
         build a Temoa Config from a config file
+        :param silent: suppress warnings and confirmations
         :param output_path:
         :param config_file: the path to the config file to use
         :return: a TemoaConfig instance
@@ -158,7 +175,7 @@ class TemoaConfig:
         with open(config_file, 'rb') as f:
             data = tomllib.load(f)
         TemoaConfig.validate_schema(data=data)
-        tc = TemoaConfig(output_path=output_path, config_file=config_file, **data)
+        tc = TemoaConfig(output_path=output_path, config_file=config_file, silent=silent, **data)
         logger.info('Scenario Name:  %s', tc.scenario)
         logger.info('Data source:  %s', tc.input_file)
         logger.info('Data target:  %s', tc.output_database)
