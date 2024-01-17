@@ -2,7 +2,6 @@
 This file is intended as a QA tool for calculating costs associated with unit-sized purchases
 of storage capacity
 """
-from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 
 # Written by:  J. F. Hyink
