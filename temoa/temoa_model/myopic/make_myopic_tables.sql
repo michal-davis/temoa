@@ -64,6 +64,7 @@ CREATE TABLE MyopicCost (
     region      text,
     scenario    text,
     sector      text,
+    period      integer,
     output_name text,
     tech        text,
     vintage     integer,
@@ -73,7 +74,7 @@ CREATE TABLE MyopicCost (
     FOREIGN KEY (region) REFERENCES regions(regions),
     FOREIGN KEY (tech) REFERENCES technologies(tech),
     FOREIGN KEY (vintage) REFERENCES time_periods(t_periods),
-
+    FOREIGN KEY (period) REFERENCES time_periods(t_periods),
     PRIMARY KEY (region, scenario, output_name, tech, vintage)
 
 );

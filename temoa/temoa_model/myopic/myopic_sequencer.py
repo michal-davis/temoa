@@ -27,22 +27,26 @@ Created on:  1/15/24
 """
 import logging
 import sqlite3
-from collections import namedtuple
 from pathlib import Path
 from queue import Queue
 from shutil import copyfile
 from sqlite3 import Connection, Cursor
 from sys import stderr as SE
 
+from pyomo.dataportal import DataPortal
+from temoa.temoa_model.myopic.MyopicIndex import MyopicIndex
+
 import definitions
 from temoa.temoa_model import run_actions
-from temoa.temoa_model.myopic.myopic_loader import LoadStatementGenerator
+from temoa.temoa_model.myopic.myopic_loader import DataPortalLoader
 from temoa.temoa_model.temoa_config import TemoaConfig
 
 logger = logging.getLogger(__name__)
 
-MyopicIndex = namedtuple('MyopicIndex', ['base_year', 'depth', 'last_year'])
-table_script_file = Path(definitions.PROJECT_ROOT, 'temoa/temoa_model/myopic', 'make_myopic_tables.sql')
+
+table_script_file = Path(
+    definitions.PROJECT_ROOT, 'temoa/temoa_model/myopic', 'make_myopic_tables.sql'
+)
 
 
 class MyopicSequencer:
@@ -62,6 +66,7 @@ class MyopicSequencer:
     ]
 
     def __init__(self, config: TemoaConfig):
+        self.optimization_periods: list[int] | None = None
         self.instance_queue: Queue[MyopicIndex] = Queue()  # a FIFO queue
         self.config = config
         # establish a connection to the controlling db
@@ -81,6 +86,12 @@ class MyopicSequencer:
 
     @property
     def cursor(self) -> Cursor:
+        """
+        cursor for the db
+        :return: cursor for the session started in the database
+        """
+        # doing this as a property is a preventative measure to isolate the cursor
+        # (it can't be overwritten)
         return self.con.cursor()
 
     def get_connection(self) -> Connection:
@@ -140,11 +151,88 @@ class MyopicSequencer:
         self.execute_script(table_script_file)
 
         # make and load the Data Portal
-        data_loader = LoadStatementGenerator(self.config.input_file)
-        data_portal = data_loader.load_data_portal()
+        data_loader = DataPortalLoader(self.config.input_file)
+
+        # start the fundamental control loop
+        # 1.  get feedback from previous instance execution (optimal/infeasible/...)
+        # 2.  decide what to do about #1
+        # 3.  pull the next instance from the queue (if !empty)
+        # 4.  pull data for next run, adjust as necessary
+        # 5.  build instance, run, assess
+        # 6.  commit or back out any data as necessary
+        # 7.  report findings
+
+        # reusables...
+        data_portal = DataPortal()
+        offset_periods = 0
+        last_instance_status = None
+        idx: MyopicIndex  # just a type-hint
+        logger.info('Starting Myopic Sequence')
+        while not self.instance_queue.empty():
+            if last_instance_status is None:
+                idx = self.instance_queue.get()
+            elif last_instance_status == 'optimal':
+                idx = self.instance_queue.get()
+            elif last_instance_status == 'roll_back':
+                offset_periods -= 1
+                curr_start_idx = self.optimization_periods.index(idx.base_year)
+                new_start_idx = curr_start_idx + offset_periods
+                if new_start_idx < 0:
+                    logger.error('Failed myopic iteration.  Cannot back up any further.')
+                    raise RuntimeError(
+                        'Myopic iteration failed during attempt to back up recursively before start of optimization period.'
+                    )
+                # roll back the start year by making a new index, increase the depth, keep the same last year
+                base_year = self.optimization_periods[new_start_idx]
+                idx = MyopicIndex(
+                    base_year=base_year,
+                    depth=idx.depth + 1,
+                    last_demand_year=idx.last_demand_year,
+                    last_year=idx.last_year,
+                )
+            else:
+                raise RuntimeError('Illegal state in myopic iteration.')
+            logger.info('Processing Myopic Index: %s', idx)
+
+            # 4. pull the data
+            data_loader.start_year = idx.base_year
+            data_loader.end_year = idx.last_year
+            data_portal = (
+                data_loader.load_data_portal(myopic_index=idx)
+            )  # just make a new data portal...they are untrustworthy...
+
+            # 5. build/run/assess
+            instance = run_actions.build_instance(
+                loaded_portal=data_portal,
+                model_name=self.config.scenario,
+                silent=self.config.silent,
+            )
+            model, results = run_actions.solve_instance(
+                instance=instance,
+                solver_name=self.config.solver_name,
+                silent=self.config.silent,
+                keep_LP_files=self.config.save_lp_file,
+            )
+            optimal, status = run_actions.check_solve_status(results)
+            if not optimal:
+                logger.warning('Completed myopic iteration on %s', idx)
+                logger.warning('Status: %s', status)
+                # clear the results from the previous period...
+                previous_period_index = self.optimization_periods.index(idx.base_year) - 1
+                previous_period = self.optimization_periods[previous_period_index]
+                self.clear_results(previous_period)
+                # restart loop
+                last_instance_status = 'roll_back'
+                continue
+
+            logger.info('Completed myopic iteration on %s', idx)
+
+            # TODO:  screen candy here for progress...
 
         instance = run_actions.build_instance(data_portal, model_name=self.config.scenario)
-
+        solved_instance = run_actions.solve_instance(
+            instance=instance, solver_name=self.config.solver_name, keep_LP_files=False
+        )
 
     def characterize_run(self):
         """
@@ -158,13 +246,19 @@ class MyopicSequencer:
         future_periods = sorted(t[0] for t in future_periods)
 
         # check that we have enough periods to do myopic run
-        if len(future_periods) < 3:  # 2 iterations, excluding end year
+        # 2 iterations, excluding end year, will be via shortened depth, if reqd.
+        if len(future_periods) < 3:
             logger.error('Not enough future years to run myopic mode: %d', len(future_periods))
+        self.optimization_periods = future_periods.copy()
         last_idx = len(future_periods) - 1
         for idx, year in enumerate(future_periods[:-1]):
-            depth = min(self.view_depth, last_idx - idx + 1)
+            depth = min(self.view_depth, last_idx - idx)
+            if depth < 1: break
             myopic_idx = MyopicIndex(
-                base_year=year, depth=depth, last_year=future_periods[idx + depth - 1]
+                base_year=year,
+                depth=depth,
+                last_demand_year=future_periods[idx + depth - 1],
+                last_year=future_periods[idx + depth],
             )
             self.instance_queue.put(myopic_idx)
             logger.debug('Added myopic index %s', myopic_idx)
@@ -188,6 +282,23 @@ class MyopicSequencer:
         logger.debug('Dropping old myopic result tables...')
         for table in self.myopic_tables:
             self.cursor.execute(f'DROP TABLE IF EXISTS {table};')
+
+    def clear_results(self, period):
+        """
+        clear the results tables for the period specified
+        :param period: the period (year) to clear
+        :return:
+        """
+        if period not in self.optimization_periods:
+            logger.error(
+                'Tried to clear period results for %s that is not in %s',
+                period,
+                self.optimization_periods,
+            )
+            raise ValueError(f'Trying to clear a year {period} that is not in the optimize periods')
+        logger.debug('Clearing period %s', period)
+        for table in self.myopic_tables:
+            self.cursor.execute(f'DELETE FROM {table} WHERE period = {period}')
 
     def __del__(self):
         """ensure the connection is closed when destructor is called."""
