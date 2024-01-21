@@ -27,22 +27,23 @@ Created on:  1/15/24
 """
 import logging
 import sqlite3
+from collections import deque, defaultdict
 from pathlib import Path
-from queue import Queue
 from shutil import copyfile
 from sqlite3 import Connection, Cursor
 from sys import stderr as SE
 
+from pyomo.core import value
 from pyomo.dataportal import DataPortal
-from temoa.temoa_model.myopic.MyopicIndex import MyopicIndex
 
 import definitions
 from temoa.temoa_model import run_actions
+from temoa.temoa_model.myopic.myopic_index import MyopicIndex
 from temoa.temoa_model.myopic.myopic_loader import DataPortalLoader
 from temoa.temoa_model.temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_model import TemoaModel
 
 logger = logging.getLogger(__name__)
-
 
 table_script_file = Path(
     definitions.PROJECT_ROOT, 'temoa/temoa_model/myopic', 'make_myopic_tables.sql'
@@ -63,11 +64,14 @@ class MyopicSequencer:
         'MyopicRetirement',
         'MyopicFlowIn',
         'MyopicFlowOut',
+        'MyopicEfficiency',
     ]
 
     def __init__(self, config: TemoaConfig):
+        self.capacity_epsilon = 1e-5
+        self.debugging = False
         self.optimization_periods: list[int] | None = None
-        self.instance_queue: Queue[MyopicIndex] = Queue()  # a FIFO queue
+        self.instance_queue: deque[MyopicIndex] = deque()  # a LIFO queue
         self.config = config
         # establish a connection to the controlling db
         self.con = self.get_connection()
@@ -82,7 +86,16 @@ class MyopicSequencer:
         else:
             self.view_depth: int = myopic_options.get('view_depth')
             if not isinstance(self.view_depth, int):
-                raise RuntimeError(f'view_depth is not an integer {self.view_depth}')
+                raise ValueError(f'view_depth is not an integer {self.view_depth}')
+            self.step_size: int = myopic_options.get('step_size')
+            if not isinstance(self.step_size, int):
+                raise ValueError(f'step_size is not an integer {self.step_size}')
+            if self.step_size > self.view_depth:
+                raise ValueError(
+                    f'the Myopic step size({self.step_size}) '
+                    f'is larger than the view depth ({self.view_depth}).  '
+                    f'Check config'
+                )
 
     @property
     def cursor(self) -> Cursor:
@@ -150,29 +163,39 @@ class MyopicSequencer:
         # create the Myopic Output tables
         self.execute_script(table_script_file)
 
-        # make and load the Data Portal
+        # start the MyopicEfficiency table.  (need to do this prior to data build to get Existing
+        # Capacity accounted for
+        self.initialize_myopic_efficiency_table()
+
+        # make a data loader
         data_loader = DataPortalLoader(self.config.input_file)
 
         # start the fundamental control loop
         # 1.  get feedback from previous instance execution (optimal/infeasible/...)
-        # 2.  decide what to do about #1
-        # 3.  pull the next instance from the queue (if !empty)
+        # 2.  decide what to do about it
+        # 3.  pull the next instance from the queue (if !empty & if needed)
         # 4.  pull data for next run, adjust as necessary
-        # 5.  build instance, run, assess
-        # 6.  commit or back out any data as necessary
-        # 7.  report findings
+        # 5.  Add to the MyopicEfficiency table
+        # 6.  build instance, run, assess
+        # 7.  commit or back out any data as necessary
+        # 8.  report findings
 
         # reusables...
         data_portal = DataPortal()
         offset_periods = 0
-        last_instance_status = None
+        last_instance_status = None  # solve status
+        last_base_year = None
         idx: MyopicIndex  # just a type-hint
         logger.info('Starting Myopic Sequence')
-        while not self.instance_queue.empty():
+        while len(self.instance_queue) > 0:
             if last_instance_status is None:
-                idx = self.instance_queue.get()
+                offset_periods = 0
+                idx = self.instance_queue.pop()
+                last_base_year = idx.base_year  # starting here
             elif last_instance_status == 'optimal':
-                idx = self.instance_queue.get()
+                offset_periods = 0
+                idx = self.instance_queue.pop()
+
             elif last_instance_status == 'roll_back':
                 offset_periods -= 1
                 curr_start_idx = self.optimization_periods.index(idx.base_year)
@@ -194,14 +217,16 @@ class MyopicSequencer:
                 raise RuntimeError('Illegal state in myopic iteration.')
             logger.info('Processing Myopic Index: %s', idx)
 
-            # 4. pull the data
-            data_loader.start_year = idx.base_year
-            data_loader.end_year = idx.last_year
-            data_portal = (
-                data_loader.load_data_portal(myopic_index=idx)
+            # 4. update the MyopicEfficiency table so it is ready for the data pull.
+            self.update_myopic_efficiency_table(myopic_index=idx, prev_base=last_base_year)
+
+            # 5. pull the data
+            print(f'\n\nPulling data for: {idx}')
+            data_portal = data_loader.load_data_portal(
+                myopic_index=idx
             )  # just make a new data portal...they are untrustworthy...
 
-            # 5. build/run/assess
+            # 6. build/solve/assess
             instance = run_actions.build_instance(
                 loaded_portal=data_portal,
                 model_name=self.config.scenario,
@@ -218,14 +243,21 @@ class MyopicSequencer:
                 logger.warning('Completed myopic iteration on %s', idx)
                 logger.warning('Status: %s', status)
                 # clear the results from the previous period...
-                previous_period_index = self.optimization_periods.index(idx.base_year) - 1
-                previous_period = self.optimization_periods[previous_period_index]
-                self.clear_results(previous_period)
+                # TODO:  Fix this...
+                # previous_period_index = self.optimization_periods.index(idx.base_year) - 1
+                # previous_period = self.optimization_periods[previous_period_index]
+                # self.clear_results(previous_period)
                 # restart loop
                 last_instance_status = 'roll_back'
                 continue
 
             logger.info('Completed myopic iteration on %s', idx)
+            # 7.  Update the output tables...
+            self.update_output_tables(idx, model)
+
+            # prep next loop
+            last_base_year = idx.base_year  # update
+            last_instance_status = 'optimal'  # simulated...
 
             # TODO:  screen candy here for progress...
 
@@ -234,16 +266,38 @@ class MyopicSequencer:
             instance=instance, solver_name=self.config.solver_name, keep_LP_files=False
         )
 
-    def characterize_run(self):
+    def update_output_tables(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
+        data = defaultdict(dict)
+        for r, p, t, v in model.V_Capacity:
+            # start at base year, to prevent re-writing existing
+            # stop before step year, which will be written in next iteration
+            if myopic_idx.base_year <= v < myopic_idx.step_year:
+                val = value(model.V_Capacity[r, p, t, v])
+                if abs(val) < self.capacity_epsilon:
+                    continue
+                # we only need to capture for the vintage
+                # TODO:  Come back to this after we look at retirements/curtailment
+                if p == v:
+                    data['V_Capacity'][r, p, t, v] = val
+                    continue
+        for (r, _, t, v), val in data['V_Capacity'].items():
+            # print(r, t, v, val)
+            self.cursor.execute(
+                'INSERT INTO MyopicCapacity ' f'VALUES (?, ?, ?, ?, ?, ?)',
+                (myopic_idx.base_year, self.config.scenario, r, t, v, val),
+            )
+
+    def characterize_run(self, future_periods: list[int] | None = None) -> None:
         """
         inspect the db and create the MyopicIndex items
+        :param future_periods: list of future period labels (years), normally None. (for test)
         :return:
         """
-        all_periods = self.cursor.execute('SELECT * FROM main.time_periods').fetchall()
-        future_periods = self.cursor.execute(
-            "SELECT t_periods FROM main.time_periods WHERE flag = 'f'"
-        ).fetchall()
-        future_periods = sorted(t[0] for t in future_periods)
+        if not future_periods:
+            future_periods = self.cursor.execute(
+                "SELECT t_periods FROM main.time_periods WHERE flag = 'f'"
+            ).fetchall()
+            future_periods = sorted(t[0] for t in future_periods)
 
         # check that we have enough periods to do myopic run
         # 2 iterations, excluding end year, will be via shortened depth, if reqd.
@@ -251,18 +305,23 @@ class MyopicSequencer:
             logger.error('Not enough future years to run myopic mode: %d', len(future_periods))
         self.optimization_periods = future_periods.copy()
         last_idx = len(future_periods) - 1
+        indices = []
         for idx, year in enumerate(future_periods[:-1]):
             depth = min(self.view_depth, last_idx - idx)
-            if depth < 1: break
+            step = min(self.step_size, last_idx - idx)
+            if depth < 1:
+                break
             myopic_idx = MyopicIndex(
                 base_year=year,
-                depth=depth,
+                step_year=future_periods[idx + step],
                 last_demand_year=future_periods[idx + depth - 1],
                 last_year=future_periods[idx + depth],
             )
-            self.instance_queue.put(myopic_idx)
+            self.instance_queue.appendleft(
+                myopic_idx
+            )  # Add to left, we will pop right, so FIFO for these
             logger.debug('Added myopic index %s', myopic_idx)
-        logger.info('myopic run is divided into %d instances', self.instance_queue.qsize())
+        logger.info('myopic run is divided into %d instances', len(self.instance_queue))
 
     def execute_script(self, script_file: Path):
         """
@@ -304,3 +363,112 @@ class MyopicSequencer:
         """ensure the connection is closed when destructor is called."""
         if hasattr(self, 'con'):  # it may not be constructed yet...
             self.con.close()
+
+    def initialize_myopic_efficiency_table(self):
+        """
+        create a new MyopicEfficiency table and pre-load it with all ExistingCapacity
+        :return:
+        """
+        # the -1 is used to indicate "existing" for flag purposes
+        # we will just use the "existing" flag in the orig db to set this up and capture
+        # all values in those vintages as "existing"
+        query = (
+            'INSERT INTO MyopicEfficiency '
+            "SELECT '-1', regions, input_comm, tech, vintage, output_comm, efficiency "
+            'FROM Efficiency '
+            '   JOIN time_periods '
+            '   ON Efficiency.vintage = time_periods.t_periods '
+            "   WHERE flag = 'e'"
+        )
+        if self.debugging:
+            print(query)
+        self.cursor.execute(query)
+        self.con.commit()
+
+        if self.debugging:
+            q2 = (
+                "SELECT '-1', regions, input_comm, tech, vintage, output_comm, efficiency "
+                'FROM Efficiency '
+                '   JOIN time_periods '
+                '   ON Efficiency.vintage = time_periods.t_periods '
+                "   WHERE flag = 'e'"
+            )
+            res = self.cursor.execute(q2).fetchall()
+            print(list(res))
+
+    def update_myopic_efficiency_table(self, myopic_index: MyopicIndex, prev_base: int):
+        """
+        This function adds to (or creates) a MyopicEfficiency table in the db with data specific
+        to the MyopicIndex timeframe.
+        :return:
+        """
+        # Dev Note:  The efficiency table drives the show for the model and is also used
+        # internally to validate commodities, techs, etc.  So by making a period-accurate
+        # efficiency table, we can bounce our other queries off of it to get accurate
+        # data out of the DB, instead of dealing with it model-side
+
+        # We already captured the ExistingCapacity efficiency values when the table
+        # was initialized, so now we need to incrementally add to it with:
+        # 1.  REMOVE things that were NOT added to the MyopicCapacity from the last year (if any)
+        # 2.  The new stuff that is visible in the current myopic period
+
+        base = myopic_index.base_year
+        last_demand_year = myopic_index.last_demand_year
+
+        # 0.  Clear any future things past the base year for housekeeping
+        #     ease with steps, depth, etc.
+        # TODO:  We *might* be able to do something more efficient here and just keep adding
+        #        but this should be most reliable way for now.
+        self.cursor.execute(
+            'DELETE FROM MyopicEfficiency WHERE ' f'MyopicEfficiency.vintage >= {base}'
+        )
+        self.con.commit()
+
+        # 1.  Clean up stuff not implemented
+        query = (
+            'DELETE FROM MyopicEfficiency WHERE NOT EXISTS ('
+            '  SELECT * FROM MyopicCapacity WHERE '
+            '    MyopicEfficiency.region = MyopicCapacity.region AND '
+            '    MyopicEfficiency.tech = MyopicCapacity.tech AND '
+            '    MyopicEfficiency.vintage = MyopicCapacity.vintage) AND '
+            f'    MyopicEfficiency.vintage >= {prev_base}'
+        )
+
+        if self.debugging:
+            debug_query = (
+                'SELECT * FROM MyopicEfficiency WHERE NOT EXISTS ('
+                '  SELECT * FROM MyopicCapacity WHERE '
+                '    MyopicEfficiency.region = MyopicCapacity.region AND '
+                '    MyopicEfficiency.tech = MyopicCapacity.tech AND '
+                '    MyopicEfficiency.vintage = MyopicCapacity.vintage) AND '
+                f'    MyopicEfficiency.vintage >= {prev_base}'
+            )
+            print('\n\n **** Removing these unused region-tech-vintage combos ****')
+            print(debug_query)
+            removals = self.cursor.execute(debug_query).fetchall()
+            for i, removal in enumerate(removals):
+                print(f'{i}. Removing:  {removal}')
+        self.cursor.execute(query)
+        self.con.commit()
+
+        # 2.  Add the new stuff now visible
+        query = (
+            'INSERT INTO MyopicEfficiency '
+            f'SELECT {base}, regions, input_comm, tech, vintage, output_comm, efficiency '
+            'FROM Efficiency '
+            f'  WHERE Efficiency.vintage >= {base}'
+            f'  AND Efficiency.vintage <= {last_demand_year}'
+        )
+        if self.debugging:
+            x = self.cursor.execute(
+                f'SELECT {base}, regions, input_comm, tech, vintage, output_comm, efficiency '
+                'FROM Efficiency '
+                f'  WHERE Efficiency.vintage >= {base}'
+                f'  AND Efficiency.vintage <= {last_demand_year}'
+            ).fetchall()
+            print('\n\n **** adding to MyopicEfficiency table from newly visible techs ****')
+            for idx, t in enumerate(x):
+                print(idx, t)
+            print()
+        self.cursor.execute(query)
+        self.con.commit()  # MUST commit here to push the INSERTs
