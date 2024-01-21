@@ -146,14 +146,14 @@ def validate_time(M: 'TemoaModel'):
         raise Exception(msg)
 
     if len(M.time_future) < 2:
-        msg = ('Set "time_future" needs at least 2 specified years.  Temoa '
-               'treats the integer numbers specified in this set as boundary years '
-               'between periods, and uses them to automatically ascertain the length '
-               '(in years) of each period.  Note that this means that there will be '
+        msg = ('Set "time_future" needs at least 2 specified years.  \nTemoa '
+               'treats the integer numbers specified in this set as boundary years \n'
+               'between periods, and uses them to automatically ascertain the length \n'
+               '(in years) of each period.  Note that this means that there will be \n'
                'one less optimization period than the number of elements in this set.')
 
         logger.error(msg)
-        raise Exception(msg)
+        raise RuntimeError(msg)
 
     # Ensure that the time_exist < time_future
     max_exist = max(M.time_exist)
@@ -564,6 +564,7 @@ def CreateSparseDicts(M: 'TemoaModel'):
         l_process = (r, t, v)
         l_lifetime = value(M.LifetimeProcess[l_process])
         # Do some error checking for the user.
+        # TODO:  Marker for the section that is culling out vintages that are in time_exist, but with no capacity...
         if v in M.vintage_exist:
             if l_process not in l_exist_indices:
                 msg = ('Warning: %s has a specified Efficiency, but does not '

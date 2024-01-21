@@ -203,6 +203,11 @@ class TemoaModel(AbstractModel):
             M.RegionalIndices, M.commodity_physical, M.tech_all, M.vintage_all, M.commodity_carrier,
             within=NonNegativeReals
         )
+        # TODO:  This doesn't work for myopic, where the Efficiency Param for a
+        #        particular myopic run may well exclude commodities, tech, etc.
+        #        for the myopic run in general.  Perhaps, make another version of
+        #        this that screens the full DB, instead of piecemeal, which is problem
+        # TODO:  Figure out a way to turn this back on for non-myopic runs
         M.validate_UsedEfficiencyIndices = BuildAction(rule=CheckEfficiencyIndices)
 
         M.CapacityFactor_rsdt = Set(dimen=4, initialize=CapacityFactorTechIndices)

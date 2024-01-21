@@ -1,26 +1,24 @@
 BEGIN ;
 
 CREATE TABLE MyopicCapacity (
-    region      text,
+    year_added  integer,
     scenario    text,
-    sector      text,
-    period      integer,
+    region      text,
+--     sector      text,
     tech        text,
     vintage     integer,
     capacity    real,
-    year_added  integer,
 
-    FOREIGN KEY (period) REFERENCES time_periods(t_periods),
-    FOREIGN KEY (sector) REFERENCES sector_labels(sector),
+--     FOREIGN KEY (sector) REFERENCES sector_labels(sector),
     FOREIGN KEY (vintage) REFERENCES time_periods(t_periods),
     FOREIGN KEY (tech)  REFERENCES technologies(tech),
 
-    PRIMARY KEY (region, scenario, period, tech, vintage),
+    PRIMARY KEY (region, scenario, tech, vintage),
     CHECK  ( capacity >= 0 )
 );
 CREATE TABLE MyopicEmission (
-    region      text,
     scenario    text,
+    region      text,
     sector      text,
     period      integer,
     emission_commodity  text,
@@ -37,8 +35,8 @@ CREATE TABLE MyopicEmission (
     PRIMARY KEY (region, scenario, period, emission_commodity, tech, vintage)
 );
 CREATE TABLE MyopicCurtailment (
-    region      text,
     scenario    text,
+    region      text,
     sector      text,
     period      integer,
     season      text,
@@ -61,8 +59,8 @@ CREATE TABLE MyopicCurtailment (
 
 );
 CREATE TABLE MyopicCost (
-    region      text,
     scenario    text,
+    region      text,
     sector      text,
     period      integer,
     output_name text,
@@ -79,8 +77,8 @@ CREATE TABLE MyopicCost (
 
 );
 CREATE TABLE MyopicRetirement (
-    region      text,
     scenario    text,
+    region      text,
     sector      text,
     period      text,
     tech        text,
@@ -97,8 +95,8 @@ CREATE TABLE MyopicRetirement (
 );
 
 CREATE TABLE MyopicFlowIn(
-    region      text,
     scenario    text,
+    region      text,
     sector      text,
     period      text,
     season      text,
@@ -123,8 +121,8 @@ CREATE TABLE MyopicFlowIn(
     check ( flow >= 0 )
 );
 CREATE TABLE MyopicFlowOut(
-    region      text,
     scenario    text,
+    region      text,
     sector      text,
     period      text,
     season      text,
@@ -148,4 +146,20 @@ CREATE TABLE MyopicFlowOut(
     PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm),
     check ( flow >= 0 )
 );
+CREATE TABLE MyopicEfficiency(
+    base_year   integer,
+    region      text,
+    input_comm  text,
+    tech        text,
+    vintage     integer,
+    output_comm text,
+    efficiency  real,
+
+    FOREIGN KEY (tech) REFERENCES technologies(tech),
+    FOREIGN KEY (region) REFERENCES regions(regions),
+
+    PRIMARY KEY (region, input_comm, tech, vintage, output_comm)
+);
+-- for efficient searching by rtv:
+CREATE INDEX region_tech_vintage ON MyopicEfficiency(region, tech, vintage);
 COMMIT ;
