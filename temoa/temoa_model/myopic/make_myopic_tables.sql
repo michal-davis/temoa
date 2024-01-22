@@ -4,12 +4,13 @@ CREATE TABLE MyopicCapacity (
     year_added  integer,
     scenario    text,
     region      text,
---     sector      text,
+    sector      text,
     tech        text,
     vintage     integer,
     capacity    real,
+    lifetime    integer,
 
---     FOREIGN KEY (sector) REFERENCES sector_labels(sector),
+    FOREIGN KEY (sector) REFERENCES sector_labels(sector),
     FOREIGN KEY (vintage) REFERENCES time_periods(t_periods),
     FOREIGN KEY (tech)  REFERENCES technologies(tech),
 
@@ -55,6 +56,7 @@ CREATE TABLE MyopicCurtailment (
     FOREIGN KEY (input_comm) REFERENCES commodities(comm_name),
     FOREIGN KEY (t_day) REFERENCES time_of_day(t_day),
     FOREIGN KEY (season) REFERENCES time_season(t_season),
+
     PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm)
 
 );
@@ -73,6 +75,7 @@ CREATE TABLE MyopicCost (
     FOREIGN KEY (tech) REFERENCES technologies(tech),
     FOREIGN KEY (vintage) REFERENCES time_periods(t_periods),
     FOREIGN KEY (period) REFERENCES time_periods(t_periods),
+
     PRIMARY KEY (region, scenario, output_name, tech, vintage)
 
 );

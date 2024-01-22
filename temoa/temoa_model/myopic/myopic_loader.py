@@ -143,6 +143,7 @@ class DataPortalLoader:
             )
         query_set_pairs.extend(time_pairs)
 
+        tech_filter = 'JOIN main.MyopicEfficiency ON tech'
         other_set_pairs = (
             (self.M.time_of_day, 'SELECT t_day FROM main.time_of_day'),
             (self.M.time_season, 'SELECT t_season FROM main.time_season'),
@@ -150,7 +151,7 @@ class DataPortalLoader:
             (self.M.regions, 'SELECT regions FROM main.regions'),
             # TODO:  will need to do RegionalGlobalIndices later as we did in db_to_dat
             # TODO:  The below is janky way to build all tech, but this is how model runs RN.
-            (self.M.tech_resource, "SELECT tech FROM main.technologies WHERE flag = 'r'"),
+            (self.M.tech_resource, f"SELECT tech FROM main.technologies {tech_filter} WHERE flag = 'r'"),
             (self.M.tech_production, "SELECT tech FROM main.technologies WHERE flag LIKE 'p%'"),
             (self.M.tech_baseload, "SELECT tech FROM main.technologies WHERE flag ='pb'"),
             (self.M.tech_storage, "SELECT tech FROM main.technologies WHERE flag = 'ps'"),
