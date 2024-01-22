@@ -38,8 +38,8 @@ from pyomo.dataportal import DataPortal
 
 import definitions
 from temoa.temoa_model import run_actions
+from temoa.temoa_model.myopic.hybrid_loader import HybridLoader
 from temoa.temoa_model.myopic.myopic_index import MyopicIndex
-from temoa.temoa_model.myopic.myopic_loader import DataPortalLoader
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_model import TemoaModel
 
@@ -168,7 +168,7 @@ class MyopicSequencer:
         self.initialize_myopic_efficiency_table()
 
         # make a data loader
-        data_loader = DataPortalLoader(self.config.input_file)
+        data_loader = HybridLoader(self.con) # DataPortalLoader(self.config.input_file)
 
         # start the fundamental control loop
         # 1.  get feedback from previous instance execution (optimal/infeasible/...)
