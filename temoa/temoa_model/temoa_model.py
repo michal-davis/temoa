@@ -37,7 +37,8 @@ class TemoaModel(AbstractModel):
     """
     An instance of the abstract Temoa model
     """
-
+    # this is used in several places outside this class, and this provides no-build access to it
+    default_lifetime_tech = 40
     def __init__(M, *args, **kwds):
         AbstractModel.__init__(M, *args, **kwds)
 
@@ -222,7 +223,8 @@ class TemoaModel(AbstractModel):
 
         # M.initialize_CapacityFactors = BuildAction(rule=CreateCapacityFactors)
 
-        M.LifetimeTech = Param(M.RegionalIndices, M.tech_all, default=40)
+        M.LifetimeTech = Param(M.RegionalIndices, M.tech_all,
+                               default=TemoaModel.default_lifetime_tech)
 
         M.LifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeProcessIndices)
         M.LifetimeProcess = Param(M.LifetimeProcess_rtv,

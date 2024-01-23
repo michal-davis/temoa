@@ -157,6 +157,7 @@ CREATE TABLE MyopicEfficiency(
     vintage     integer,
     output_comm text,
     efficiency  real,
+    lifetime    integer,
 
     FOREIGN KEY (tech) REFERENCES technologies(tech),
     FOREIGN KEY (region) REFERENCES regions(regions),
