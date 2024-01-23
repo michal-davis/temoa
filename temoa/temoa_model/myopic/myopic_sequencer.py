@@ -67,14 +67,15 @@ class MyopicSequencer:
         'MyopicEfficiency',
     ]
 
-    def __init__(self, config: TemoaConfig):
+    def __init__(self, config: TemoaConfig | None):
         self.capacity_epsilon = 1e-5
         self.debugging = False
         self.optimization_periods: list[int] | None = None
         self.instance_queue: deque[MyopicIndex] = deque()  # a LIFO queue
         self.config = config
         # establish a connection to the controlling db
-        self.con = self.get_connection()
+        # allow a "shunt" here so we can test parts of this by passing a None config
+        self.con = self.get_connection() if isinstance(config, TemoaConfig) else None
         # break out what is needed from the config
         myopic_options = config.myopic_inputs
         if not myopic_options:
@@ -168,7 +169,7 @@ class MyopicSequencer:
         self.initialize_myopic_efficiency_table()
 
         # make a data loader
-        data_loader = HybridLoader(self.con) # DataPortalLoader(self.config.input_file)
+        data_loader = HybridLoader(self.con)  # DataPortalLoader(self.config.input_file)
 
         # start the fundamental control loop
         # 1.  get feedback from previous instance execution (optimal/infeasible/...)
@@ -261,10 +262,6 @@ class MyopicSequencer:
 
             # TODO:  screen candy here for progress...
 
-        instance = run_actions.build_instance(data_portal, model_name=self.config.scenario)
-        solved_instance = run_actions.solve_instance(
-            instance=instance, solver_name=self.config.solver_name, keep_LP_files=False
-        )
 
     def update_output_tables(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
         data = defaultdict(dict)
@@ -277,15 +274,20 @@ class MyopicSequencer:
                     continue
                 # we only need to capture for the vintage
                 # TODO:  Come back to this after we look at retirements/curtailment
-                if p == v:
+                if p < myopic_idx.step_year:
                     data['V_Capacity'][r, p, t, v] = val
                     continue
-        for (r, _, t, v), val in data['V_Capacity'].items():
+        for (r, p, t, v), val in data['V_Capacity'].items():
             # print(r, t, v, val)
-            self.cursor.execute(
-                'INSERT INTO MyopicCapacity ' f'VALUES (?, ?, ?, ?, ?, ?)',
-                (myopic_idx.base_year, self.config.scenario, r, t, v, val),
-            )
+            lifetime = model.LifetimeProcess[r, t, v]
+            try:
+                self.cursor.execute(
+                    'INSERT INTO MyopicCapacity ' f'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    (myopic_idx.base_year, self.config.scenario, r, p, t, v, val, lifetime),
+                )
+            except sqlite3.IntegrityError:
+                print(f'choked on : {myopic_idx.base_year, r, p, t, v}')
+        self.con.commit()
 
     def characterize_run(self, future_periods: list[int] | None = None) -> None:
         """
@@ -305,14 +307,13 @@ class MyopicSequencer:
             logger.error('Not enough future years to run myopic mode: %d', len(future_periods))
         self.optimization_periods = future_periods.copy()
         last_idx = len(future_periods) - 1
-        indices = []
-        for idx, year in enumerate(future_periods[:-1]):
+        for idx in range(0, len(future_periods[:-1]), self.step_size):
             depth = min(self.view_depth, last_idx - idx)
             step = min(self.step_size, last_idx - idx)
             if depth < 1:
                 break
             myopic_idx = MyopicIndex(
-                base_year=year,
+                base_year=future_periods[idx],
                 step_year=future_periods[idx + step],
                 last_demand_year=future_periods[idx + depth - 1],
                 last_year=future_periods[idx + depth],
@@ -361,7 +362,7 @@ class MyopicSequencer:
 
     def __del__(self):
         """ensure the connection is closed when destructor is called."""
-        if hasattr(self, 'con'):  # it may not be constructed yet...
+        if hasattr(self, 'con') and self.con is not None:  # it may not be constructed yet...
             self.con.close()
 
     def initialize_myopic_efficiency_table(self):
@@ -372,14 +373,24 @@ class MyopicSequencer:
         # the -1 is used to indicate "existing" for flag purposes
         # we will just use the "existing" flag in the orig db to set this up and capture
         # all values in those vintages as "existing"
+        default_lifetime = TemoaModel.default_lifetime_tech
         query = (
             'INSERT INTO MyopicEfficiency '
-            "SELECT '-1', regions, input_comm, tech, vintage, output_comm, efficiency "
-            'FROM Efficiency '
+            '  SELECT -1, main.Efficiency.regions, input_comm, Efficiency.tech, Efficiency.vintage, output_comm, efficiency, '
+            f'  coalesce(main.LifetimeProcess.life_process, main.LifetimeTech.life, {default_lifetime}) AS lifetime '
+            '   FROM main.Efficiency '
+            '    LEFT JOIN main.LifetimeProcess '
+            '       ON main.Efficiency.tech = LifetimeProcess.tech '
+            '       AND main.Efficiency.vintage = LifetimeProcess.vintage '
+            '       AND main.Efficiency.regions = LifetimeProcess.regions '
+            '    LEFT JOIN main.LifetimeTech '
+            '       ON main.Efficiency.tech = main.LifetimeTech.tech '
+            '     AND main.Efficiency.regions = main.LifeTimeTech.regions '
             '   JOIN time_periods '
             '   ON Efficiency.vintage = time_periods.t_periods '
             "   WHERE flag = 'e'"
         )
+
         if self.debugging:
             print(query)
         self.cursor.execute(query)
@@ -452,10 +463,21 @@ class MyopicSequencer:
         self.con.commit()
 
         # 2.  Add the new stuff now visible
+        lifetime = TemoaModel.default_lifetime_tech
         query = (
             'INSERT INTO MyopicEfficiency '
-            f'SELECT {base}, regions, input_comm, tech, vintage, output_comm, efficiency '
-            'FROM Efficiency '
+            f'SELECT {base}, Efficiency.regions, input_comm, '
+            '      Efficiency.tech, Efficiency.vintage, output_comm, efficiency, '
+            f'     coalesce(main.LifetimeProcess.life_process, main.LifetimeTech.life, {lifetime}) '
+            f'     AS lifetime '
+            ' FROM main.Efficiency '
+            '    LEFT JOIN main.LifetimeProcess '
+            '       ON main.Efficiency.tech = LifetimeProcess.tech '
+            '       AND main.Efficiency.vintage = LifetimeProcess.vintage '
+            '       AND main.Efficiency.regions = LifetimeProcess.regions '
+            '    LEFT JOIN main.LifetimeTech '
+            '       ON main.Efficiency.tech = main.LifetimeTech.tech '
+            '     AND main.Efficiency.regions = main.LifeTimeTech.regions '
             f'  WHERE Efficiency.vintage >= {base}'
             f'  AND Efficiency.vintage <= {last_demand_year}'
         )

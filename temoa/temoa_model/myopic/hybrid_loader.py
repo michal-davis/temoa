@@ -2,7 +2,7 @@
 A module to build/load a Data Portal for myopic run using both SQL to pull data
 and python to filter results
 """
-
+import time
 from logging import getLogger
 from sqlite3 import Connection
 from typing import Sequence
@@ -50,7 +50,7 @@ class HybridLoader:
     """
 
     def __init__(self, db_connection: Connection):
-        self.debugging = True  # for T/S
+        self.debugging = False  # for T/S
         self.con = db_connection
 
         # filters for myopic ops
@@ -59,7 +59,7 @@ class HybridLoader:
         self.viable_vintages: set[int] = set()
         self.viable_rtv: set[tuple[str, str, int]] = set()
 
-    def _refresh_filters(self):
+    def _refresh_filters(self, myopic_index: MyopicIndex):
         """
         refresh all the sets used for filtering from the current contents
         of the MyopicEfficiency table.  This should normally be called
@@ -68,17 +68,18 @@ class HybridLoader:
         """
         cur = self.con.cursor()
         contents = cur.execute(
-            'SELECT region, input_comm, tech, vintage, output_comm FROM MyopicEfficiency'
+            'SELECT region, input_comm, tech, vintage, output_comm, lifetime FROM MyopicEfficiency'
         ).fetchall()
         logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
         self._clear_filters()
 
-        for r, c1, t, v, c2 in contents:
-            self.viable_techs.add(t)
-            self.viable_comms.add(c1)
-            self.viable_comms.add(c2)
-            self.viable_vintages.add(v)
-            self.viable_rtv.add((r, t, v))
+        for r, c1, t, v, c2, lifetime in contents:
+            if v + lifetime > myopic_index.base_year:
+                self.viable_techs.add(t)
+                self.viable_comms.add(c1)
+                self.viable_comms.add(c2)
+                self.viable_vintages.add(v)
+                self.viable_rtv.add((r, t, v))
 
     def _clear_filters(self):
         self.viable_techs.clear()
@@ -99,19 +100,20 @@ class HybridLoader:
             mi = myopic_index  # abbreviated name
 
         # housekeeping
-        self._refresh_filters()
+        tic = time.time()
+        self._refresh_filters(myopic_index=mi)
 
         data: dict[str, list | dict] = dict()
 
         def load_element(
-            c: Set | Param, values: Sequence, validation: set | None = None, rtv_loc: tuple = None
+            c: Set | Param, values: Sequence, validation: set | None = None, val_loc: tuple = None
         ):
             """
             Helper to alleviate some typing!
             :param c: the model component
             :param values: the keys for param or the item values for set
             :param validation: the set to validate the keys/set value against
-            :param rtv_loc: tuple of the positions of r, t, v in the key for validation
+            :param val_loc: tuple of the positions of r, t, v in the key for validation
             :return: None
             """
             match c:
@@ -129,17 +131,20 @@ class HybridLoader:
                 case Param():  # c is a pyomo Param
                     if validation and mi:
                         if validation is self.viable_rtv:
-                            if not rtv_loc:
+                            if not val_loc:
                                 raise ValueError(
                                     'Trying to validate against r, t, v and got no locations'
                                 )
                             data[c.name] = {
                                 t[:-1]: t[-1]
                                 for t in values
-                                if (t[rtv_loc[0]], t[rtv_loc[1]], t[rtv_loc[2]]) in self.viable_rtv
+                                if (t[val_loc[0]], t[val_loc[1]], t[val_loc[2]]) in self.viable_rtv
                             }
                         else:
-                            data[c.name] = {t[:-1]: t[-1] for t in values if t[:-1] in validation}
+                            if val_loc:
+                                data[c.name] = {t[:-1]: t[-1] for t in values if t[val_loc[0]] in validation}
+                            else:
+                                data[c.name] = {t[:-1]: t[-1] for t in values if t[:-1] in validation}
                     else:
                         data[c.name] = {t[:-1]: t[-1] for t in values}
                 case _:
@@ -192,7 +197,7 @@ class HybridLoader:
         load_element(M.tech_resource, raw, self.viable_techs)
 
         # tech_production
-        raw = cur.execute("SELECT tech from main.technologies WHERE flag = 'p'").fetchall()
+        raw = cur.execute("SELECT tech from main.technologies WHERE flag LIKE 'p%'").fetchall()
         load_element(M.tech_production, raw, self.viable_techs)
 
         # tech_baseload
@@ -230,7 +235,8 @@ class HybridLoader:
         if mi:
             raw = cur.execute(
                 'SELECT region, input_comm, tech, vintage, output_comm, efficiency '
-                'FROM MyopicEfficiency',
+                'FROM MyopicEfficiency '
+                f"WHERE MyopicEfficiency.vintage + MyopicEfficiency.lifetime > {mi.base_year}",
             ).fetchall()
         else:
             raw = cur.execute(
@@ -238,13 +244,35 @@ class HybridLoader:
                 'FROM main.Efficiency',
             ).fetchall()
         load_element(M.Efficiency, raw)
+        toc = time.time()
+        logger.debug('Data Portal Load time: %0.5f seconds', (toc - tic))
+
+
+
 
         # ExistingCapacity
+        default_lifetime = TemoaModel.default_lifetime_tech
+
         if mi:
+            # this is gonna be a bit ugly because we need to calculate the lifetime "on the fly"
+            # or we will get warnings in later years by including things that are dead
+            # lifetime =
             raw = cur.execute(
-                'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
-                'UNION '
-                'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity'
+                "SELECT region, tech, vintage, capacity FROM ("
+                "  SELECT lifetime, region, tech, vintage, capacity FROM main.MyopicCapacity "
+                "  UNION "
+                f" SELECT coalesce(main.LifetimeProcess.life_process, main.LifetimeTech.life, {default_lifetime}) "
+                "      AS lifetime,ExistingCapacity.regions, "
+                "         ExistingCapacity.tech,ExistingCapacity.vintage,exist_cap "
+                "  FROM main.ExistingCapacity "
+                "    LEFT JOIN main.LifetimeProcess "
+                "       ON main.ExistingCapacity.tech = LifetimeProcess.tech "
+                "       AND main.ExistingCapacity.vintage = LifetimeProcess.vintage "
+                "       AND main.ExistingCapacity.regions = LifetimeProcess.regions "
+                "    LEFT JOIN main.LifetimeTech "
+                "       ON main.ExistingCapacity.tech = main.LifetimeTech.tech "
+                "     AND main.ExistingCapacity.regions = main.LifeTimeTech.regions "
+                f" WHERE ExistingCapacity.vintage + lifetime > {mi.base_year} )"
             ).fetchall()
         else:
             raw = cur.execute(
@@ -254,7 +282,8 @@ class HybridLoader:
 
         # GlobalDiscountRate
         raw = cur.execute('SELECT rate from main.GlobalDiscountRate').fetchall()
-        load_element(M.GlobalDiscountRate, raw)
+        # do this separately as it is non-indexed, so we need to make a mapping with None
+        data[M.GlobalDiscountRate.name] = {None: raw[0][0]}
 
         # SegFrac
         raw = cur.execute(
@@ -284,10 +313,24 @@ class HybridLoader:
             M.CostFixed,
             raw,
             self.viable_rtv,
-            rtv_loc=(0, 2, 3)
+            val_loc=(0, 2, 3)
         )
+        # LifetimeTech
+        raw = cur.execute(
+            'SELECT regions, tech, life FROM main.LifetimeTech'
+        ).fetchall()
+        load_element(M.LifetimeTech, raw, self.viable_techs, val_loc=(1,))
+
+        # LifetimeProcess
+        raw = cur.execute(
+            'SELECT regions, tech, vintage, life_process FROM main.LifetimeProcess'
+        ).fetchall()
+        load_element(M.LifetimeProcess, raw, self.viable_rtv, val_loc=(0,1,2))
 
         # pyomo namespace format has data[namespace][idx]=value
         namespace = {None: data}
+        if self.debugging:
+            for item in namespace[None].items():
+                print(item[0], item[1])
         dp = DataPortal(data_dict=namespace)
         return dp
