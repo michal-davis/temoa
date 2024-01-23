@@ -142,9 +142,13 @@ class HybridLoader:
                             }
                         else:
                             if val_loc:
-                                data[c.name] = {t[:-1]: t[-1] for t in values if t[val_loc[0]] in validation}
+                                data[c.name] = {
+                                    t[:-1]: t[-1] for t in values if t[val_loc[0]] in validation
+                                }
                             else:
-                                data[c.name] = {t[:-1]: t[-1] for t in values if t[:-1] in validation}
+                                data[c.name] = {
+                                    t[:-1]: t[-1] for t in values if t[:-1] in validation
+                                }
                     else:
                         data[c.name] = {t[:-1]: t[-1] for t in values}
                 case _:
@@ -236,7 +240,7 @@ class HybridLoader:
             raw = cur.execute(
                 'SELECT region, input_comm, tech, vintage, output_comm, efficiency '
                 'FROM MyopicEfficiency '
-                f"WHERE MyopicEfficiency.vintage + MyopicEfficiency.lifetime > {mi.base_year}",
+                f'WHERE MyopicEfficiency.vintage + MyopicEfficiency.lifetime > {mi.base_year}',
             ).fetchall()
         else:
             raw = cur.execute(
@@ -247,9 +251,6 @@ class HybridLoader:
         toc = time.time()
         logger.debug('Data Portal Load time: %0.5f seconds', (toc - tic))
 
-
-
-
         # ExistingCapacity
         default_lifetime = TemoaModel.default_lifetime_tech
 
@@ -258,21 +259,21 @@ class HybridLoader:
             # or we will get warnings in later years by including things that are dead
             # lifetime =
             raw = cur.execute(
-                "SELECT region, tech, vintage, capacity FROM ("
-                "  SELECT lifetime, region, tech, vintage, capacity FROM main.MyopicCapacity "
-                "  UNION "
-                f" SELECT coalesce(main.LifetimeProcess.life_process, main.LifetimeTech.life, {default_lifetime}) "
-                "      AS lifetime,ExistingCapacity.regions, "
-                "         ExistingCapacity.tech,ExistingCapacity.vintage,exist_cap "
-                "  FROM main.ExistingCapacity "
-                "    LEFT JOIN main.LifetimeProcess "
-                "       ON main.ExistingCapacity.tech = LifetimeProcess.tech "
-                "       AND main.ExistingCapacity.vintage = LifetimeProcess.vintage "
-                "       AND main.ExistingCapacity.regions = LifetimeProcess.regions "
-                "    LEFT JOIN main.LifetimeTech "
-                "       ON main.ExistingCapacity.tech = main.LifetimeTech.tech "
-                "     AND main.ExistingCapacity.regions = main.LifeTimeTech.regions "
-                f" WHERE ExistingCapacity.vintage + lifetime > {mi.base_year} )"
+                'SELECT region, tech, vintage, capacity FROM ('
+                '  SELECT lifetime, region, tech, vintage, capacity FROM main.MyopicCapacity '
+                '  UNION '
+                f' SELECT coalesce(main.LifetimeProcess.life_process, main.LifetimeTech.life, {default_lifetime}) '
+                '      AS lifetime,ExistingCapacity.regions, '
+                '         ExistingCapacity.tech,ExistingCapacity.vintage,exist_cap '
+                '  FROM main.ExistingCapacity '
+                '    LEFT JOIN main.LifetimeProcess '
+                '       ON main.ExistingCapacity.tech = LifetimeProcess.tech '
+                '       AND main.ExistingCapacity.vintage = LifetimeProcess.vintage '
+                '       AND main.ExistingCapacity.regions = LifetimeProcess.regions '
+                '    LEFT JOIN main.LifetimeTech '
+                '       ON main.ExistingCapacity.tech = main.LifetimeTech.tech '
+                '     AND main.ExistingCapacity.regions = main.LifeTimeTech.regions '
+                f' WHERE ExistingCapacity.vintage + lifetime > {mi.base_year} )'
             ).fetchall()
         else:
             raw = cur.execute(
@@ -309,23 +310,16 @@ class HybridLoader:
             'SELECT regions, periods, tech, vintage, cost_fixed FROM main.CostFixed '
             f'WHERE {mi.base_year} <= CostFixed.periods AND CostFixed.periods <= {mi.last_demand_year}'
         ).fetchall()
-        load_element(
-            M.CostFixed,
-            raw,
-            self.viable_rtv,
-            val_loc=(0, 2, 3)
-        )
+        load_element(M.CostFixed, raw, self.viable_rtv, val_loc=(0, 2, 3))
         # LifetimeTech
-        raw = cur.execute(
-            'SELECT regions, tech, life FROM main.LifetimeTech'
-        ).fetchall()
+        raw = cur.execute('SELECT regions, tech, life FROM main.LifetimeTech').fetchall()
         load_element(M.LifetimeTech, raw, self.viable_techs, val_loc=(1,))
 
         # LifetimeProcess
         raw = cur.execute(
             'SELECT regions, tech, vintage, life_process FROM main.LifetimeProcess'
         ).fetchall()
-        load_element(M.LifetimeProcess, raw, self.viable_rtv, val_loc=(0,1,2))
+        load_element(M.LifetimeProcess, raw, self.viable_rtv, val_loc=(0, 1, 2))
 
         # pyomo namespace format has data[namespace][idx]=value
         namespace = {None: data}

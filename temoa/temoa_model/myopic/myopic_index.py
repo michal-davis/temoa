@@ -37,16 +37,18 @@ class MyopicIndex:
     """
     A frozen data structure to hold the years for a myopic iteration
     """
+
     base_year: int
     step_year: int
     last_demand_year: int
     last_year: int
 
     def __post_init__(self):
-
         if not self.base_year < self.step_year <= self.last_year:
-            raise ValueError(f'Received a nonsense value for step_year: {self.step_year} with '
-                             f'base_year: {self.base_year} and last_year: {self.last_year}')
+            raise ValueError(
+                f'Received a nonsense value for step_year: {self.step_year} with '
+                f'base_year: {self.base_year} and last_year: {self.last_year}'
+            )
         if not self.base_year <= self.last_demand_year < self.last_year:
             raise ValueError(
                 f'Sequencing of years in MyopicIndex is wrong: {self.base_year}, '
