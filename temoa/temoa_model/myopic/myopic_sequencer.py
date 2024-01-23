@@ -40,6 +40,7 @@ import definitions
 from temoa.temoa_model import run_actions
 from temoa.temoa_model.myopic.hybrid_loader import HybridLoader
 from temoa.temoa_model.myopic.myopic_index import MyopicIndex
+from temoa.temoa_model.myopic.myopic_progress_mapper import MyopicProgressMapper
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_model import TemoaModel
 
@@ -78,6 +79,7 @@ class MyopicSequencer:
         self.con = self.get_connection() if isinstance(config, TemoaConfig) else None
         # break out what is needed from the config
         myopic_options = config.myopic_inputs
+        self.progress_mapper: MyopicProgressMapper | None = None
         if not myopic_options:
             logger.error(
                 'The myopic mode was selected, but no options were received.\n %s',
@@ -210,19 +212,20 @@ class MyopicSequencer:
                 base_year = self.optimization_periods[new_start_idx]
                 idx = MyopicIndex(
                     base_year=base_year,
-                    depth=idx.depth + 1,
-                    last_demand_year=idx.last_demand_year,
-                    last_year=idx.last_year,
+                    step_year=idx.step_year,  # no change
+                    last_demand_year=idx.last_demand_year,  # no change
+                    last_year=idx.last_year,  # no change
                 )
             else:
                 raise RuntimeError('Illegal state in myopic iteration.')
             logger.info('Processing Myopic Index: %s', idx)
+            if not self.config.silent:
+                self.progress_mapper.report(idx, 'load')
 
             # 4. update the MyopicEfficiency table so it is ready for the data pull.
             self.update_myopic_efficiency_table(myopic_index=idx, prev_base=last_base_year)
 
             # 5. pull the data
-            print(f'\n\nPulling data for: {idx}')
             data_portal = data_loader.load_data_portal(
                 myopic_index=idx
             )  # just make a new data portal...they are untrustworthy...
@@ -231,12 +234,14 @@ class MyopicSequencer:
             instance = run_actions.build_instance(
                 loaded_portal=data_portal,
                 model_name=self.config.scenario,
-                silent=self.config.silent,
+                silent=True,  # override this, we do our own reporting...
             )
+            if not self.config.silent:
+                self.progress_mapper.report(idx, 'solve')
             model, results = run_actions.solve_instance(
                 instance=instance,
                 solver_name=self.config.solver_name,
-                silent=self.config.silent,
+                silent=True,  # override this, we do our own reporting...
                 keep_LP_files=self.config.save_lp_file,
             )
             optimal, status = run_actions.check_solve_status(results)
@@ -255,13 +260,14 @@ class MyopicSequencer:
             logger.info('Completed myopic iteration on %s', idx)
             # 7.  Update the output tables...
             self.update_output_tables(idx, model)
+            if not self.config.silent:
+                self.progress_mapper.report(idx, 'report')
 
             # prep next loop
             last_base_year = idx.base_year  # update
             last_instance_status = 'optimal'  # simulated...
 
             # TODO:  screen candy here for progress...
-
 
     def update_output_tables(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
         data = defaultdict(dict)
@@ -300,6 +306,11 @@ class MyopicSequencer:
                 "SELECT t_periods FROM main.time_periods WHERE flag = 'f'"
             ).fetchall()
             future_periods = sorted(t[0] for t in future_periods)
+
+        # set up the progress mapper
+        self.progress_mapper = MyopicProgressMapper(future_periods)
+        if not self.config.silent:
+            self.progress_mapper.draw_header()
 
         # check that we have enough periods to do myopic run
         # 2 iterations, excluding end year, will be via shortened depth, if reqd.

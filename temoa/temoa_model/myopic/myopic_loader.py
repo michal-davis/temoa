@@ -151,7 +151,10 @@ class DataPortalLoader:
             (self.M.regions, 'SELECT regions FROM main.regions'),
             # TODO:  will need to do RegionalGlobalIndices later as we did in db_to_dat
             # TODO:  The below is janky way to build all tech, but this is how model runs RN.
-            (self.M.tech_resource, f"SELECT tech FROM main.technologies {tech_filter} WHERE flag = 'r'"),
+            (
+                self.M.tech_resource,
+                f"SELECT tech FROM main.technologies {tech_filter} WHERE flag = 'r'",
+            ),
             (self.M.tech_production, "SELECT tech FROM main.technologies WHERE flag LIKE 'p%'"),
             (self.M.tech_baseload, "SELECT tech FROM main.technologies WHERE flag ='pb'"),
             (self.M.tech_storage, "SELECT tech FROM main.technologies WHERE flag = 'ps'"),
