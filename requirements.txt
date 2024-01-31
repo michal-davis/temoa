@@ -9,7 +9,7 @@ pyomo==6.7
 # xlwt  # not used
 ipython~=8.17.2
 matplotlib~=3.7.0
-pandas~=2.1.4
+pandas~=2.2.0
 numpy
 # scipy # not used
 joblib~=1.3.2
@@ -39,7 +39,7 @@ sphinxcontrib-bibtex
 # cbc <-- solver should be installed separately, not available on PyPi
 
 # new requirements
-pytest~=7.4.3
+pytest~=8.0.0
 Deprecated
 
 openpyxl~=3.1.2

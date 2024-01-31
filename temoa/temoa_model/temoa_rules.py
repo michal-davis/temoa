@@ -2527,6 +2527,7 @@ def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     if r == 'global':
         reg = M.regions
     else:
+        # TODO:  This is a bug.  r cannot be an interable.  We should use the breakup by "+" scheme
         reg = [r]
 
     try:
@@ -2576,6 +2577,8 @@ def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     if r == 'global':
         reg = M.regions
     else:
+        # TODO:  This is a bug.  r cannot be an interable.  We should use the breakup by "+" scheme
+
         reg = [r]
 
     try:
