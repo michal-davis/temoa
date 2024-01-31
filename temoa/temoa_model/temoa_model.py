@@ -30,7 +30,8 @@ from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.validators import (validate_linked_tech, region_check,
-                                          validate_CapacityFactorProcess, region_group_check)
+                                          validate_CapacityFactorProcess, region_group_check,
+                                          validate_Efficiency)
 
 
 class TemoaModel(AbstractModel):
@@ -116,6 +117,7 @@ class TemoaModel(AbstractModel):
         M.tech_storage = Set(within=M.tech_all)
         M.tech_reserve = Set(within=M.tech_all)
         M.tech_ramping = Set(within=M.tech_all)
+        # TODO:  both of these are outdated and can be removed / tests updated
         M.tech_capacity_min = Set(within=M.tech_all)
         M.tech_capacity_max = Set(within=M.tech_all)
         M.tech_curtailment = Set(within=M.tech_all)
@@ -200,9 +202,14 @@ class TemoaModel(AbstractModel):
 
         M.ExistingCapacity = Param(M.RegionalIndices, M.tech_all, M.vintage_exist)
 
+        # temporarily useful for passing down to validator to find set violations
+        # M.Efficiency = Param(
+        #     Any, Any, Any, Any, Any,
+        #     within=NonNegativeReals, validate=validate_Efficiency
+        # )
         M.Efficiency = Param(
             M.RegionalIndices, M.commodity_physical, M.tech_all, M.vintage_all, M.commodity_carrier,
-            within=NonNegativeReals
+            within=NonNegativeReals, validate=validate_Efficiency
         )
         # TODO:  This doesn't work for myopic, where the Efficiency Param for a
         #        particular myopic run may well exclude commodities, tech, etc.
@@ -232,6 +239,7 @@ class TemoaModel(AbstractModel):
 
         M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
         M.LifetimeLoanProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
+        # TODO:  Remove LifetimeLoanProcess....table no longer exists
         M.LifetimeLoanProcess = Param(M.LifetimeLoanProcess_rtv, mutable=True)
         M.initialize_Lifetimes = BuildAction(rule=CreateLifetimes)
 
@@ -282,8 +290,9 @@ class TemoaModel(AbstractModel):
         M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
         M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
         M.MaxResource = Param(M.RegionalIndices, M.tech_all)
-        M.MinCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
-        M.MaxCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
+        # TODO:  Both of the below sets are obsolete and can be removed w/ tests updated
+        # M.MinCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
+        # M.MaxCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
         M.MaxActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
         M.MinActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
         M.MinAnnualCapacityFactor = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all,

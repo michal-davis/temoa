@@ -29,6 +29,7 @@ import re
 from collections import defaultdict
 from logging import getLogger
 from typing import TYPE_CHECKING
+
 from pyomo.environ import NonNegativeReals
 
 if TYPE_CHECKING:
@@ -268,3 +269,25 @@ def validate_CapacityFactorProcess(M: 'TemoaModel', val, r, s, d, t, v) -> bool:
             0 <= val <= 1.0,
         )
     )
+
+def validate_Efficiency(M: 'TemoaModel', val, r, si, t, v, so) -> bool:
+
+
+    if all(
+        (
+            isinstance(val, float),
+            val > 0,
+            r in M.RegionalIndices,
+            si in M.commodity_physical,
+            t in M.tech_all,
+            so in M.commodity_carrier,
+            v in M.vintage_all,
+        )
+    ):
+        return True
+    print ('r', r in M.RegionalIndices)
+    print( 'si', si in M.commodity_physical )
+    print( 't', t in M.tech_all)
+    print( 'v', v in M.vintage_all)
+    print( 'so', so in M.commodity_carrier )
+    return False
