@@ -47,7 +47,8 @@ def validate_linked_tech(M: 'TemoaModel') -> bool:
     """
     logger.debug('Starting to validate linked techs.')
     # gather the tech-linked_tech pairs
-    tech_pairs = {(k[0], k[1], v) for (k, v) in M.LinkedTechs.items()}  # (r, t, linked_tech) tuples
+    tech_pairs = {(k[0], k[1], v) for (k, v) in M.LinkedTechs.items() if v in M.time_optimize}  # (r, t,
+    # linked_tech) tuples
 
     # get the lifetimes by (r, t) and v for comparison
     lifetimes: dict[tuple, dict] = defaultdict(dict)
@@ -85,7 +86,7 @@ def validate_linked_tech(M: 'TemoaModel') -> bool:
                 vintage_disparities = lifetimes[r, t].keys() ^ lifetimes[r, linked_tech].keys()
                 if vintage_disparities:
                     logger.error(
-                        'Tech %s and %s are linked but have differing vintages in Lifetime process in vintages:\n  %s',
+                        'Tech %s and %s are linked but have differing baseline vintages:\n  %s',
                         t,
                         linked_tech,
                         vintage_disparities,

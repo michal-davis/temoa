@@ -77,6 +77,15 @@ def price_checker(M: 'TemoaModel'):
         if p == v:
             base_year_variable_cost_rtv.add((r, t, v))
     logger.debug('  Finished making costing data structures for price checker')
+
+    # Check 0:  Look for techs that have NO fixed/invest/var cost at all
+    logger.debug('  Starting price check #0:  No costs at all. :(')
+    no_invest = efficiency_rtv - registered_inv_costs
+    no_fixed_costs = no_invest - fixed_costs.keys()
+    no_var_costs = no_fixed_costs - var_costs.keys()
+    for r, t, v in no_var_costs:
+        logger.error('No costs at all for: %s', (r, t, v))
+
     # Check 1 looks for missing (1a) and inconsistent (1b) fixed cost - investment cost pairings
     logger.debug('  Starting price check #1a')
     # Check 1a:  Look for "missing" FC/IC (no fixed or investment cost) based on what is in the

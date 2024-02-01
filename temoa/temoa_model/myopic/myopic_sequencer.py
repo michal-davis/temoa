@@ -446,7 +446,7 @@ class MyopicSequencer:
         )
         self.con.commit()
 
-        # 1.  Clean up stuff not implemented
+        # 1.  Clean up stuff not implemented in previous step
         query = (
             'DELETE FROM MyopicEfficiency WHERE NOT EXISTS ('
             '  SELECT * FROM MyopicCapacity WHERE '
