@@ -3,6 +3,7 @@ A module to build/load a Data Portal for myopic run using both SQL to pull data
 and python to filter results
 """
 import time
+from collections import defaultdict
 from logging import getLogger
 from sqlite3 import Connection
 from typing import Sequence
@@ -72,6 +73,7 @@ class HybridLoader:
         self.viable_output_comms: set[str] = set()
         self.viable_vintages: set[int] = set()
         self.viable_rtv: set[tuple[str, str, int]] = set()
+        self.efficiency_values: list[tuple] = []
 
     def _refresh_filters(self, myopic_index: MyopicIndex):
         """
@@ -81,6 +83,7 @@ class HybridLoader:
         :return:
         """
         cur = self.con.cursor()
+        self._clear_filters()
         # we need to union a couple things...
         # 1.  Everything from the MyopicEfficiency table that is still "alive" (within lifespan)
         # 2.  Everything in the original Efficiency table that is now "in view" for this
@@ -88,22 +91,85 @@ class HybridLoader:
         # We can just use '1' for the lifetime of the existing stuff, because the "test" is just
         # to be greater than the current vintage.
         contents = cur.execute(
-            'SELECT region, input_comm, tech, vintage, output_comm, lifetime FROM MyopicEfficiency '
-            'UNION '
-            'SELECT regions, input_comm, tech, vintage, output_comm, 1 FROM Efficiency '
-            f'WHERE vintage >= {myopic_index.base_year} AND vintage <= {myopic_index.last_demand_year}'
+            'SELECT region, input_comm, tech, vintage, output_comm, efficiency, lifetime  '
+            'FROM MyopicEfficiency '
+            f'WHERE vintage + lifetime > {myopic_index.base_year}'
         ).fetchall()
         logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
-        self._clear_filters()
 
-        for r, c1, t, v, c2, lifetime in contents:
-            if v + lifetime > myopic_index.base_year:
-                self.viable_techs.add(t)
-                self.viable_input_comms.add(c1)
-                self.viable_output_comms.add(c2)
-                self.viable_vintages.add(v)
-                self.viable_rtv.add((r, t, v))
+        # We will need to ID the physical commodities...
+        raw = cur.execute(
+            "SELECT comm_name FROM main.commodities WHERE flag = 'p'"
+        ).fetchall()
+        phys_commodities = {t[0] for t in raw}
+        assert len(phys_commodities) > 0, 'Failsafe...we should find some!  Flag change?'
+        # We will need to iterate a bit here to:
+        # 1.  Screen all the input commodities -> viable commodities
+        # 2.  Find any tech with PHYSICAL output commodity that is not viable (not in set above)
+        # 3.  Suppress that tech
+        # 4.  re-screen the input commodities
+        # 5.  quit when no more techs are suppressed
+        # 6.  Generate viable commodities & viable techs
+
+        # we probably need to keep track of (r, t, v) tuples here because you *could*
+        # have a tech process different things in different vintages/regions based solely
+        # on Efficiency Table
+
+        techs_by_output = defaultdict(set)
+        ok_techs = set()
+        suppressed_techs = set()
+        viable_phys_commodities = set()
+        for r, c1, t, v, c2, eff, lifetime in contents:
+            row = (r, c1, t, v, c2, eff)
+            if c1 not in phys_commodities:
+                raise ValueError(f'Tech {t} has a non-physical input: {c1}')
+            viable_phys_commodities.add(c1)
+            ok_techs.add(row)
+            # we screen here to not worry about demand/emission outputs
+            if c2 in phys_commodities:
+                techs_by_output[c2].add(row)
+
+        illegal_outputs = set(techs_by_output.keys()) - viable_phys_commodities
+        while illegal_outputs:
+            for output in illegal_outputs:
+                # mark all the techs that push that output as "suppressed"
+                suppressed_techs.update(techs_by_output[output])
+            # remove from viable
+            ok_techs -= suppressed_techs
+            # re-capture tech by output
+            techs_by_output.clear()
+            for row in ok_techs:
+                r, c1, t, v, c2, eff = row
+                if c2 in phys_commodities:
+                    techs_by_output[c2].add(row)
+
+            # re-screen for a new list of viable commodities from inputs
+            viable_phys_commodities = {row[1] for row in ok_techs}
+            illegal_outputs = set(techs_by_output.keys()) - viable_phys_commodities
+
+        # log the deltas
+        logger.debug('Reduced techs in Efficiency from %d to %d', len(contents), len(ok_techs))
+        logger.debug('Reduced Physical Commodities from %d to %d', len(raw), len(viable_phys_commodities))
+        # for tech in sorted(suppressed_techs, key = lambda tech: tech[2]):
+        #     print(tech)
+        for tech in suppressed_techs:
+            logger.info('Tech: %s\n'
+                        ' is SUPPRESSED as it has a Physical Commodity output that has no viable '
+                        'receiver', tech)
+
+        for row in ok_techs:
+            r, c1, t, v, c2, _ = row
+            self.viable_techs.add(t)
+            self.viable_input_comms.add(c1)
+            self.viable_rtv.add((r, t, v))
+            self.viable_vintages.add(v)
+            self.viable_output_comms.add(c2)
         self.viable_comms = self.viable_input_comms | self.viable_output_comms
+
+        # book the EfficiencyTable
+        # we should sort here for deterministic results after pulling from set
+        self.efficiency_values = sorted(ok_techs)
+
 
     def _clear_filters(self):
         self.viable_techs.clear()
@@ -112,6 +178,7 @@ class HybridLoader:
         self.viable_comms.clear()
         self.viable_rtv.clear()
         self.viable_vintages.clear()
+        self.efficiency_values.clear()
 
     def table_exists(self, table_name: str) -> bool:
         """
@@ -177,16 +244,15 @@ class HybridLoader:
         # 2. use SQL query to get the full table
         # 3. (OPTIONALLY) filter it, as needed for myopic
         # 4. load it into the data dictionary
+        tic = time.time()
 
         if myopic_index is not None and not isinstance(myopic_index, MyopicIndex):
             raise ValueError(f'received an illegal entry for the myopic index: {myopic_index}')
         else:
             mi = myopic_index  # abbreviated name
+            self._refresh_filters(myopic_index=mi)
 
         # housekeeping
-        tic = time.time()
-        self._refresh_filters(myopic_index=mi)
-
         data: dict[str, list | dict] = dict()
 
         def load_element(
@@ -304,7 +370,7 @@ class HybridLoader:
                 raw = cur.execute(f'SELECT {field_name} from main.{table}').fetchall()
                 regions_and_groups.update({t[0] for t in raw})
         # filter to those that contain "+" and sort (for deterministic pyomo behavior)
-        list_of_groups = sorted((t, ) for t in regions_and_groups if "+" in t)
+        list_of_groups = sorted((t, ) for t in regions_and_groups) #if "+" in t or t=='global')
         load_element(M.RegionalGlobalIndices, list_of_groups)
 
         # region-exchanges
@@ -357,7 +423,7 @@ class HybridLoader:
         # tech_flex
         # TODO:  later
 
-        # tech_exhcange
+        # tech_exchange
         raw = cur.execute('SELECT tech from main.tech_exchange').fetchall()
         load_element(M.tech_exchange, raw, self.viable_techs)
 
@@ -392,41 +458,20 @@ class HybridLoader:
         # The model enforces 0 symmetric difference between the physical commodities
         # and the input commodities, so we need to include only the viable INPUTS
         load_element(M.commodity_physical, raw, self.viable_input_comms)
-        physical_commodities = {t[0] for t in raw}  # capture for later use.
 
         #  === PARAMS ===
 
         # Efficiency
         if mi:
-            # we are running myopically, so we want everything from the
-            # myopic eff. table up to, but not including the base year, if it is
-            # still "alive" (hence the lifetime check) AND
-            # all of the "new stuff" that is now in view from mi.base_year
-            # up to mi.last_demand_year
-            raw = cur.execute(
-                'SELECT region, input_comm, tech, vintage, output_comm, efficiency '
-                'FROM MyopicEfficiency '
-                f'WHERE MyopicEfficiency.vintage + MyopicEfficiency.lifetime > {mi.base_year} ' 
-                'UNION '
-                'SELECT regions, input_comm, tech, vintage, output_comm, efficiency '
-                'FROM Efficiency '
-                f'WHERE vintage >= {mi.base_year} AND vintage <= {mi.last_demand_year}'
-            ).fetchall()
-            # ADD IN:  It seems in some oddly formed DB's there may be case where a
-            # commodity is not visible in input and output in the same first year, which
-            # TEMOA will pop an error on the unknown commodity, so we need to screen both
-            # input and output commodities, to make sure both are "in visibility"
-            raw = [(r, i, t, v, o, e) for r, i, t, v, o, e in raw if
-                    i in self.viable_input_comms and
-                    o in self.viable_output_comms]
+            # use what we have already computed
+            raw = self.efficiency_values
         else:
             raw = cur.execute(
                 'SELECT regions, input_comm, tech, vintage, output_comm, efficiency '
                 'FROM main.Efficiency',
             ).fetchall()
-        # filter...
-        filtered_raw = HybridLoader._efficiency_table_cleanup(raw, physical_commodities=physical_commodities)
-        load_element(M.Efficiency, filtered_raw)
+
+        load_element(M.Efficiency, raw)
 
 
         # ExistingCapacity
@@ -436,27 +481,15 @@ class HybridLoader:
             # or we will get warnings in later years by including things that are dead
             # noinspection SqlUnused
             raw = cur.execute(
-                'SELECT region, tech, vintage, capacity FROM ('
-                '  SELECT lifetime, region, tech, vintage, capacity FROM main.MyopicCapacity '
+                'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
                 '  UNION '
-                f' SELECT coalesce(main.LifetimeProcess.life_process, main.LifetimeTech.life, {default_lifetime}) '
-                '      AS lifetime,ExistingCapacity.regions, '
-                '         ExistingCapacity.tech,ExistingCapacity.vintage,exist_cap '
-                '  FROM main.ExistingCapacity '
-                '    LEFT JOIN main.LifetimeProcess '
-                '       ON main.ExistingCapacity.tech = LifetimeProcess.tech '
-                '       AND main.ExistingCapacity.vintage = LifetimeProcess.vintage '
-                '       AND main.ExistingCapacity.regions = LifetimeProcess.regions '
-                '    LEFT JOIN main.LifetimeTech '
-                '       ON main.ExistingCapacity.tech = main.LifetimeTech.tech '
-                '     AND main.ExistingCapacity.regions = main.LifeTimeTech.regions '
-                f' WHERE ExistingCapacity.vintage + lifetime > {mi.base_year} )'
+                'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity '
             ).fetchall()
         else:
             raw = cur.execute(
                 'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity'
             ).fetchall()
-        load_element(M.ExistingCapacity, raw)
+        load_element(M.ExistingCapacity, raw, self.viable_rtv, (0, 1, 2))
 
         # GlobalDiscountRate
         raw = cur.execute('SELECT rate from main.GlobalDiscountRate').fetchall()
@@ -569,6 +602,7 @@ class HybridLoader:
         # DiscountRate
         raw = cur.execute(
             'SELECT regions, tech, vintage, tech_rate FROM main.DiscountRate '
+            f'WHERE vintage >= {mi.base_year}'
         ).fetchall()
         load_element(M.DiscountRate, raw, self.viable_rtv, (0, 1, 2))
 
@@ -599,12 +633,14 @@ class HybridLoader:
         if self.table_exists("MaxActivity"):
             raw = cur.execute(
                 'SELECT regions, periods, tech, maxact FROM main.MaxActivity '
+                f'WHERE periods >= {mi.base_year} and periods <= {mi.last_demand_year}'
             ).fetchall()
             load_element(M.MaxActivity, raw, self.viable_techs, (2,))
 
         # MinActivity
         raw = cur.execute(
             'SELECT regions, periods, tech, minact FROM main.MinActivity '
+            f'WHERE periods >= {mi.base_year} and periods <= {mi.last_demand_year}'
         ).fetchall()
         load_element(M.MinActivity, raw, self.viable_techs, (2,))
 
@@ -658,7 +694,7 @@ class HybridLoader:
 
         # LinkedTechs
         # Note:  Both of the linked techs must be viable.  As this is non period/vintage
-        #        specific, it should be true that if one is built, the otehr is also
+        #        specific, it should be true that if one is built, the other is also
         raw = cur.execute(
             'SELECT primary_region, primary_tech, emis_comm, linked_tech FROM main.LinkedTechs'
         ).fetchall()
