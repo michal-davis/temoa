@@ -65,8 +65,7 @@ def get_str_padding(obj):
 
 
 def CommodityBalanceConstraintErrorCheck(vflow_out, vflow_in, r, p, s, d, c):
-    # TODO:  This needs a deep-dive.  Not clear why we are triggering on an instance of int to do
-    #  "stuff"
+    # an "int" here indicates that the summation ended up without any variables (empty)
     if isinstance(vflow_out, int):
         flow_in_expr = StringIO()
         vflow_in.pprint(ostream=flow_in_expr)
@@ -79,7 +78,8 @@ def CommodityBalanceConstraintErrorCheck(vflow_out, vflow_in, r, p, s, d, c):
                " - Is there a missing commodity in set 'commodity_physical'?\n"
                ' - Are there missing entries in the Efficiency parameter?\n'
                ' - Does a process need a longer LifetimeProcess parameter setting?')
-        logger.error(msg)
+        logger.error(msg.format(
+            r, c, s, d, p, flow_in_expr.getvalue()))
         raise Exception(msg.format(
             r, c, s, d, p, flow_in_expr.getvalue()
         ))
@@ -674,6 +674,7 @@ def CreateSparseDicts(M: 'TemoaModel'):
             # dictionary.
             M.processInputs[pindex].add(i)
             M.processOutputs[pindex].add(o)
+            # TODO:  The below construct requires that each tech-vintage has same i/o in all regions
             M.commodityDStreamProcess[r, p, i].add((t, v))
             M.commodityUStreamProcess[r, p, o].add((t, v))
             M.ProcessOutputsByInput[r, p, t, v, i].add(o)
