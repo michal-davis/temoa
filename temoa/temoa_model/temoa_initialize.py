@@ -18,7 +18,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
-
+from collections import defaultdict
 from itertools import product as cross_product
 from operator import itemgetter as iget
 from sys import stderr as SE
@@ -787,6 +787,11 @@ def CreateSparseDicts(M: 'TemoaModel'):
 
                                 for r, p, t in M.processVintages.keys() for v in
                                 M.processVintages[r, p, t])
+
+    M.activeRegionsForTech = defaultdict(set)
+    for r, p, t, v in M.activeActivity_rptv:
+        M.activeRegionsForTech[p, t].add(r)
+
 
     M.activeCapacity_rtv = set((r, t, v)
 

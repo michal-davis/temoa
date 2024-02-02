@@ -201,7 +201,7 @@ class DataPortalLoader:
                 self.M.ExistingCapacity,
                 f'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
                 'UNION '
-                'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity',
+                'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity ',
             )
         else:
             capacity_pair = (

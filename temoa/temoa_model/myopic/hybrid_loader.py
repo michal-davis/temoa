@@ -482,8 +482,9 @@ class HybridLoader:
             # noinspection SqlUnused
             raw = cur.execute(
                 'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
-                '  UNION '
-                'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity '
+                f' WHERE vintage < {mi.base_year} '
+                'UNION '
+                '  SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity '
             ).fetchall()
         else:
             raw = cur.execute(
@@ -679,12 +680,12 @@ class HybridLoader:
         raw = cur.execute(
             'SELECT regions, emis_comm, input_comm, tech, vintage, output_comm, emis_act '
             'FROM main.EmissionActivity '
-            f'WHERE vintage >= {mi.base_year}'
+            # f'WHERE vintage >= {mi.base_year}'
         ).fetchall()
         filtered = [(r, e, i, t, v, o, val) for r, e, i, t, v, o, val in raw
                     if t in self.viable_techs
                     and v in self.viable_vintages
-                    and i in self.viable_comms
+                    and i in self.viable_input_comms
                     and o in self.viable_comms]
         load_element(M.EmissionActivity, filtered)
 
