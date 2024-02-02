@@ -26,7 +26,6 @@ from pyomo.core import BuildCheck
 from pyomo.environ import (Any, NonNegativeReals, AbstractModel, BuildAction, Param, Set, Var,
                            Objective, minimize)
 
-from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.validators import (validate_linked_tech, region_check,
@@ -48,16 +47,22 @@ class TemoaModel(AbstractModel):
         #       (not formal model elements)            #
         ################################################
 
+        # Dev Note:  The triple-quotes UNDER the items below pop up as dox in most IDEs
         M.processInputs = dict()
         M.processOutputs = dict()
         M.processLoans = dict()
         M.activeFlow_rpsditvo = None
+        """a flow index for techs NOT in tech_annual"""
         M.activeFlow_rpitvo = None
+        """a flow index for techs in tech_annual only"""
         M.activeFlex_rpsditvo = None
         M.activeFlex_rpitvo = None
         M.activeFlowInStorage_rpsditvo = None
         M.activeCurtailment_rpsditvo = None
         M.activeActivity_rptv = None
+        """currently available (within lifespan) (r, p, t, v) tuples (from M.processVintages)"""
+        M.activeRegionsForTech = None
+        """currently available regions by period and tech {(p, t) : r}"""
         M.activeCapacity_rtv = None
         M.activeCapacityAvailable_rpt = None
         M.activeCapacityAvailable_rptv = None
@@ -68,6 +73,7 @@ class TemoaModel(AbstractModel):
         M.processTechs = dict()
         M.processReservePeriods = dict()
         M.processVintages = dict()
+        """current available (within lifespan) vintages {(r, p, t) : v}"""
         M.baseloadVintages = dict()
         M.curtailmentVintages = dict()
         M.storageVintages = dict()
@@ -267,7 +273,7 @@ class TemoaModel(AbstractModel):
         M.CostVariable_rptv = Set(dimen=4, initialize=CostVariableIndices)
         M.CostVariable = Param(M.CostVariable_rptv)
 
-        M.validate_pricing = BuildAction(rule=price_checker)
+        # M.validate_pricing = BuildAction(rule=price_checker)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
