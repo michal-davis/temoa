@@ -386,6 +386,10 @@ class HybridLoader:
         raw = cur.execute("SELECT tech from main.technologies WHERE flag LIKE 'p%'").fetchall()
         load_element(M.tech_production, raw, self.viable_techs)
 
+        # tech_uncap
+        raw = cur.execute('SELECT tech from main.technologies WHERE unlim_cap > 0').fetchall()
+        load_element(M.tech_uncap, raw, self.viable_techs)
+
         # tech_baseload
         raw = cur.execute(f"SELECT tech from main.technologies where flag = 'pb'").fetchall()
         load_element(M.tech_baseload, raw, self.viable_techs)

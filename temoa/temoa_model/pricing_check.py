@@ -54,8 +54,12 @@ logger = getLogger(__name__)
 def price_checker(M: 'TemoaModel'):
     logger.info('Started price checking model: %s', M.name)
     # some sets for x-checking
-    registered_inv_costs = {(region, tech, vintage) for (region, tech, vintage) in M.CostInvest.sparse_iterkeys()}
-    efficiency_rtv = {(region, tech, vintage) for (region, _, tech, vintage, __) in M.Efficiency.sparse_iterkeys()}
+    registered_inv_costs = {
+        (region, tech, vintage) for (region, tech, vintage) in M.CostInvest.sparse_iterkeys()
+    }
+    efficiency_rtv = {
+        (region, tech, vintage) for (region, _, tech, vintage, __) in M.Efficiency.sparse_iterkeys()
+    }
     sorted_efficiency_rtv = sorted(efficiency_rtv, key=lambda rtv: (rtv[1], rtv[0], rtv[2]))
 
     # make convenience dicts to avoid repeated filtering
@@ -248,3 +252,82 @@ def price_checker(M: 'TemoaModel'):
             )
 
     logger.info('Finished Price Checking Build Action')
+
+
+def check_tech_uncap(M: 'TemoaModel') -> bool:
+    """
+    Check that the tech_uncap set members...
+    1.  do not have fixed or invest costs
+    2.  Either have no Var cost, or a Var cost in every year of their lifespan
+    3.  Are not in the MaxCapacity/MinCapacity parameters
+    4.  future:  screen the group capacity params
+    :param M:
+    :return:
+    """
+    if len(M.tech_uncap) == 0:
+        return True
+    efficiency_rtv = {
+        (region, tech, vintage)
+        for (region, _, tech, vintage, __) in M.Efficiency.sparse_iterkeys()
+        if tech in M.tech_uncap
+    }
+
+    fixed_cost_periods = {(r, t, v): p for r, p, t, v in M.CostFixed}
+    rtv_with_fixed_cost = efficiency_rtv & set(fixed_cost_periods.keys())
+    if rtv_with_fixed_cost:
+        logger.error(
+            'The following technologies are labeled as unlimited capacity, but have a FIXED cost in periods'
+        )
+        for rtv in rtv_with_fixed_cost:
+            logger.error('%s: %s', rtv, fixed_cost_periods[rtv])
+
+    rtv_with_invest_cost = efficiency_rtv & set(M.CostInvest.keys())
+    if rtv_with_invest_cost:
+        logger.error(
+            'The following technologies are labeled as unlimited capacity, but have an INVEST cost'
+        )
+        for rtv in rtv_with_invest_cost:
+            logger.error('%s', rtv)
+
+    var_cost_periods = defaultdict(set)
+    for r, p, t, v in M.CostVariable.sparse_iterkeys():
+        if (r, t, v) in efficiency_rtv:
+            var_cost_periods[(r, t, v)].add(p)
+    # use it to check for all/none var costs in viable periods
+    all_periods = M.time_future
+    bad_var_costs = False
+    for r, t, v in var_cost_periods:
+        lifetime = M.LifetimeProcess[r, t, v]
+        expected_periods = {p for p in all_periods if v <= p < v + lifetime}
+        missing_periods = expected_periods - var_cost_periods[r, t, v]
+        if missing_periods:
+            logger.error(
+                'Unlimited capacity tech has some Variable costs, but is missing cost in periods: %s',
+                missing_periods,
+            )
+            bad_var_costs = True
+        extra_periods = var_cost_periods[r, t, v] - expected_periods
+        if extra_periods:
+            logger.warning(
+                'Unlimited capacity region-tech-vintage %s-%s-%s has some variable costs outside of its '
+                'lifespan: %s',
+                r,
+                t,
+                v,
+                extra_periods,
+            )
+
+    # screen the basic Capacity regulating parameters
+    # TODO:  future development to refine this to look for membership in tech groups that have limits
+
+    capacity_params = (M.MaxCapacity, M.MinCapacity)
+    bad_cap_entries = False
+    for param in capacity_params:
+        bad_entries = {(r, t, v) for r, t, v in param.keys() if t in M.tech_uncap}
+        if bad_entries:
+            for entry in bad_entries:
+                logger.error('Cannot limit unlimited capacity tech %s in table %s: %s', entry[1], param.name, entry)
+
+    if any((rtv_with_fixed_cost, rtv_with_invest_cost, bad_var_costs, bad_cap_entries)):
+        return False
+    return True

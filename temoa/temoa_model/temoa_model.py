@@ -119,6 +119,8 @@ class TemoaModel(AbstractModel):
         M.tech_resource = Set()
         M.tech_production = Set()
         M.tech_all = Set(initialize=M.tech_resource | M.tech_production)
+        M.tech_uncap = Set(within=M.tech_all)
+        """techs with unlimited capacity, ALWAYS available within lifespan"""
         M.tech_baseload = Set(within=M.tech_all)
         M.tech_storage = Set(within=M.tech_all)
         M.tech_reserve = Set(within=M.tech_all)
