@@ -30,7 +30,7 @@ import sqlite3
 from collections import deque, defaultdict
 from pathlib import Path
 from shutil import copyfile
-from sqlite3 import Connection, Cursor
+from sqlite3 import Connection
 from sys import stderr as SE
 
 from pyomo.core import value
@@ -77,6 +77,7 @@ class MyopicSequencer:
         # establish a connection to the controlling db
         # allow a "shunt" here so we can test parts of this by passing a None config
         self.con = self.get_connection() if isinstance(config, TemoaConfig) else None
+        self.cursor = self.con.cursor()
         # break out what is needed from the config
         myopic_options = config.myopic_inputs
         self.progress_mapper: MyopicProgressMapper | None = None
@@ -100,15 +101,15 @@ class MyopicSequencer:
                     f'Check config'
                 )
 
-    @property
-    def cursor(self) -> Cursor:
-        """
-        cursor for the db
-        :return: cursor for the session started in the database
-        """
-        # doing this as a property is a preventative measure to isolate the cursor
-        # (it can't be overwritten)
-        return self.con.cursor()
+    # @property
+    # def cursor(self) -> Cursor:
+    #     """
+    #     cursor for the db
+    #     :return: cursor for the session started in the database
+    #     """
+    #     # doing this as a property is a preventative measure to isolate the cursor
+    #     # (it can't be overwritten)
+    #     return self.con.cursor()
 
     def get_connection(self) -> Connection:
         """
@@ -202,7 +203,7 @@ class MyopicSequencer:
             elif last_instance_status == 'roll_back':
                 offset_periods -= 1
                 curr_start_idx = self.optimization_periods.index(idx.base_year)
-                new_start_idx = curr_start_idx + offset_periods
+                new_start_idx = curr_start_idx - 1  # + offset_periods
                 if new_start_idx < 0:
                     logger.error('Failed myopic iteration.  Cannot back up any further.')
                     raise RuntimeError(
@@ -259,7 +260,8 @@ class MyopicSequencer:
 
             logger.info('Completed myopic iteration on %s', idx)
             # 7.  Update the output tables...
-            self.update_output_tables(idx, model)
+            self.update_capacity_table(idx, model)
+            self.update_flow_out_table(idx, model)
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'report')
 
@@ -269,30 +271,91 @@ class MyopicSequencer:
 
             # TODO:  screen candy here for progress...
 
-    def update_output_tables(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
+    def update_capacity_table(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
+        if self.debugging:
+            print('publishing: ', myopic_idx)
         data = defaultdict(dict)
         for r, p, t, v in model.V_Capacity:
             # start at base year, to prevent re-writing existing
             # stop before step year, which will be written in next iteration
-            if myopic_idx.base_year <= v < myopic_idx.step_year:
+            if myopic_idx.base_year <= p < myopic_idx.step_year:
                 val = value(model.V_Capacity[r, p, t, v])
-                if abs(val) < self.capacity_epsilon:
+                if val < self.capacity_epsilon:
                     continue
-                # we only need to capture for the vintage
-                # TODO:  Come back to this after we look at retirements/curtailment
-                if p < myopic_idx.step_year:
+                else:
                     data['V_Capacity'][r, p, t, v] = val
                     continue
+        # we need to clear all entries in the table from the base year forward because we may
+        # be "backing up" and that will cause collisions
+        self.cursor.execute(f'DELETE FROM MyopicCapacity WHERE period >= {myopic_idx.base_year}')
+        self.con.commit()
+
         for (r, p, t, v), val in data['V_Capacity'].items():
-            # print(r, t, v, val)
             lifetime = model.LifetimeProcess[r, t, v]
+            # need to pull the sector...
+            raw = self.cursor.execute(
+                'SELECT sector FROM main.technologies WHERE tech = ?', (t,)
+            ).fetchall()
+            sector = raw[0][0]
             try:
                 self.cursor.execute(
-                    'INSERT INTO MyopicCapacity ' f'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                    (myopic_idx.base_year, self.config.scenario, r, p, t, v, val, lifetime),
+                    'INSERT INTO MyopicCapacity ' 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (myopic_idx.base_year, self.config.scenario, r, p, sector, t, v, val, lifetime)
                 )
             except sqlite3.IntegrityError:
-                print(f'choked on : {myopic_idx.base_year, r, p, t, v}')
+                print(f'choked updating MyopicCapacity on : {myopic_idx.base_year, r, p, t, v, val, lifetime}')
+        self.con.commit()
+
+        # we also need to add in any newly available unrestricted capacity techs, for which there is no V_Capacity
+        # it is probably easier/quicker to filter the model Efficiency data container vs. the old Efficiency table
+        new_unrestricted_cap_entries = {(r, p, t, v)
+                                        for r, p, s, d, i, t, v, o
+                                        in model.activeFlow_rpsditvo
+                                        if t in model.tech_uncap}
+        for (r, p, t, v) in new_unrestricted_cap_entries:
+            lifetime = model.LifetimeProcess[r, t, v]
+            # need to pull the sector...
+            raw = self.cursor.execute(
+                'SELECT sector FROM main.technologies WHERE tech = ?', (t,)
+            ).fetchall()
+            sector = raw[0][0]
+            try:
+                self.cursor.execute(
+                    'INSERT INTO MyopicCapacity ' 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (myopic_idx.base_year, self.config.scenario, r, p, sector, t, v, None, lifetime)
+                )
+            except sqlite3.IntegrityError:
+                print(f'choked updating MyopicCapacity on : {myopic_idx.base_year, r, p, t, v, None, lifetime}')
+        self.con.commit()
+
+
+    def update_flow_out_table(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
+        data = defaultdict(dict)
+        # clean up the data
+        # for r, p, s, d, i, t, v, o in model.V_FlowOut:
+
+        # erase in case we are over-writing
+        self.cursor.execute(f'DELETE FROM main.MyopicFlowOut WHERE period >= {myopic_idx.base_year}')
+        self.con.commit()
+
+        # write it...
+        for (r, p, s, d, i, t, v, o), flow in model.V_FlowOut.items():
+            flow = value(flow)
+            if flow < self.capacity_epsilon:
+                continue
+            raw = self.cursor.execute(
+                'SELECT sector FROM main.technologies WHERE tech = ?', (t,)
+            ).fetchall()
+            sector = raw[0][0]
+            try:
+                self.cursor.execute(
+                    'INSERT INTO MyopicFlowOut VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                   ( self.config.scenario, r, sector, p, s, d, i, t, v, o, flow)
+                )
+            except sqlite3.IntegrityError:
+                print(f'choked updating MyopicFlowOut on : { self.config.scenario, r, sector, p, s, d, i, t, v, o, flow}')
+            except sqlite3.ProgrammingError:
+                print(f'choked updating MyopicFlowOut on : { self.config.scenario, r, sector, p, s, d, i, t, v, o, flow}')
         self.con.commit()
 
     def characterize_run(self, future_periods: list[int] | None = None) -> None:
@@ -344,6 +407,7 @@ class MyopicSequencer:
             sql_commands = table_script.read()
         logger.debug('Executing sql from file: %s on connection: %s', script_file, self.con)
         self.cursor.executescript(sql_commands)
+        self.con.commit()
 
     def drop_old_results(self):
         """
@@ -353,6 +417,7 @@ class MyopicSequencer:
         logger.debug('Dropping old myopic result tables...')
         for table in self.myopic_tables:
             self.cursor.execute(f'DROP TABLE IF EXISTS {table};')
+        self.con.commit()
 
     def clear_results(self, period):
         """
@@ -370,6 +435,7 @@ class MyopicSequencer:
         logger.debug('Clearing period %s', period)
         for table in self.myopic_tables:
             self.cursor.execute(f'DELETE FROM {table} WHERE period = {period}')
+        self.con.commit()
 
     def __del__(self):
         """ensure the connection is closed when destructor is called."""

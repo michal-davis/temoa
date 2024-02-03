@@ -4,6 +4,7 @@ CREATE TABLE MyopicCapacity (
     year_added  integer,
     scenario    text,
     region      text,
+    period      integer,
     sector      text,
     tech        text,
     vintage     integer,
@@ -14,7 +15,7 @@ CREATE TABLE MyopicCapacity (
     FOREIGN KEY (vintage) REFERENCES time_periods(t_periods),
     FOREIGN KEY (tech)  REFERENCES technologies(tech),
 
-    PRIMARY KEY (region, scenario, tech, vintage),
+    PRIMARY KEY (scenario, region, period, tech, vintage),
     CHECK  ( capacity >= 0 )
 );
 CREATE TABLE MyopicEmission (
@@ -33,7 +34,7 @@ CREATE TABLE MyopicEmission (
     FOREIGN KEY (tech)  REFERENCES technologies(tech),
     FOREIGN KEY (emission_commodity) REFERENCES commodities(comm_name),
 
-    PRIMARY KEY (region, scenario, period, emission_commodity, tech, vintage)
+    PRIMARY KEY (scenario,region, period, emission_commodity, tech, vintage)
 );
 CREATE TABLE MyopicCurtailment (
     scenario    text,

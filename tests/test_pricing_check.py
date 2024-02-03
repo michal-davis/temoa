@@ -39,6 +39,7 @@ def mock_model():
     M.time_future = Set(initialize=[2020, 2010, 2020, 2030])
     M.LifetimeProcess = Param(Any, Any, Any, initialize={('CA', 'refinery', 2020): 30})
     M.Efficiency = Param(Any, Any, Any, Any, Any, initialize={('CA', 0, 'refinery', 2020, 0): 1.0})
+    M.ExistingCapacity = Param(Any, Any, Any, mutable=True)
     return M
 
 

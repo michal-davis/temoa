@@ -83,12 +83,14 @@ def price_checker(M: 'TemoaModel'):
     logger.debug('  Finished making costing data structures for price checker')
 
     # Check 0:  Look for techs that have NO fixed/invest/var cost at all
+    # This is now a DEBUG level alert because it is possible/ok for uncap techs to have no costs
+    # and techs that are not in tech_uncap are already screened below in check #1
     logger.debug('  Starting price check #0:  No costs at all. :(')
     no_invest = efficiency_rtv - registered_inv_costs
     no_fixed_costs = no_invest - fixed_costs.keys()
     no_var_costs = no_fixed_costs - var_costs.keys()
     for r, t, v in no_var_costs:
-        logger.error('No costs at all for: %s', (r, t, v))
+        logger.debug('No costs at all for: %s', (r, t, v))
 
     # Check 1 looks for missing (1a) and inconsistent (1b) fixed cost - investment cost pairings
     logger.debug('  Starting price check #1a')
@@ -98,11 +100,11 @@ def price_checker(M: 'TemoaModel'):
     # pull the details...
     chk_1_errors = []
     for region, tech, vintage in sorted_efficiency_rtv:
-        # disregard "resource" technologies
-        if tech in M.tech_resource:
+        # disregard "unrestricted capacity" technologies that should NOT have a fixed/invest cost
+        if tech in M.tech_uncap:
             continue
-        # disregard vintages that are not in the optimization period (they are never accessed in
-        # model)
+        # disregard vintages that are not in the optimization period, their capacity decisions
+        # are already made and the lack of fixed/invest cost is non-impactful
         if vintage not in M.time_optimize:
             continue
 
@@ -290,6 +292,7 @@ def check_tech_uncap(M: 'TemoaModel') -> bool:
             logger.error('%s', rtv)
 
     var_cost_periods = defaultdict(set)
+    # by starting from the cost side, we will naturally omit anything with NO var costs at all.
     for r, p, t, v in M.CostVariable.sparse_iterkeys():
         if (r, t, v) in efficiency_rtv:
             var_cost_periods[(r, t, v)].add(p)
@@ -320,7 +323,7 @@ def check_tech_uncap(M: 'TemoaModel') -> bool:
     # screen the basic Capacity regulating parameters
     # TODO:  future development to refine this to look for membership in tech groups that have limits
 
-    capacity_params = (M.MaxCapacity, M.MinCapacity)
+    capacity_params = (M.MaxCapacity, M.MinCapacity, M.ExistingCapacity)
     bad_cap_entries = False
     for param in capacity_params:
         bad_entries = {(r, t, v) for r, t, v in param.keys() if t in M.tech_uncap}

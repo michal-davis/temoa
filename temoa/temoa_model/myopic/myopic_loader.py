@@ -136,10 +136,10 @@ class DataPortalLoader:
         else:
             time_pairs = (
                 # time based sets
-                (self.M.time_exist, f"SELECT t_periods from main.time_periods WHERE flag = 'e'"),
+                (self.M.time_exist, "SELECT t_periods from main.time_periods WHERE flag = 'e'"),
                 # note:  We still want to screen for "f" to ensure we can never bring
                 # "existing" into scope.
-                (self.M.time_future, f"SELECT t_periods from main.time_periods WHERE flag = 'f'"),
+                (self.M.time_future, "SELECT t_periods from main.time_periods WHERE flag = 'f'"),
             )
         query_set_pairs.extend(time_pairs)
 
@@ -159,7 +159,7 @@ class DataPortalLoader:
             (self.M.tech_baseload, "SELECT tech FROM main.technologies WHERE flag ='pb'"),
             (self.M.tech_storage, "SELECT tech FROM main.technologies WHERE flag = 'ps'"),
             (self.M.tech_reserve, 'SELECT tech FROM main.tech_reserve'),
-            (self.M.tech_annual, f'SELECT tech FROM main.tech_annual'),
+            (self.M.tech_annual, 'SELECT tech FROM main.tech_annual'),
             (self.M.commodity_demand, "SELECT comm_name FROM main.commodities WHERE flag = 'd'"),
             (self.M.commodity_emissions, "SELECT comm_name FROM main.commodities WHERE flag = 'e'"),
             (self.M.commodity_physical, "SELECT comm_name FROM main.commodities WHERE flag = 'p'"),
@@ -199,7 +199,7 @@ class DataPortalLoader:
         if myopic_load:
             capacity_pair = (
                 self.M.ExistingCapacity,
-                f'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
+                'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
                 'UNION '
                 'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity ',
             )
