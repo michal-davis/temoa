@@ -46,16 +46,18 @@ logger = getLogger(__name__)
 
 # the tables below are ones in which we might find regional groups which should be captured
 # to make the members of the RegionalGlobalIndices Set in the model.  They need to aggregated
-tables_with_regional_groups = {'MaxActivity': 'regions',
-                               'MinActivity': 'regions',
-                               'MinAnnualCapacityFactor': 'regions',
-                               'MaxAnnualCapacityFactor': 'regions',
-                               'EmissionLimit': 'regions',
-                               'MinActivityGroup': 'regions',
-                               'MaxActivityGroup': 'regions',
-                               'MinCapacityGroup': 'regions',
-                               'MaxCapacityGroup': 'regions',
-                               }
+tables_with_regional_groups = {
+    'MaxActivity': 'regions',
+    'MinActivity': 'regions',
+    'MinAnnualCapacityFactor': 'regions',
+    'MaxAnnualCapacityFactor': 'regions',
+    'EmissionLimit': 'regions',
+    'MinActivityGroup': 'regions',
+    'MaxActivityGroup': 'regions',
+    'MinCapacityGroup': 'regions',
+    'MaxCapacityGroup': 'regions',
+}
+
 
 class HybridLoader:
     """
@@ -73,6 +75,7 @@ class HybridLoader:
         self.viable_output_comms: set[str] = set()
         self.viable_vintages: set[int] = set()
         self.viable_rtv: set[tuple[str, str, int]] = set()
+        self.viable_rt: set[tuple[str, str]] = set()
         self.efficiency_values: list[tuple] = []
 
     def _refresh_filters(self, myopic_index: MyopicIndex):
@@ -98,9 +101,7 @@ class HybridLoader:
         logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
 
         # We will need to ID the physical commodities...
-        raw = cur.execute(
-            "SELECT comm_name FROM main.commodities WHERE flag = 'p'"
-        ).fetchall()
+        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 'p'").fetchall()
         phys_commodities = {t[0] for t in raw}
         assert len(phys_commodities) > 0, 'Failsafe...we should find some!  Flag change?'
         # We will need to iterate a bit here to:
@@ -149,13 +150,18 @@ class HybridLoader:
 
         # log the deltas
         logger.debug('Reduced techs in Efficiency from %d to %d', len(contents), len(ok_techs))
-        logger.debug('Reduced Physical Commodities from %d to %d', len(raw), len(viable_phys_commodities))
+        logger.debug(
+            'Reduced Physical Commodities from %d to %d', len(raw), len(viable_phys_commodities)
+        )
         # for tech in sorted(suppressed_techs, key = lambda tech: tech[2]):
         #     print(tech)
         for tech in suppressed_techs:
-            logger.info('Tech: %s\n'
-                        ' is SUPPRESSED as it has a Physical Commodity output that has no viable '
-                        'receiver', tech)
+            logger.info(
+                'Tech: %s\n'
+                ' is SUPPRESSED as it has a Physical Commodity output that has no viable '
+                'receiver',
+                tech,
+            )
 
         for row in ok_techs:
             r, c1, t, v, c2, _ = row
@@ -164,12 +170,12 @@ class HybridLoader:
             self.viable_rtv.add((r, t, v))
             self.viable_vintages.add(v)
             self.viable_output_comms.add(c2)
+        self.viable_rt = {(r, t) for r, t, v in self.viable_rtv}
         self.viable_comms = self.viable_input_comms | self.viable_output_comms
 
         # book the EfficiencyTable
         # we should sort here for deterministic results after pulling from set
         self.efficiency_values = sorted(ok_techs)
-
 
     def _clear_filters(self):
         self.viable_techs.clear()
@@ -177,6 +183,7 @@ class HybridLoader:
         self.viable_output_comms.clear()
         self.viable_comms.clear()
         self.viable_rtv.clear()
+        self.viable_rt.clear()
         self.viable_vintages.clear()
         self.efficiency_values.clear()
 
@@ -186,15 +193,19 @@ class HybridLoader:
         :param table_name: the table name to check
         :return: True if it exists in the schema
         """
-        table_name_check = self.con.cursor().execute(
-            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'").fetchall()
+        table_name_check = (
+            self.con.cursor()
+            .execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+            .fetchall()
+        )
         if len(table_name_check) > 0:
             return True
         return False
 
     @staticmethod
-    def _efficiency_table_cleanup(raw_data: list[tuple], physical_commodities: Sequence) \
-            -> list[tuple]:
+    def _efficiency_table_cleanup(
+        raw_data: list[tuple], physical_commodities: Sequence
+    ) -> list[tuple]:
         """
         A cleanup for the data going in to the efficiency table.  Needed to ensure that there
         are no cases where a commodity can be an input before it is available as an output
@@ -210,33 +221,41 @@ class HybridLoader:
         if not isinstance(physical_commodities, set):
             physical_commodities = set(physical_commodities)
 
-        visible_inputs = {input_comm for
-                          region, input_comm, tech, vintage, output_comm, efficiency in raw_data}
-        visible_outputs = {output_comm for
-                           region, input_comm, tech, vintage, output_comm, efficiency in raw_data}
+        visible_inputs = {
+            input_comm for region, input_comm, tech, vintage, output_comm, efficiency in raw_data
+        }
+        visible_outputs = {
+            output_comm for region, input_comm, tech, vintage, output_comm, efficiency in raw_data
+        }
 
         filtered_data = []
         for row in raw_data:
             region, input_comm, tech, vintage, output_comm, efficiency = row
             if output_comm in physical_commodities and output_comm not in visible_inputs:
-                logger.warning('For Efficiency table entry: \n'
-                               '    %s\n'
-                               '    There are no sources to accept the physical commodity output: '
-                               '%s\n'
-                               '    Either the commodity is mislabeled as physical or this tech is '
-                               'ahead of need.  This Efficiency entry is SUPPRESSED.',
-                               row, output_comm)
+                logger.warning(
+                    'For Efficiency table entry: \n'
+                    '    %s\n'
+                    '    There are no sources to accept the physical commodity output: '
+                    '%s\n'
+                    '    Either the commodity is mislabeled as physical or this tech is '
+                    'ahead of need.  This Efficiency entry is SUPPRESSED.',
+                    row,
+                    output_comm,
+                )
             else:
                 filtered_data.append(row)
             if input_comm not in visible_outputs:
-                logger.warning('For Efficiency table entry: \n'
-                               '    %s\n'
-                               '    There are no sources to supply the input commodity: '
-                               '%s\n'
-                               '    Advisory only, no action taken.',row, input_comm)
+                logger.warning(
+                    'For Efficiency table entry: \n'
+                    '    %s\n'
+                    '    There are no sources to supply the input commodity: '
+                    '%s\n'
+                    '    Advisory only, no action taken.',
+                    row,
+                    input_comm,
+                )
 
         return filtered_data
-
 
     def load_data_portal(self, myopic_index: MyopicIndex | None = None) -> DataPortal:
         # the general plan:
@@ -256,8 +275,10 @@ class HybridLoader:
         data: dict[str, list | dict] = dict()
 
         def load_element(
-            c: Set | Param, values: Sequence[tuple], validation: set | None = None, val_loc:
-                tuple = None
+            c: Set | Param,
+            values: Sequence[tuple],
+            validation: set | None = None,
+            val_loc: tuple = None,
         ):
             """
             Helper to alleviate some typing!
@@ -304,9 +325,21 @@ class HybridLoader:
                             regions_screened = {t[val_loc[0]] for t in values}
                             groups_discovered = {t for t in regions_screened if '+' in t}
                             if len(groups_discovered) > 0:
-                                logger.error('Region-Groups discovered during screen of:  %s.'
-                                             'likely error in loader / param description.',
-                                             c.name)
+                                logger.error(
+                                    'Region-Groups discovered during screen of:  %s.'
+                                    'likely error in loader / param description.',
+                                    c.name,
+                                )
+                        elif validation is self.viable_rt:
+                            if not val_loc:
+                                raise ValueError(
+                                    'Trying to validate against r, t and got no locations'
+                                )
+                            data[c.name] = {
+                                t[:-1]: t[-1]
+                                for t in values
+                                if (t[val_loc[0]], t[val_loc[1]]) in self.viable_rt
+                            }
                         else:
                             if val_loc:
                                 data[c.name] = {
@@ -332,9 +365,7 @@ class HybridLoader:
                 f'SELECT t_periods from main.time_periods WHERE t_periods < {mi.base_year}'
             ).fetchall()
         else:
-            raw = cur.execute(
-                f"SELECT t_periods from main.time_periods WHERE flag = 'e'"
-            ).fetchall()
+            raw = cur.execute("SELECT t_periods from main.time_periods WHERE flag = 'e'").fetchall()
         load_element(M.time_exist, raw)
 
         # time_future
@@ -344,9 +375,7 @@ class HybridLoader:
                 f't_periods >= {mi.base_year} AND t_periods <= {mi.last_year}',
             ).fetchall()
         else:
-            raw = cur.execute(
-                f"SELECT t_periods from main.time_periods WHERE flag = 'f'"
-            ).fetchall()
+            raw = cur.execute("SELECT t_periods from main.time_periods WHERE flag = 'f'").fetchall()
         load_element(M.time_future, raw)
 
         # time_of_day
@@ -370,7 +399,7 @@ class HybridLoader:
                 raw = cur.execute(f'SELECT {field_name} from main.{table}').fetchall()
                 regions_and_groups.update({t[0] for t in raw})
         # filter to those that contain "+" and sort (for deterministic pyomo behavior)
-        list_of_groups = sorted((t, ) for t in regions_and_groups) #if "+" in t or t=='global')
+        list_of_groups = sorted((t,) for t in regions_and_groups)  # if "+" in t or t=='global')
         load_element(M.RegionalGlobalIndices, list_of_groups)
 
         # region-exchanges
@@ -391,11 +420,11 @@ class HybridLoader:
         load_element(M.tech_uncap, raw, self.viable_techs)
 
         # tech_baseload
-        raw = cur.execute(f"SELECT tech from main.technologies where flag = 'pb'").fetchall()
+        raw = cur.execute("SELECT tech from main.technologies where flag = 'pb'").fetchall()
         load_element(M.tech_baseload, raw, self.viable_techs)
 
         # tech_storage
-        raw = cur.execute(f"SELECT tech from main.technologies where flag = 'ps'").fetchall()
+        raw = cur.execute("SELECT tech from main.technologies where flag = 'ps'").fetchall()
         load_element(M.tech_storage, raw, self.viable_techs)
 
         # tech_reserve
@@ -410,7 +439,7 @@ class HybridLoader:
         if self.table_exists('RampDown'):
             ramp_dn_techs = cur.execute('SELECT tech from main.RampDown').fetchall()
             techs.update({t[0] for t in ramp_dn_techs})
-        load_element(M.tech_ramping, sorted((t, ) for t in techs), self.viable_techs)  # sort for
+        load_element(M.tech_ramping, sorted((t,) for t in techs), self.viable_techs)  # sort for
         # deterministic behavior
 
         # tech_reserve
@@ -444,7 +473,9 @@ class HybridLoader:
             load_element(M.tech_variable, raw, self.viable_techs)
 
         # tech_retirement
-        # TODO:  later
+        if self.table_exists('tech_retirement'):
+            raw = cur.execute('SELECT tech from main.tech_retirement').fetchall()
+            load_element(M.tech_retirement, raw, self.viable_techs)
 
         #  === COMMODITIES ===
 
@@ -477,16 +508,16 @@ class HybridLoader:
 
         load_element(M.Efficiency, raw)
 
-
         # ExistingCapacity
         default_lifetime = TemoaModel.default_lifetime_tech
         if mi:
-            # this is gonna be a bit ugly because we need to calculate the lifetime "on the fly"
-            # or we will get warnings in later years by including things that are dead
+            # on this pull, we need to exclude techs that are unrestricted capacity from the past
+            # to prevent them from getting in to the capacity variables.
             # noinspection SqlUnused
             raw = cur.execute(
                 'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
                 f' WHERE vintage < {mi.base_year} '
+                '  AND tech not in (SELECT tech FROM main.technologies WHERE technologies.unlim_cap > 0)'
                 'UNION '
                 '  SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity '
             ).fetchall()
@@ -524,17 +555,15 @@ class HybridLoader:
         # TODO:  later
 
         # CapacityToActivity
-        raw = cur.execute(
-            'SELECT regions, tech, c2a from main.CapacityToActivity '
-        ).fetchall()
-        load_element(M.CapacityToActivity, raw, self.viable_techs, (1,))
+        raw = cur.execute('SELECT regions, tech, c2a from main.CapacityToActivity ').fetchall()
+        load_element(M.CapacityToActivity, raw, self.viable_rt, (0, 1))
 
         # CapacityFactorTech
         raw = cur.execute(
             'SELECT regions, season_name, time_of_day_name, tech, cf_tech '
             'from main.CapacityFactorTech'
         ).fetchall()
-        load_element(M.CapacityFactorTech, raw, self.viable_techs, (3,))
+        load_element(M.CapacityFactorTech, raw, self.viable_rt, (0, 3))
 
         # CapacityFactorProcess
         raw = cur.execute(
@@ -545,7 +574,7 @@ class HybridLoader:
 
         # LifetimeTech
         raw = cur.execute('SELECT regions, tech, life FROM main.LifetimeTech').fetchall()
-        load_element(M.LifetimeTech, raw, self.viable_techs, val_loc=(1,))
+        load_element(M.LifetimeTech, raw, self.viable_rt, val_loc=(0, 1))
 
         # LifetimeProcess
         raw = cur.execute(
@@ -554,17 +583,15 @@ class HybridLoader:
         load_element(M.LifetimeProcess, raw, self.viable_rtv, val_loc=(0, 1, 2))
 
         # LifetimeLoanTech
-        raw = cur.execute(
-            'SELECT regions, tech, loan FROM main.LifetimeLoanTech'
-        ).fetchall()
-        load_element(M.LifetimeLoanTech, raw, self.viable_techs, (1,))
+        raw = cur.execute('SELECT regions, tech, loan FROM main.LifetimeLoanTech').fetchall()
+        load_element(M.LifetimeLoanTech, raw, self.viable_rt, (0, 1))
 
         # TechInputSplit
         raw = cur.execute(
             'SELECT regions, periods, input_comm, tech, ti_split FROM main.TechInputSplit '
             f'WHERE {mi.base_year} <= periods AND periods <= {mi.last_demand_year}'
         ).fetchall()
-        load_element(M.TechInputSplit, raw, self.viable_techs, (3,))
+        load_element(M.TechInputSplit, raw, self.viable_rt, (0, 3))
 
         # TechInputSplitAverage
         if self.table_exists('TechInputSplitAverage'):
@@ -573,7 +600,7 @@ class HybridLoader:
                 'FROM main.TechInputSplitAverage '
                 f'WHERE {mi.base_year} <= periods AND periods <={mi.last_demand_year}'
             ).fetchall()
-            load_element(M.TechInputSplitAverage, raw, self.viable_techs, (3,))
+            load_element(M.TechInputSplitAverage, raw, self.viable_rt, (0, 3))
 
         # TechOutputSplit
         # TODO:  later
@@ -616,53 +643,49 @@ class HybridLoader:
             'SELECT regions, periods, tech, mincap FROM main.MinCapacity '
             f'WHERE {mi.base_year} <= periods AND periods <= {mi.last_demand_year}'
         ).fetchall()
-        load_element(M.MinCapacity, raw, self.viable_techs, (2,))
+        load_element(M.MinCapacity, raw, self.viable_rt, (0, 2))
 
         # MaxCapacity
         raw = cur.execute(
             'SELECT regions, periods, tech, maxcap FROM main.MaxCapacity '
             f'WHERE {mi.base_year} <= periods AND periods <= {mi.last_demand_year}'
         ).fetchall()
-        load_element(M.MaxCapacity, raw, self.viable_techs, (2,))
+        load_element(M.MaxCapacity, raw, self.viable_rt, (0, 2))
 
         # MinNewCap, MaxNewCap
         # TODO:  later
 
         # MaxResource
-        raw = cur.execute(
-            'SELECT regions, tech, maxres from main.MaxResource'
-        ).fetchall()
-        load_element(M.MaxResource, raw, self.viable_techs, (1,))
+        raw = cur.execute('SELECT regions, tech, maxres from main.MaxResource').fetchall()
+        load_element(M.MaxResource, raw, self.viable_rt, (0, 1))
 
         # MaxActivity
-        if self.table_exists("MaxActivity"):
+        if self.table_exists('MaxActivity'):
             raw = cur.execute(
                 'SELECT regions, periods, tech, maxact FROM main.MaxActivity '
                 f'WHERE periods >= {mi.base_year} and periods <= {mi.last_demand_year}'
             ).fetchall()
-            load_element(M.MaxActivity, raw, self.viable_techs, (2,))
+            load_element(M.MaxActivity, raw, self.viable_rt, (0, 2))
 
         # MinActivity
         raw = cur.execute(
             'SELECT regions, periods, tech, minact FROM main.MinActivity '
             f'WHERE periods >= {mi.base_year} and periods <= {mi.last_demand_year}'
         ).fetchall()
-        load_element(M.MinActivity, raw, self.viable_techs, (2,))
+        load_element(M.MinActivity, raw, self.viable_rt, (1, 2))
 
         # Min(Max)AnnualCapacityFactor
         # TODO:  later
 
         # GrowthRateMax
-        raw = cur.execute(
-            'SELECT regions, tech, growthrate_max FROM main.GrowthRateMax'
-        ).fetchall()
-        load_element(M.GrowthRateMax, raw, self.viable_techs, (1,))
+        raw = cur.execute('SELECT regions, tech, growthrate_max FROM main.GrowthRateMax').fetchall()
+        load_element(M.GrowthRateMax, raw, self.viable_rt, (0, 1))
 
         # GrowthRateSeed
         raw = cur.execute(
             'SELECT regions, tech, growthrate_seed FROM main.GrowthRateSeed'
         ).fetchall()
-        load_element(M.GrowthRateSeed, raw, self.viable_techs, (1,))
+        load_element(M.GrowthRateSeed, raw, self.viable_rt, (0, 1))
 
         # EmissionLimit
         raw = cur.execute(
@@ -686,11 +709,13 @@ class HybridLoader:
             'FROM main.EmissionActivity '
             # f'WHERE vintage >= {mi.base_year}'
         ).fetchall()
-        filtered = [(r, e, i, t, v, o, val) for r, e, i, t, v, o, val in raw
-                    if t in self.viable_techs
-                    and v in self.viable_vintages
-                    and i in self.viable_input_comms
-                    and o in self.viable_comms]
+        filtered = [
+            (r, e, i, t, v, o, val)
+            for r, e, i, t, v, o, val in raw
+            if (r, t, v) in self.viable_rtv
+            and i in self.viable_input_comms
+            and o in self.viable_comms
+        ]
         load_element(M.EmissionActivity, filtered)
 
         # Min(Max)ActivityGroup, Min(Max)ActivityGroup, Min(Max)NewCapacityGroup,
@@ -703,21 +728,17 @@ class HybridLoader:
         raw = cur.execute(
             'SELECT primary_region, primary_tech, emis_comm, linked_tech FROM main.LinkedTechs'
         ).fetchall()
-        load_element(M.LinkedTechs, raw, self.viable_techs, (1,))
+        load_element(M.LinkedTechs, raw, self.viable_rt, (0, 1))
 
         # RampUp
         if self.table_exists('RampUp'):
-            raw = cur.execute(
-                'SELECT regions, tech, ramp_up FROM main.RampUp'
-            ).fetchall()
-            load_element(M.RampUp, raw, self.viable_techs, (1,))
+            raw = cur.execute('SELECT regions, tech, ramp_up FROM main.RampUp').fetchall()
+            load_element(M.RampUp, raw, self.viable_rt, (0, 1))
 
         # RampDown
         if self.table_exists('RampDown'):
-            raw = cur.execute(
-                'SELECT regions, tech, ramp_down FROM main.RampDown'
-            ).fetchall()
-            load_element(M.RampDown, raw, self.viable_techs, (1,))
+            raw = cur.execute('SELECT regions, tech, ramp_down FROM main.RampDown').fetchall()
+            load_element(M.RampDown, raw, self.viable_rt, (0, 1))
 
         # CapacityCredit
         raw = cur.execute(
@@ -733,10 +754,8 @@ class HybridLoader:
         load_element(M.PlanningReserveMargin, raw)
 
         # StorageDuration
-        raw = cur.execute(
-            'SELECT regions, tech, duration FROM main.StorageDuration'
-        ).fetchall()
-        load_element(M.StorageDuration, raw, self.viable_techs)
+        raw = cur.execute('SELECT regions, tech, duration FROM main.StorageDuration').fetchall()
+        load_element(M.StorageDuration, raw, self.viable_rt, (0, 1))
 
         # StorageInit
         # TODO:  later

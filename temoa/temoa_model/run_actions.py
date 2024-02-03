@@ -160,6 +160,16 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
             result = optimizer.solve(instance, suffixes=['dual'],  # 'rc', 'slack'],
                                      keepfiles=keep_LP_files,
                                      symbolic_solver_labels=keep_LP_files)
+
+            # opt = appsi.solvers.Highs()
+            # # opt.config.load_solution=False
+            # try:
+            #     res = opt.solve(instance)
+            #     result = res.termination_condition.name
+            # except RuntimeError as e:
+            #     print('failed highs solve')
+            #     result = None
+
             logger.info('Solve process complete')
             logger.debug('Solver results: \n %s', result)
 
@@ -186,6 +196,14 @@ def check_solve_status(result: SolverResults) -> tuple[bool, str]:
     :param result: the results object returned by the solver
     :return: tuple of status boolean (True='optimal', others False), and string message if not optimal
     """
+    # # TODO:  for T/S highs...
+    # if result is None:
+    #     return False, 'highs barf'
+    #
+    # elif result == 'optimal':
+    #     return True, 'optimal'
+    # else:
+    #     pass
     soln = result['Solution']
     solv = result['Solver']  # currently unused, but may want it later
     prob = result['Problem']  # currently unused, but may want it later

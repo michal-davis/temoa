@@ -26,6 +26,7 @@ from pyomo.core import BuildCheck
 from pyomo.environ import (Any, NonNegativeReals, AbstractModel, BuildAction, Param, Set, Var,
                            Objective, minimize)
 
+from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.validators import (validate_linked_tech, region_check,
@@ -119,8 +120,6 @@ class TemoaModel(AbstractModel):
         M.tech_resource = Set()
         M.tech_production = Set()
         M.tech_all = Set(initialize=M.tech_resource | M.tech_production)
-        M.tech_uncap = Set(within=M.tech_all)
-        """techs with unlimited capacity, ALWAYS available within lifespan"""
         M.tech_baseload = Set(within=M.tech_all)
         M.tech_storage = Set(within=M.tech_all)
         M.tech_reserve = Set(within=M.tech_all)
@@ -138,6 +137,8 @@ class TemoaModel(AbstractModel):
         M.tech_groups = Set(within=M.RegionalGlobalIndices * M.groups * M.tech_all)
         # Define techs with constant output
         M.tech_annual = Set(within=M.tech_all)
+        M.tech_uncap = Set(within=M.tech_all - M.tech_annual)
+        """techs with unlimited capacity, ALWAYS available within lifespan"""
         # Define techs for use with TechInputSplitAverage constraint,
         # where techs have variable annual output but the user wishes to constrain them annually
         M.tech_variable = Set(
@@ -208,7 +209,7 @@ class TemoaModel(AbstractModel):
         # Define technology performance parameters
         M.CapacityToActivity = Param(M.RegionalIndices, M.tech_all, default=1)
 
-        M.ExistingCapacity = Param(M.RegionalIndices, M.tech_all, M.vintage_exist)
+        M.ExistingCapacity = Param(M.RegionalIndices, M.tech_all - M.tech_uncap, M.vintage_exist)
 
         # temporarily useful for passing down to validator to find set violations
         # M.Efficiency = Param(
@@ -232,7 +233,7 @@ class TemoaModel(AbstractModel):
         # Devnote:  using a default function below alleviates need to make this set.
         # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
         M.CapacityFactorProcess = Param(M.regions, M.time_season,
-                                        M.time_of_day, M.tech_all, M.vintage_all,
+                                        M.time_of_day, M.tech_all - M.tech_uncap, M.vintage_all,
                                         validate=validate_CapacityFactorProcess,
                                         default=get_default_capacity_factor)
 
@@ -275,7 +276,7 @@ class TemoaModel(AbstractModel):
         M.CostVariable_rptv = Set(dimen=4, initialize=CostVariableIndices)
         M.CostVariable = Param(M.CostVariable_rptv)
 
-        # M.validate_pricing = BuildAction(rule=price_checker)
+        M.validate_pricing = BuildAction(rule=price_checker)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
@@ -293,10 +294,10 @@ class TemoaModel(AbstractModel):
             M.ProcessLifeFrac_rptv, initialize=ParamProcessLifeFraction_rule
         )
 
-        M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
-        M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
-        M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
-        M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
+        M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
+        M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
+        M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
+        M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
         M.MaxResource = Param(M.RegionalIndices, M.tech_all)
         # TODO:  Both of the below sets are obsolete and can be removed w/ tests updated
         # M.MinCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
