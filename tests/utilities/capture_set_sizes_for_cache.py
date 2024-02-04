@@ -57,7 +57,7 @@ sequencer = TemoaSequencer(
 instance = sequencer.start()
 
 model_sets = instance.component_map(ctype=pyo.Set)
-sets_dict = {k: len(v) for k, v in model_sets.items()}
+sets_dict = {k: len(v) for k, v in model_sets.items() if '_index' not in k}
 
 # stash the result in a json file...
 with open(output_file, 'w') as f_out:
