@@ -454,7 +454,8 @@ class HybridLoader:
         # TODO:  later
 
         # tech_flex
-        # TODO:  later
+        raw = cur.execute('SELECT tech from main.tech_exchange').fetchall()
+        load_element(M.tech_exchange, raw, self.viable_techs)
 
         # tech_exchange
         raw = cur.execute('SELECT tech from main.tech_exchange').fetchall()
