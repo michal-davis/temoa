@@ -41,10 +41,12 @@ logger = getLogger(__name__)
 
 class CommodityNetwork:
     """
-    class to hold the network for a particular region/period
+    class to hold the data and the network for a particular region/period
     """
 
     def __init__(self, region, period: int, M: TemoaModel):
+        self.bad_connections: set[tuple] | None = None
+        self.good_connections: set[tuple] | None = None
         self.M = M
         self.region = region
         self.period = period
@@ -54,13 +56,11 @@ class CommodityNetwork:
             d for (r, p, d) in M.Demand if r == self.region and p == self.period
         }
         self.source_commodities: set[str] = set(M.commodity_source)
-        # scan non-annual techs
+        # scan non-annual techs...
         for r, p, s, d, ic, tech, v, oc in self.M.activeFlow_rpsditvo:
             if r == self.region and p == self.period:
                 self.connections[oc].add((ic, tech))
-
-        # add annual techs...
-
+        # scan annual techs...
         for r, p, ic, tech, v, oc in M.activeFlow_rpitvo:
             if r == self.region and p == self.period:
                 self.connections[oc].add((ic, tech))
@@ -74,73 +74,129 @@ class CommodityNetwork:
         # self.output_sockets: dict[str, set[str]] = dict()
         # self.input_sockets: ...
 
-    def analyze(self):
-        good_connections = DFS(self.demand_commodities, self.source_commodities, self.connections)
-        logger.debug(
-            'Got %d good connections from %d techs in region %s, period %d',
-            len(good_connections),
+    def analyze_network(self):
+        # dev note:  send a copy of connections...
+        # it is consumed by the function.  (easier than managing it in the recursion)
+        discovered_sources, visited = visited_dfs(
+            self.demand_commodities, self.source_commodities, self.connections.copy()
+        )
+        self.good_connections = mark_good_connections(
+            good_ic=discovered_sources, connections=visited.copy()
+        )
+
+        logger.info(
+            'Got %d good processes from %d techs in region %s, period %d',
+            len(self.good_connections),
             len(tuple(chain(*self.connections.values()))),
             self.region,
             self.period,
         )
+        # report the bad connections
+        # need a flat list for comparison...
+        orig_connections = set()
+        for oc in self.connections:
+            orig_connections |= {(ic, tech, oc) for (ic, tech) in self.connections[oc]}
+        self.bad_connections = orig_connections - self.good_connections
+        for bc in self.bad_connections:
+            logger.warning('Bad process: %s in region %s, period %d', bc, self.region, self.period)
+
+    def unsupported_demands(self) -> set[str]:
+        """
+        Look for demand commodities that are amongst the "bad connections" set which would indicate
+        that they cannot be traced back to a source and are suspect to magically being filled by some
+        dangling intermediate tech
+        :return: set of improperly supported demands
+        """
+        bad_demands = {oc for ic, tech, oc in self.bad_connections if oc in self.demand_commodities}
+        return bad_demands
 
 
-def DFS(
+def mark_good_connections(
+    good_ic: set[str], connections: dict[str, set[tuple]], start: str | None = None
+) -> set[tuple]:
+    """
+    Now that we have ID'ed the good ic that have been discovered, we need to work back up
+    the chain of visited nodes to identify the good connections (this is the reverse of the
+    previous search where we looked backward from demand.  Here we look up from the Input Commodities
+    :param start: The current node to start from
+    :param good_ic: The set of Input Commodities that were discovered by the first search
+    :param connections:  The set of connections to analyze.  It is consumed by the function via pop()
+    :return:
+    """
+
+    # end conditions...
+    if not good_ic and not start:  # nothing to discover
+        return set()
+    else:
+        good_connections = set()
+
+    if not start:
+        for start in good_ic:
+            good_connections |= mark_good_connections(good_ic, connections, start=start)
+
+    # recurse...
+    for oc, tech in connections.pop(start, []):  # prevent re-expanding this later by popping
+        good_connections.add((start, tech, oc))
+        # explore all upstream
+        good_connections |= mark_good_connections(
+            good_ic=good_ic, connections=connections, start=oc
+        )
+    return good_connections
+
+
+def visited_dfs(
     start_nodes: set[str],
     end_nodes: set[str],
     connections: dict[str, set[tuple]],
     current_start=None,
-    current_chain=None,
-    good_tech=None,
-) -> set[tuple]:
+) -> tuple[set, dict[str, set[tuple]]]:
     """
-    recursive depth-first search to identify viable techs
+    recursive depth-first search to identify discovered source nodes and connections from
+    a start point and set of connections
     :param start_nodes: the set of demand commodities (oc ∈ demand)
-    :param good_tech: currently good (input comm, tech, output comm) tuples
-    :param connections: the connections to explore {output: {(ic, tech)}}
     :param end_nodes: source nodes, or ones traceable to source nodes
+    :param connections: the connections to explore {output: {(ic, tech)}}
     :param current_start: the current node (ic) index
-    :param current_chain: the current chain of exploration tuples (ic, tech, oc)
     :return: the set of viable tech tuples (ic, tech, oc)
     """
-    if not good_tech:
-        good_tech = set()
+    # setup...
+    discovered_sources = set()
+    visited = defaultdict(set)
+
+    # end conditions...
     if not current_start and not start_nodes:  # no more starts, we're done
-        if good_tech:
-            return good_tech
-        else:
-            return set()
-    if not current_start:
-        current_start = start_nodes.pop()
-        current_chain = []  # new list for new start
-
-    for ic, tech in connections.pop(current_start, []):  # we can pop, no need to re-explore
-        if ic in end_nodes:  # we have struck gold
-            # add the current tech
-            good_tech.add((ic, tech, current_start))
-            end_nodes.add(current_start)  # current start (output) is now proven good also
-            # add all in the chain
-            for prev_ic, prev_tech, prev_oc in current_chain:
-                good_tech.add((prev_ic, prev_tech, prev_oc))
-                end_nodes.add(prev_oc)  # previous output is now proven also
-        else:
-            # add this ic, tech to current chain copy and go from there
-            chain = current_chain.copy()
-            chain.append((ic, tech, current_start))
-            # add what is found down this chain...
-            good_tech.update(
-                DFS(
-                    start_nodes,
-                    end_nodes,
-                    connections,
-                    current_start=ic,
-                    current_chain=chain,
-                    good_tech=good_tech,
-                )
+        return set(), dict()
+    if not current_start:  # start from each node in the starts
+        for node in start_nodes:
+            ds, v = visited_dfs(
+                start_nodes=start_nodes,
+                end_nodes=end_nodes,
+                connections=connections,
+                current_start=node,
             )
+            discovered_sources.update(ds)
+            for k in v:
+                visited[k].update(v[k])
+        return discovered_sources, visited
 
-    # start a new search if no connections left from this start...
-    return DFS(start_nodes, end_nodes, connections, current_start=None, good_tech=good_tech)
+    # we have a start node, dig from here.
+    for ic, tech in connections.pop(current_start, []):  # we can pop, no need to re-explore
+        visited[ic].add((current_start, tech))
+        if ic in end_nodes:  # we have struck gold
+            # add the current ic to discoveries
+            discovered_sources.add(ic)
+        else:
+            # explore from here
+            ds, v = visited_dfs(
+                start_nodes,
+                end_nodes,
+                connections,
+                current_start=ic,
+            )
+            discovered_sources.update(ds)
+            for k in v:
+                visited[k].update(v[k])
+    return discovered_sources, visited
 
 
 def source_trace(M: 'TemoaModel') -> bool:
@@ -149,9 +205,19 @@ def source_trace(M: 'TemoaModel') -> bool:
     :param M: the model to inspect
     :return: True if all demands are traceable, False otherwise
     """
-
+    demands_traceable = True
     for region in M.regions:
         for p in M.time_optimize:
             commodity_network = CommodityNetwork(region=region, period=p, M=M)
-            commodity_network.analyze()
-    return True
+            commodity_network.analyze_network()
+            unsupported_demands = commodity_network.unsupported_demands()
+            if unsupported_demands:
+                demands_traceable = False
+                for commodity in unsupported_demands:
+                    logger.warning(
+                        'Demand %s is not supported back to source in region %s period %d',
+                        commodity,
+                        commodity_network.region,
+                        commodity_network.period,
+                    )
+    return demands_traceable
