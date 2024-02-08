@@ -39,6 +39,7 @@ from temoa.temoa_model.dat_file_maker import db_2_dat
 from temoa.temoa_model.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
     check_solve_status, load_portal_from_dat
+from temoa.temoa_model.source_check import source_trace
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -139,6 +140,41 @@ class TemoaSequencer:
                     self.config.dat_file = dat_file
                 data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
                 instance = build_instance(data_portal, silent=self.config.silent)
+                # # for T/S
+                # con = sqlite3.connect(self.config.input_file)
+                # cur = con.cursor()
+                # cur.execute('CREATE TABLE IF NOT EXISTS PF_Eff ( '
+                #             'region text, '
+                #             'tech text, '
+                #             'vintage integer, '
+                #             'output text,'
+                #             'PRIMARY KEY (region, tech, vintage))'
+                #             )
+                # con.commit()
+                #
+                # records = [(r, t, v, c2) for  r, c1, t, v, c2 in instance.Efficiency.sparse_keys()]
+                # print('records made')
+                # qry = f"INSERT or REPLACE INTO PF_Eff VALUES (?, ?, ?, ?)"
+                # cur.executemany(qry, records)
+                # print('written')
+                #
+                # con.commit()
+                # cur.execute('CREATE TABLE IF NOT EXISTS PF_vintages ( '
+                #             'region text, '
+                #             'period integer,'
+                #             'tech text, '
+                #             'vintage integer, '
+                #             'PRIMARY KEY (region, period, tech, vintage))'
+                #             )
+                # con.commit()
+                #
+                # stuff = {(r, p, t, v) for (r, p, t) in instance.processVintages for v in
+                #          instance.processVintages[r, p, t]}
+                # qry = 'INSERT OR REPLACE INTO PF_vintages VALUES (?, ?, ?, ?)'
+                # cur.executemany(qry, stuff)
+                # con.commit()
+                # con.close()
+                source_trace(instance)
                 return instance
 
             case TemoaMode.PERFECT_FORESIGHT:
@@ -151,6 +187,8 @@ class TemoaSequencer:
 
                 data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, self.config.silent)
                 instance = build_instance(data_portal, silent=self.config.silent)
+                # For T/S:
+                instance.MaxActivityConstraint_rpt.display()
                 self.pf_solved_instance, self.pf_results = solve_instance(instance,
                                                                           self.config.solver_name,
                                                                           self.config.save_lp_file,

@@ -2553,15 +2553,15 @@ def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     # if r == 'global', the constraint is system-wide
     if r == 'global':
         reg = M.regions
+    elif '+' in r:
+        reg = r.split('+')
     else:
-        # TODO:  This is a bug.  r cannot be an interable.  We should use the breakup by "+" scheme
         reg = (r, )
 
     if t not in M.tech_annual:
         activity_rpt = sum(
             M.V_FlowOut[r, p, s, d, S_i, t, S_v, o]
             for r in reg
-            if ',' not in r
             for S_v in M.processVintages.get((r, p, t), [])
             for S_i in M.processInputs[r, p, t, S_v]
             for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
@@ -2572,7 +2572,6 @@ def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
         activity_rpt = sum(
             M.V_FlowOutAnnual[r, p, S_i, t, S_v, o]
             for r in reg
-            if ',' not in r
             for S_v in M.processVintages.get((r, p, t), [])
             for S_i in M.processInputs[r, p, t, S_v]
             for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
@@ -2606,16 +2605,15 @@ def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     # if r == 'global', the constraint is system-wide
     if r == 'global':
         reg = M.regions
+    elif '+' in r:
+        reg = r.split('+')
     else:
-        # TODO:  This is a bug.  r cannot be an interable.  We should use the breakup by "+" scheme
-
         reg = (r, )
 
     if t not in M.tech_annual:
         activity_rpt = sum(
             M.V_FlowOut[r, p, s, d, S_i, t, S_v, o]
             for r in reg
-            if ',' not in r
             for S_v in M.processVintages.get((r, p, t), [])
             for S_i in M.processInputs[r, p, t, S_v]
             for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
@@ -2626,7 +2624,6 @@ def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
         activity_rpt = sum(
             M.V_FlowOutAnnual[r, p, S_i, t, S_v, o]
             for r in reg
-            if ',' not in r
             for S_v in M.processVintages.get((r, p, t), [])
             for S_i in M.processInputs[r, p, t, S_v]
             for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
