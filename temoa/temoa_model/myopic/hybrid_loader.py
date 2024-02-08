@@ -491,7 +491,9 @@ class HybridLoader:
         load_element(M.commodity_emissions, raw)
 
         # commodity_physical
-        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 'p' OR flag = 's'").fetchall()
+        raw = cur.execute(
+            "SELECT comm_name FROM main.commodities WHERE flag = 'p' OR flag = 's'"
+        ).fetchall()
         # The model enforces 0 symmetric difference between the physical commodities
         # and the input commodities, so we need to include only the viable INPUTS
         load_element(M.commodity_physical, raw, self.viable_input_comms)

@@ -190,7 +190,7 @@ def price_checker(M: 'TemoaModel'):
         if missing_fixed_costs:
             logger.warning(
                 'Check 2: The following have registered variable costs in '
-                'the periods listed, but no fixed costs in the same periods: %s',
+                'the periods listed and at least 1 fixed cost, but not fixed & var in all periods: %s',
                 missing_fixed_costs,
             )
 
@@ -329,7 +329,12 @@ def check_tech_uncap(M: 'TemoaModel') -> bool:
         bad_entries = {(r, t, v) for r, t, v in param.keys() if t in M.tech_uncap}
         if bad_entries:
             for entry in bad_entries:
-                logger.error('Cannot limit unlimited capacity tech %s in table %s: %s', entry[1], param.name, entry)
+                logger.error(
+                    'Cannot limit unlimited capacity tech %s in table %s: %s',
+                    entry[1],
+                    param.name,
+                    entry,
+                )
 
     if any((rtv_with_fixed_cost, rtv_with_invest_cost, bad_var_costs, bad_cap_entries)):
         return False

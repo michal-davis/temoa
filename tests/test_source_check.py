@@ -25,10 +25,10 @@ https://westernspark.us
 Created on:  2/6/24
 
 """
-from temoa.temoa_model.source_check import DFS
+from temoa.temoa_model.source_check import visited_dfs, mark_good_connections
 
 
-def test_dfs():
+def test_network_analysis():
     """
     tests of the dfs connection maker
     :return:
@@ -43,7 +43,10 @@ def test_dfs():
     end_nodes = {'s1'}
     connections = {'d1': {('p1', 't2')}, 'p1': {('s1', 't1')}}
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1')}
-    t = DFS(start_nodes=start_nodes, end_nodes=end_nodes, connections=connections)
+    discovered_sources, visited = visited_dfs(
+        start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
+    )
+    t = mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     # s1 -> t1 -> p1 -> t2 -> d1
@@ -54,7 +57,10 @@ def test_dfs():
     end_nodes = {'s1'}
     connections = {'d1': {('p1', 't2'), ('p2', 't3')}, 'p1': {('s1', 't1')}}
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1')}
-    t = DFS(start_nodes=start_nodes, end_nodes=end_nodes, connections=connections)
+    discovered_sources, visited = visited_dfs(
+        start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
+    )
+    t = mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     #                 - t4  -
@@ -67,7 +73,10 @@ def test_dfs():
     end_nodes = {'s1'}
     connections = {'d1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')}, 'p1': {('s1', 't1')}}
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1')}
-    t = DFS(start_nodes=start_nodes, end_nodes=end_nodes, connections=connections)
+    discovered_sources, visited = visited_dfs(
+        start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
+    )
+    t = mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     #                 - t4  -
@@ -80,17 +89,73 @@ def test_dfs():
 
     start_nodes = {'d1', 'd2'}
     end_nodes = {'s1', 's2'}
-    connections = {'d1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')}, 'p1': {('s1', 't1')}, 'd2': {('s2', 't5')}}
+    connections = {
+        'd1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')},
+        'p1': {('s1', 't1')},
+        'd2': {('s2', 't5')},
+    }
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1'), ('s2', 't5', 'd2')}
-    t = DFS(start_nodes=start_nodes, end_nodes=end_nodes, connections=connections)
+    discovered_sources, visited = visited_dfs(
+        start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
+    )
+    t = mark_good_connections(discovered_sources, visited)
+    assert t == good_tech, 'should match up!'
+
+    # demand 2 (d2) with no path back to any source...
+    #                 - t4  -
+    #               /        \
+    # s1 -> t1 -> p1 -> t2 -> d1
+    #                        /
+    #             p2 -> t3  -
+    #
+    #             p3 -> t5 -> d2
+
+    start_nodes = {'d1', 'd2'}
+    end_nodes = {'s1'}
+    connections = {
+        'd1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')},
+        'p1': {('s1', 't1')},
+        'd2': {('p3', 't5')},
+    }
+    good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1')}
+    discovered_sources, visited = visited_dfs(
+        start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
+    )
+    t = mark_good_connections(discovered_sources, visited)
+    assert t == good_tech, 'should match up!'
+
+    # test with loop: t4 is like storage with I/O the same
+    #           - t4 -
+    #            \  /
+    # s1 -> t1 -> p1 -> t2 -> d1
+    #                        /
+    #             p2 -> t3  -
+    #
+
+    start_nodes = {'d1'}
+    end_nodes = {'s1', 's2'}
+    connections = {
+        'd1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')},
+        'p1': {('s1', 't1'), ('p1', 't4')},
+    }
+    good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1'), ('p1', 't4', 'p1')}
+    discovered_sources, visited = visited_dfs(
+        start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
+    )
+    t = mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     # no good tech
     start_nodes = {'d1', 'd2'}
     end_nodes = set()
-    connections = {'d1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')}, 'p1': {('s1', 't1')}, 'd2': {('s2', 't5')}}
+    connections = {
+        'd1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')},
+        'p1': {('s1', 't1')},
+        'd2': {('s2', 't5')},
+    }
     good_tech = set()
-    t = DFS(start_nodes=start_nodes, end_nodes=end_nodes, connections=connections)
+    discovered_sources, visited = visited_dfs(
+        start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
+    )
+    t = mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
-
-
