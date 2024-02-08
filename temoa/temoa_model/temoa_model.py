@@ -74,7 +74,7 @@ class TemoaModel(AbstractModel):
         M.processTechs = dict()
         M.processReservePeriods = dict()
         M.processVintages = dict()
-        """current available (within lifespan) vintages {(r, p, t) : v}"""
+        """current available (within lifespan) vintages {(r, p, t) : set(v)}"""
         M.baseloadVintages = dict()
         M.curtailmentVintages = dict()
         M.storageVintages = dict()
@@ -152,6 +152,7 @@ class TemoaModel(AbstractModel):
         M.commodity_demand = Set()
         M.commodity_emissions = Set()
         M.commodity_physical = Set()
+        M.commodity_source = Set(within=M.commodity_physical)
         M.commodity_carrier = Set(initialize=M.commodity_physical | M.commodity_demand)
         M.commodity_all = Set(initialize=M.commodity_carrier | M.commodity_emissions)
 

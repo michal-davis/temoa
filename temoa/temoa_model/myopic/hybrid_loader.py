@@ -78,7 +78,7 @@ class HybridLoader:
         self.viable_rt: set[tuple[str, str]] = set()
         self.efficiency_values: list[tuple] = []
 
-    def _refresh_filters(self, myopic_index: MyopicIndex):
+    def _build_efficiency_data(self, myopic_index: MyopicIndex):
         """
         refresh all the sets used for filtering from the current contents
         of the MyopicEfficiency table.  This should normally be called
@@ -87,12 +87,8 @@ class HybridLoader:
         """
         cur = self.con.cursor()
         self._clear_filters()
-        # we need to union a couple things...
-        # 1.  Everything from the MyopicEfficiency table that is still "alive" (within lifespan)
-        # 2.  Everything in the original Efficiency table that is now "in view" for this
-        #     myopic index
-        # We can just use '1' for the lifetime of the existing stuff, because the "test" is just
-        # to be greater than the current vintage.
+        # the sequencer is responsible for updating the MyopicEfficiency table, so we should
+        # just be able to pull directly from it for things that are alive as of the base year
         contents = cur.execute(
             'SELECT region, input_comm, tech, vintage, output_comm, efficiency, lifetime  '
             'FROM MyopicEfficiency '
@@ -100,59 +96,64 @@ class HybridLoader:
         ).fetchall()
         logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
 
-        # We will need to ID the physical commodities...
-        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 'p'").fetchall()
+        # We will need to ID the non-demand commodities (production / emission) for filtering...
+        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag <> 'd'").fetchall()
         phys_commodities = {t[0] for t in raw}
-        assert len(phys_commodities) > 0, 'Failsafe...we should find some!  Flag change?'
+        assert len(phys_commodities) > 0, 'Failsafe...we should find some!  Did flag change?'
+
         # We will need to iterate a bit here to:
-        # 1.  Screen all the input commodities -> viable commodities
-        # 2.  Find any tech with PHYSICAL output commodity that is not viable (not in set above)
+        # 1.  Screen all the input commodities to identify "viable" commodities
+        # 2.  Find any tech with PHYSICAL output commodity that is not in set of viable commodities
         # 3.  Suppress that tech
         # 4.  re-screen the input commodities
         # 5.  quit when no more techs are suppressed
-        # 6.  Generate viable commodities & viable techs
+        # 6.  publish viable commodities & viable techs
 
         # we probably need to keep track of (r, t, v) tuples here because you *could*
         # have a tech process different things in different vintages/regions based solely
-        # on Efficiency Table
+        # on differences in Efficiency Table
 
-        techs_by_output = defaultdict(set)
+        techs_by_production_output = defaultdict(set)  # {phys_output_comm: { techs } }
         ok_techs = set()
         suppressed_techs = set()
-        viable_phys_commodities = set()
+        input_commodities = set()
         for r, c1, t, v, c2, eff, lifetime in contents:
             row = (r, c1, t, v, c2, eff)
             if c1 not in phys_commodities:
                 raise ValueError(f'Tech {t} has a non-physical input: {c1}')
-            viable_phys_commodities.add(c1)
+            input_commodities.add(c1)
+
             ok_techs.add(row)
             # we screen here to not worry about demand/emission outputs
             if c2 in phys_commodities:
-                techs_by_output[c2].add(row)
+                techs_by_production_output[c2].add(row)
 
-        illegal_outputs = set(techs_by_output.keys()) - viable_phys_commodities
+        # identify the "illegal" outputs as any output that is not in demand by something else or a demand commodity
+        # itself
+        illegal_outputs = set(techs_by_production_output.keys()) - input_commodities
+
+        # this needs to be done iteratively because pulling 1 tech *might* make an output from another tech
+        # illegal
         while illegal_outputs:
             for output in illegal_outputs:
                 # mark all the techs that push that output as "suppressed"
-                suppressed_techs.update(techs_by_output[output])
+                suppressed_techs.update(techs_by_production_output[output])
             # remove from viable
             ok_techs -= suppressed_techs
             # re-capture tech by output
-            techs_by_output.clear()
+            techs_by_production_output.clear()
             for row in ok_techs:
                 r, c1, t, v, c2, eff = row
                 if c2 in phys_commodities:
-                    techs_by_output[c2].add(row)
+                    techs_by_production_output[c2].add(row)
 
             # re-screen for a new list of viable commodities from inputs
-            viable_phys_commodities = {row[1] for row in ok_techs}
-            illegal_outputs = set(techs_by_output.keys()) - viable_phys_commodities
+            input_commodities = {row[1] for row in ok_techs}
+            illegal_outputs = set(techs_by_production_output.keys()) - input_commodities
 
         # log the deltas
         logger.debug('Reduced techs in Efficiency from %d to %d', len(contents), len(ok_techs))
-        logger.debug(
-            'Reduced Physical Commodities from %d to %d', len(raw), len(viable_phys_commodities)
-        )
+        logger.debug('Reduced Physical Commodities from %d to %d', len(raw), len(input_commodities))
         # for tech in sorted(suppressed_techs, key = lambda tech: tech[2]):
         #     print(tech)
         for tech in suppressed_techs:
@@ -269,7 +270,7 @@ class HybridLoader:
             raise ValueError(f'received an illegal entry for the myopic index: {myopic_index}')
         else:
             mi = myopic_index  # abbreviated name
-            self._refresh_filters(myopic_index=mi)
+            self._build_efficiency_data(myopic_index=mi)
 
         # housekeeping
         data: dict[str, list | dict] = dict()
@@ -461,7 +462,7 @@ class HybridLoader:
         raw = cur.execute('SELECT tech from main.tech_exchange').fetchall()
         load_element(M.tech_exchange, raw, self.viable_techs)
 
-        # groups & tech_groups
+        # groups & tech_groups (supports RPS)
         # TODO:  later
 
         # tech_annual
@@ -490,10 +491,14 @@ class HybridLoader:
         load_element(M.commodity_emissions, raw)
 
         # commodity_physical
-        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 'p'").fetchall()
+        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 'p' OR flag = 's'").fetchall()
         # The model enforces 0 symmetric difference between the physical commodities
         # and the input commodities, so we need to include only the viable INPUTS
         load_element(M.commodity_physical, raw, self.viable_input_comms)
+
+        # commodity_source
+        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 's'").fetchall()
+        load_element(M.commodity_source, raw, self.viable_input_comms)
 
         #  === PARAMS ===
 
@@ -553,7 +558,7 @@ class HybridLoader:
         load_element(M.Demand, raw)
 
         # RescourceBound
-        # TODO:  later
+        # TODO:  later, it isn't used RN anyhow.
 
         # CapacityToActivity
         raw = cur.execute('SELECT regions, tech, c2a from main.CapacityToActivity ').fetchall()
@@ -675,8 +680,19 @@ class HybridLoader:
         ).fetchall()
         load_element(M.MinActivity, raw, self.viable_rt, (1, 2))
 
-        # Min(Max)AnnualCapacityFactor
-        # TODO:  later
+        # MinAnnualCapacityFactor
+        if self.table_exists('MinAnnualCapacityFactor'):
+            raw = cur.execute(
+                'SELECT regions, tech, output_comm, min_acf FROM main.MinAnnualCapacityFactor'
+            ).fetchall()
+            load_element(M.MinAnnualCapacityFactor, raw, self.viable_rt, (0, 1))
+
+        # MaxAnnualCapacityFactor
+        if self.table_exists('MaxAnnualCapacityFactor'):
+            raw = cur.execute(
+                'SELECT regions, tech, output_comm, max_acf FROM main.MaxAnnualCapacityFactor'
+            ).fetchall()
+            load_element(M.MaxCapacityFactor, raw, self.viable_rt, (0, 1))
 
         # GrowthRateMax
         raw = cur.execute('SELECT regions, tech, growthrate_max FROM main.GrowthRateMax').fetchall()
@@ -693,22 +709,19 @@ class HybridLoader:
             'SELECT regions, periods, emis_comm, emis_limit FROM main.EmissionLimit '
             f'WHERE periods >= {mi.base_year} AND periods <= {mi.last_demand_year}'
         ).fetchall()
-        load_element(M.EmissionLimit, raw, self.viable_comms, (2,))
+        # emission commodities are always legal, so we don't need to filter down
+        load_element(M.EmissionLimit, raw)
 
         # EmissionActivity
         # this could be ugly too.  We can have region groups here, so for this to be valid:
-        # 1.  The tech-vintage must be viable somewhere, but it may not have
-        #     been built in all eligible regions in a region-group
+        # 1.  r-t-v combo must be valid
         # 2.  The input/output commodities must be viable also
         # 3.  The emission commodities are separate
-        # 4.  The vintage must be in time_optimize, so screen the early stuff and then
-        #     The viable_vintages will screen the latter stuff
         # The current emission constraint screens by valid inputs, so if it is NOT
         # built in a particular region, this should still be OK
         raw = cur.execute(
             'SELECT regions, emis_comm, input_comm, tech, vintage, output_comm, emis_act '
             'FROM main.EmissionActivity '
-            # f'WHERE vintage >= {mi.base_year}'
         ).fetchall()
         filtered = [
             (r, e, i, t, v, o, val)
@@ -759,7 +772,7 @@ class HybridLoader:
         load_element(M.StorageDuration, raw, self.viable_rt, (0, 1))
 
         # StorageInit
-        # TODO:  later
+        # TODO:  later, shouldn't be used anyway
 
         # pyomo namespace format has data[namespace][idx]=value
         # the default namespace is None, thus...

@@ -196,6 +196,7 @@ def CheckEfficiencyIndices(M: 'TemoaModel'):
     """
     Ensure that there are no unused items in any of the Efficiency index sets.
     """
+    # TODO:  This probably needs more resolution and a check by REGION and PERIOD...
     c_physical = set(i for r, i, t, v, o in M.Efficiency.sparse_iterkeys())
     techs = set(t for r, i, t, v, o in M.Efficiency.sparse_iterkeys())
     c_outputs = set(o for r, i, t, v, o in M.Efficiency.sparse_iterkeys())

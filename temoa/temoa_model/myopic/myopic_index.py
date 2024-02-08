@@ -72,7 +72,7 @@ myopic_index                   BY        SY       LDY       LY
                                                    |         |
               last "demand year" with 1 period after         |
                                                              |
-     last year of the block, to set length of last eval period
+        one period last LDY, to set length of last eval period
 
 The model generally expects one extra period after the last period
 to be optimized for the purpose of setting the last optimization

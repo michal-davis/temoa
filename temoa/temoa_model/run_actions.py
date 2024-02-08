@@ -137,12 +137,13 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
             # result = options.optimizer.solve(instance, opt=options.solver)
         else:
             if solver_name == 'cbc':
+                pass
                 # Solver options. Reference:
                 # https://genxproject.github.io/GenX/dev/solver_configuration/
-                optimizer.options["dualTolerance"] = 1e-6
-                optimizer.options["primalTolerance"] = 1e-6
-                optimizer.options["zeroTolerance"] = 1e-12
-                optimizer.options["crossover"] = 'off'
+                # optimizer.options["dualTolerance"] = 1e-6
+                # optimizer.options["primalTolerance"] = 1e-6
+                # optimizer.options["zeroTolerance"] = 1e-12
+                # optimizer.options["crossover"] = 'off'
 
             elif solver_name == 'cplex':
                 # Note: these parameter values are taken to be the same as those in PyPSA
@@ -184,8 +185,8 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
         SE.write(str(model_exc))
         raise model_exc
 
-    # TODO:  What is this transformation??  I think this should change and just work
-    #        with termination condition, which is all that appears to be needed downstream
+    # TODO:  It isn't clear that we need to push the solution values into the Result object:  it appears to be used in
+    #        pformat results, but why not just use the instance?
     instance.solutions.store_to(result)
     return instance, result
 
