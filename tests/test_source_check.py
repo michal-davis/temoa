@@ -25,7 +25,7 @@ https://westernspark.us
 Created on:  2/6/24
 
 """
-from temoa.temoa_model.source_check import visited_dfs, mark_good_connections
+from temoa.temoa_model.source_check import _visited_dfs, _mark_good_connections
 
 
 def test_network_analysis():
@@ -43,10 +43,10 @@ def test_network_analysis():
     end_nodes = {'s1'}
     connections = {'d1': {('p1', 't2')}, 'p1': {('s1', 't1')}}
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1')}
-    discovered_sources, visited = visited_dfs(
+    discovered_sources, visited = _visited_dfs(
         start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
     )
-    t = mark_good_connections(discovered_sources, visited)
+    t = _mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     # s1 -> t1 -> p1 -> t2 -> d1
@@ -57,10 +57,10 @@ def test_network_analysis():
     end_nodes = {'s1'}
     connections = {'d1': {('p1', 't2'), ('p2', 't3')}, 'p1': {('s1', 't1')}}
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1')}
-    discovered_sources, visited = visited_dfs(
+    discovered_sources, visited = _visited_dfs(
         start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
     )
-    t = mark_good_connections(discovered_sources, visited)
+    t = _mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     #                 - t4  -
@@ -73,10 +73,10 @@ def test_network_analysis():
     end_nodes = {'s1'}
     connections = {'d1': {('p1', 't2'), ('p2', 't3'), ('p1', 't4')}, 'p1': {('s1', 't1')}}
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1')}
-    discovered_sources, visited = visited_dfs(
+    discovered_sources, visited = _visited_dfs(
         start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
     )
-    t = mark_good_connections(discovered_sources, visited)
+    t = _mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     #                 - t4  -
@@ -95,10 +95,10 @@ def test_network_analysis():
         'd2': {('s2', 't5')},
     }
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1'), ('s2', 't5', 'd2')}
-    discovered_sources, visited = visited_dfs(
+    discovered_sources, visited = _visited_dfs(
         start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
     )
-    t = mark_good_connections(discovered_sources, visited)
+    t = _mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     # demand 2 (d2) with no path back to any source...
@@ -118,10 +118,10 @@ def test_network_analysis():
         'd2': {('p3', 't5')},
     }
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1')}
-    discovered_sources, visited = visited_dfs(
+    discovered_sources, visited = _visited_dfs(
         start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
     )
-    t = mark_good_connections(discovered_sources, visited)
+    t = _mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     # test with loop: t4 is like storage with I/O the same
@@ -139,10 +139,10 @@ def test_network_analysis():
         'p1': {('s1', 't1'), ('p1', 't4')},
     }
     good_tech = {('s1', 't1', 'p1'), ('p1', 't2', 'd1'), ('p1', 't4', 'd1'), ('p1', 't4', 'p1')}
-    discovered_sources, visited = visited_dfs(
+    discovered_sources, visited = _visited_dfs(
         start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
     )
-    t = mark_good_connections(discovered_sources, visited)
+    t = _mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'
 
     # no good tech
@@ -154,8 +154,8 @@ def test_network_analysis():
         'd2': {('s2', 't5')},
     }
     good_tech = set()
-    discovered_sources, visited = visited_dfs(
+    discovered_sources, visited = _visited_dfs(
         start_nodes=start_nodes, end_nodes=end_nodes, connections=connections
     )
-    t = mark_good_connections(discovered_sources, visited)
+    t = _mark_good_connections(discovered_sources, visited)
     assert t == good_tech, 'should match up!'

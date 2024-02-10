@@ -56,6 +56,12 @@ class CommodityNetwork:
             d for (r, p, d) in M.Demand if r == self.region and p == self.period
         }
         self.source_commodities: set[str] = set(M.commodity_source)
+        if not self.demand_commodities:
+            raise ValueError(f"No demand commodities discovered in region {self.region} period {self.period}.  Check "
+                             f"Demand table data")
+        if not self.source_commodities:
+            raise ValueError("No source commodities marked.  Have source commodities been identified in commodities "
+                             "table with 's'?")
         # scan non-annual techs...
         for r, p, s, d, ic, tech, v, oc in self.M.activeFlow_rpsditvo:
             if r == self.region and p == self.period:
@@ -77,15 +83,15 @@ class CommodityNetwork:
     def analyze_network(self):
         # dev note:  send a copy of connections...
         # it is consumed by the function.  (easier than managing it in the recursion)
-        discovered_sources, visited = visited_dfs(
+        discovered_sources, visited = _visited_dfs(
             self.demand_commodities, self.source_commodities, self.connections.copy()
         )
-        self.good_connections = mark_good_connections(
+        self.good_connections = _mark_good_connections(
             good_ic=discovered_sources, connections=visited.copy()
         )
 
         logger.info(
-            'Got %d good processes from %d techs in region %s, period %d',
+            'Got %d good processes from %d processes in region %s, period %d',
             len(self.good_connections),
             len(tuple(chain(*self.connections.values()))),
             self.region,
@@ -98,7 +104,7 @@ class CommodityNetwork:
             orig_connections |= {(ic, tech, oc) for (ic, tech) in self.connections[oc]}
         self.bad_connections = orig_connections - self.good_connections
         for bc in self.bad_connections:
-            logger.warning('Bad process: %s in region %s, period %d', bc, self.region, self.period)
+            logger.warning('Bad (orphan/disconnected) process: %s in region %s, period %d', bc, self.region, self.period)
 
     def unsupported_demands(self) -> set[str]:
         """
@@ -111,7 +117,7 @@ class CommodityNetwork:
         return bad_demands
 
 
-def mark_good_connections(
+def _mark_good_connections(
     good_ic: set[str], connections: dict[str, set[tuple]], start: str | None = None
 ) -> set[tuple]:
     """
@@ -132,19 +138,19 @@ def mark_good_connections(
 
     if not start:
         for start in good_ic:
-            good_connections |= mark_good_connections(good_ic, connections, start=start)
+            good_connections |= _mark_good_connections(good_ic, connections, start=start)
 
     # recurse...
     for oc, tech in connections.pop(start, []):  # prevent re-expanding this later by popping
         good_connections.add((start, tech, oc))
         # explore all upstream
-        good_connections |= mark_good_connections(
+        good_connections |= _mark_good_connections(
             good_ic=good_ic, connections=connections, start=oc
         )
     return good_connections
 
 
-def visited_dfs(
+def _visited_dfs(
     start_nodes: set[str],
     end_nodes: set[str],
     connections: dict[str, set[tuple]],
@@ -168,7 +174,7 @@ def visited_dfs(
         return set(), dict()
     if not current_start:  # start from each node in the starts
         for node in start_nodes:
-            ds, v = visited_dfs(
+            ds, v = _visited_dfs(
                 start_nodes=start_nodes,
                 end_nodes=end_nodes,
                 connections=connections,
@@ -187,7 +193,7 @@ def visited_dfs(
             discovered_sources.add(ic)
         else:
             # explore from here
-            ds, v = visited_dfs(
+            ds, v = _visited_dfs(
                 start_nodes,
                 end_nodes,
                 connections,
@@ -215,7 +221,7 @@ def source_trace(M: 'TemoaModel') -> bool:
                 demands_traceable = False
                 for commodity in unsupported_demands:
                     logger.warning(
-                        'Demand %s is not supported back to source in region %s period %d',
+                        'Demand %s is not supported back to source commodities in region %s period %d',
                         commodity,
                         commodity_network.region,
                         commodity_network.period,
