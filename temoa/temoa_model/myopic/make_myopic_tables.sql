@@ -1,6 +1,6 @@
 BEGIN ;
 
-CREATE TABLE MyopicCapacity (
+CREATE TABLE IF NOT EXISTS MyopicCapacity (
     year_added  integer,
     scenario    text,
     region      text,
@@ -18,7 +18,7 @@ CREATE TABLE MyopicCapacity (
     PRIMARY KEY (scenario, region, period, tech, vintage),
     CHECK  ( capacity >= 0 )
 );
-CREATE TABLE MyopicEmission (
+CREATE TABLE IF NOT EXISTS MyopicEmission (
     scenario    text,
     region      text,
     sector      text,
@@ -36,7 +36,7 @@ CREATE TABLE MyopicEmission (
 
     PRIMARY KEY (scenario,region, period, emission_commodity, tech, vintage)
 );
-CREATE TABLE MyopicCurtailment (
+CREATE TABLE IF NOT EXISTS MyopicCurtailment (
     scenario    text,
     region      text,
     sector      text,
@@ -61,7 +61,7 @@ CREATE TABLE MyopicCurtailment (
     PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm)
 
 );
-CREATE TABLE MyopicCost (
+CREATE TABLE IF NOT EXISTS MyopicCost (
     scenario    text,
     region      text,
     sector      text,
@@ -80,7 +80,7 @@ CREATE TABLE MyopicCost (
     PRIMARY KEY (region, scenario, output_name, tech, vintage)
 
 );
-CREATE TABLE MyopicRetirement (
+CREATE TABLE IF NOT EXISTS MyopicRetirement (
     scenario    text,
     region      text,
     sector      text,
@@ -98,7 +98,7 @@ CREATE TABLE MyopicRetirement (
     PRIMARY KEY (region, scenario, period, tech, vintage)
 );
 
-CREATE TABLE MyopicFlowIn(
+CREATE TABLE IF NOT EXISTS MyopicFlowIn(
     scenario    text,
     region      text,
     sector      text,
@@ -124,7 +124,7 @@ CREATE TABLE MyopicFlowIn(
     PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm),
     check ( flow >= 0 )
 );
-CREATE TABLE MyopicFlowOut(
+CREATE TABLE IF NOT EXISTS MyopicFlowOut(
     scenario    text,
     region      text,
     sector      text,
@@ -150,7 +150,7 @@ CREATE TABLE MyopicFlowOut(
     PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm),
     check ( flow >= 0 )
 );
-CREATE TABLE MyopicEfficiency(
+CREATE TABLE IF NOT EXISTS MyopicEfficiency(
     base_year   integer,
     region      text,
     input_comm  text,
@@ -166,5 +166,5 @@ CREATE TABLE MyopicEfficiency(
     PRIMARY KEY (region, input_comm, tech, vintage, output_comm)
 );
 -- for efficient searching by rtv:
-CREATE INDEX region_tech_vintage ON MyopicEfficiency(region, tech, vintage);
+CREATE INDEX IF NOT EXISTS region_tech_vintage ON MyopicEfficiency(region, tech, vintage);
 COMMIT ;

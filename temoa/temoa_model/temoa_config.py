@@ -49,7 +49,9 @@ class TemoaConfig:
         myopic: dict | None = None,
         config_file: Path | None = None,
         silent: bool = False,
-        stream_output=False,
+        stream_output:bool=False,
+        price_check:bool=True,
+        source_check:bool=True,
     ):
         self.scenario = scenario
         # capture the operating mode
@@ -111,15 +113,20 @@ class TemoaConfig:
         self.myopic_inputs = myopic
         self.silent = silent
         self.stream_output = stream_output
+        self.price_check = price_check
+        self.source_check = source_check
 
         # warn if output db != input db
-        if self.input_file.suffix == self.output_database.suffix: # they are both .db/.sqlite
-            if self.input_file != self.output_database: # they are not the same db
-                msg =   ('Input file, which is a database, does not match the output file\n User '
-                         'is responsible to ensure the data ~ results congruency in the output db')
+        if self.input_file.suffix == self.output_database.suffix:  # they are both .db/.sqlite
+            if self.input_file != self.output_database:  # they are not the same db
+                msg = (
+                    'Input file, which is a database, does not match the output file\n User '
+                    'is responsible to ensure the data ~ results congruency in the output db'
+                )
                 logger.warning(msg)
                 if not self.silent:
-                    SE.write("Warning: " + msg)
+                    SE.write('Warning: ' + msg)
+
     @staticmethod
     def validate_schema(data: dict):
         """
@@ -143,6 +150,8 @@ class TemoaConfig:
                 'MGA': {'slack': int(), 'iterations': int(), 'weight': str()},
                 'myopic': {'myopic_view': int(), 'keep_myopic_databases': bool()},
                 'stream_output': bool(),
+                'price_check': bool(),
+                'source_check': bool()
             }:
                 # full schema OK
                 pass
