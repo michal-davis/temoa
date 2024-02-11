@@ -199,7 +199,7 @@ class DataPortalLoader:
         if myopic_load:
             capacity_pair = (
                 self.M.ExistingCapacity,
-                'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
+                'SELECT region, tech, vintage, capacity FROM main.MyopicNetCapacity '
                 'UNION '
                 'SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity ',
             )

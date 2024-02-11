@@ -50,6 +50,9 @@ class CommodityNetwork:
         self.M = M
         self.region = region
         self.period = period
+        # the cataloguing of inputs/outputs by tech is needed for implicit links like via emissions in LinkedTech
+        self.tech_inputs: dict[str, set[str]] | None = defaultdict(set)
+        self.tech_outputs: dict[str, set[str]] | None = defaultdict(set)
         # {output comm: {input comm, tech} that source it}
         self.connections: dict[str, set[tuple]] = defaultdict(set)
         self.demand_commodities: set[str] = {
@@ -57,28 +60,89 @@ class CommodityNetwork:
         }
         self.source_commodities: set[str] = set(M.commodity_source)
         if not self.demand_commodities:
-            raise ValueError(f"No demand commodities discovered in region {self.region} period {self.period}.  Check "
-                             f"Demand table data")
+            raise ValueError(
+                f'No demand commodities discovered in region {self.region} period {self.period}.  Check '
+                f'Demand table data'
+            )
         if not self.source_commodities:
-            raise ValueError("No source commodities marked.  Have source commodities been identified in commodities "
-                             "table with 's'?")
+            raise ValueError(
+                'No source commodities marked.  Have source commodities been identified in commodities '
+                "table with 's'?"
+            )
         # scan non-annual techs...
         for r, p, s, d, ic, tech, v, oc in self.M.activeFlow_rpsditvo:
             if r == self.region and p == self.period:
                 self.connections[oc].add((ic, tech))
+                self.tech_inputs[tech].add(ic)
+                self.tech_outputs[tech].add(oc)
         # scan annual techs...
         for r, p, ic, tech, v, oc in M.activeFlow_rpitvo:
             if r == self.region and p == self.period:
                 self.connections[oc].add((ic, tech))
+                self.tech_inputs[tech].add(ic)
+                self.tech_outputs[tech].add(oc)
 
         # network of {destination: {origins}}
         self.network: dict[str, set[str]] = dict()
+
+        self.connect_linked_techs()
 
         # TODO:  perhaps sockets later to account for links, for now, we will just look at internal connex
         # # set of exchange techs FROM this region that supply commodity through link
         # # {tech: set(output commodities)}
         # self.output_sockets: dict[str, set[str]] = dict()
         # self.input_sockets: ...
+
+    def connect_linked_techs(self):
+        # add implicit connections from linked tech...
+        for (r, driver, emission), driven in self.M.LinkedTechs.items():
+            if r == self.region:
+                # check that the driven tech only has 1 input....
+                # Dev Note:  It isn't clear how to link to a driven tech with multiple inputs as the linkage
+                # is via the emission of the driver, and establishing links to all inputs of the driven
+                # would likely supply false assurance that the multiple inputs were all viable
+                if len(self.tech_inputs[driven]) > 1:
+                    raise ValueError(
+                        'Multiple input commodities detected for a driven Linked Tech.  This is '
+                        'currently not supported because establishing the validity of the multiple '
+                        'input commodities is not possible with current linkage data.'
+                    )
+                # check that the driver & driven techs both exist
+                if driver in self.tech_outputs and driven in self.tech_outputs:  # we're gtg.
+                    for oc in self.tech_outputs[driver]:
+                        # we need to link the commodities via an implied link
+                        # so the oc from the driver needs to be linked to the ic for the driven by a 'fake' tech
+                        self.connections[oc].update(
+                            {(ic, '<<linked tech>>') for ic in self.tech_inputs[driven]}
+                        )
+
+                # else, document errors in linkage...
+                elif driver not in self.tech_outputs and driven not in self.tech_outputs:
+                    # neither tech is present, not a problem
+                    logger.debug(
+                        'Note (no action reqd.):  Neither linked tech %s nor %s are active in region %s, period %s',
+                        driver,
+                        driven,
+                        self.region,
+                        self.period,
+                    )
+                elif driver in self.tech_outputs and driven not in self.tech_outputs:
+                    logger.info(
+                        'No driven linked tech available for driver %s in regions %s, period %d.  Driver may function without it.',
+                        driver,
+                        self.region,
+                        self.period,
+                    )
+                else:  # the driver tech is not available, a problem because the driven could be allowed to run without constraint.
+                    logger.warning(
+                        'Driven linked tech %s is not connected to an active driver in region %s, period %d',
+                        driven,
+                        self.region,
+                        self.period,
+                    )
+                    raise ValueError(
+                        'Driven linked tech %s is not connected to a driver.  See log file details. \n'
+                    )
 
     def analyze_network(self):
         # dev note:  send a copy of connections...
@@ -91,7 +155,7 @@ class CommodityNetwork:
         )
 
         logger.info(
-            'Got %d good processes from %d processes in region %s, period %d',
+            'Got %d good technologies (possibly multi-vintage) from %d techs in region %s, period %d',
             len(self.good_connections),
             len(tuple(chain(*self.connections.values()))),
             self.region,
@@ -104,7 +168,13 @@ class CommodityNetwork:
             orig_connections |= {(ic, tech, oc) for (ic, tech) in self.connections[oc]}
         self.bad_connections = orig_connections - self.good_connections
         for bc in self.bad_connections:
-            logger.warning('Bad (orphan/disconnected) process: %s in region %s, period %d', bc, self.region, self.period)
+            logger.warning(
+                'Bad (orphan/disconnected) process should be investigated/removed: \n'
+                '   %s in region %s, period %d',
+                bc,
+                self.region,
+                self.period,
+            )
 
     def unsupported_demands(self) -> set[str]:
         """
@@ -220,7 +290,7 @@ def source_trace(M: 'TemoaModel') -> bool:
             if unsupported_demands:
                 demands_traceable = False
                 for commodity in unsupported_demands:
-                    logger.warning(
+                    logger.error(
                         'Demand %s is not supported back to source commodities in region %s period %d',
                         commodity,
                         commodity_network.region,

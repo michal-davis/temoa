@@ -1,7 +1,7 @@
 BEGIN ;
 
-CREATE TABLE IF NOT EXISTS MyopicCapacity (
-    year_added  integer,
+CREATE TABLE IF NOT EXISTS MyopicNetCapacity (
+    basis_year  integer,
     scenario    text,
     region      text,
     period      integer,
