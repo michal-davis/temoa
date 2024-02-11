@@ -35,6 +35,7 @@ from pathlib import Path
 import pyomo.opt
 from pyomo.dataportal import DataPortal
 
+from temoa.temoa_model import source_check
 from temoa.temoa_model.dat_file_maker import db_2_dat
 from temoa.temoa_model.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
@@ -140,6 +141,20 @@ class TemoaSequencer:
                 data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
                 instance = build_instance(data_portal, silent=self.config.silent)
                 return instance
+
+            case TemoaMode.CHECK:
+                # convert the input file from .sqlite -> .dat if needed
+                if self.config.input_file.suffix == '.sqlite':
+                    dat_file = self.config.input_file.with_suffix('.dat')
+                    db_2_dat(self.config.input_file, dat_file, self.config)
+                    # update the config to point to the .dat file newly created
+                    self.config.dat_file = dat_file
+                data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
+                # override the price check, if it isn't selected
+                self.config.price_check = True
+                instance = build_instance(data_portal, silent=self.config.silent)
+                source_check.source_trace(instance)
+
 
             case TemoaMode.PERFECT_FORESIGHT:
                 # convert the input file from .sqlite -> .dat if needed

@@ -21,15 +21,14 @@ GNU General Public License for more details.
 A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
-"""
-# Written by:  J. F. Hyink
-# jeff@westernspark.us
-# https://westernspark.us
-# Created on:  11/28/23
 
+Written by:  J. F. Hyink
+jeff@westernspark.us
+https://westernspark.us
+Created on:  11/28/23
+"""
 
 from enum import Enum, unique
-
 
 
 @unique
@@ -40,4 +39,4 @@ class TemoaMode(Enum):
     MYOPIC = 3  # Step-wise execution through the future
     METHOD_OF_MORRIS = 4  # Method-of-Morris run
     BUILD_ONLY = 5  # Just build the model, no solve
-
+    CHECK = 6  # build and run price check, source check

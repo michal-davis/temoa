@@ -65,6 +65,7 @@ class CommodityNetwork:
                 f'Demand table data'
             )
         if not self.source_commodities:
+            logger.error('No source commodities discovered')
             raise ValueError(
                 'No source commodities marked.  Have source commodities been identified in commodities '
                 "table with 's'?"
@@ -281,6 +282,7 @@ def source_trace(M: 'TemoaModel') -> bool:
     :param M: the model to inspect
     :return: True if all demands are traceable, False otherwise
     """
+    logger.debug('Starting source trace')
     demands_traceable = True
     for region in M.regions:
         for p in M.time_optimize:
@@ -296,4 +298,5 @@ def source_trace(M: 'TemoaModel') -> bool:
                         commodity_network.region,
                         commodity_network.period,
                     )
+    logger.debug('Completed source trace')
     return demands_traceable

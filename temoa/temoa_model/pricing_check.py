@@ -178,7 +178,7 @@ def price_checker(M: 'TemoaModel'):
     #           fixed cost that do not have ALL fixed costs that match ALL variable
     #           costs and vice-versa.  Else, we are going to get false positives
     #           on things that have NO fixed (or variable) costs at all.
-    #           Note this checks all Periods, not just base year as previous check did.
+    #           Note this checks all periods in lifetime, not just base year as previous check did.
     logger.debug('  Starting price check #2')
     for region, tech, vintage in sorted_efficiency_rtv:
         # take the differenece in the sets of periods...
@@ -260,7 +260,7 @@ def check_tech_uncap(M: 'TemoaModel') -> bool:
     """
     Check that the tech_uncap set members...
     1.  do not have fixed or invest costs
-    2.  Either have no Var cost, or a Var cost in every year of their lifespan
+    2.  Either have no Var cost, or a Var cost in every year of their lifespan (similar to check #3 above)
     3.  Are not in the MaxCapacity/MinCapacity parameters
     4.  future:  screen the group capacity params
     :param M:

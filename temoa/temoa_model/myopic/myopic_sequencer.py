@@ -264,6 +264,8 @@ class MyopicSequencer:
                 last_instance_status = 'roll_back'
                 # restart loop
                 continue
+            else:
+                last_instance_status = 'optimal'
 
             logger.info('Completed myopic iteration on %s', idx)
             # 7.  Update the output tables...
@@ -279,7 +281,7 @@ class MyopicSequencer:
 
             # prep next loop
             last_base_year = idx.base_year  # update
-            last_instance_status = 'optimal'  # simulated...
+
 
     def initialize_myopic_efficiency_table(self):
         """
@@ -289,6 +291,7 @@ class MyopicSequencer:
         # the -1 for base year is used to indicate "existing" for flag purposes
         # we will just use the "existing" flag in the orig db to set this up and capture
         # all values in those vintages as "existing"
+        # the "coalesce" is an if-else structure to pluck out the correct lifetime value, precedence left->right
         default_lifetime = TemoaModel.default_lifetime_tech
         query = (
             'INSERT INTO MyopicEfficiency '
@@ -359,8 +362,9 @@ class MyopicSequencer:
                     (myopic_idx.base_year, self.config.scenario, r, p, sector, t, v, val, lifetime),
                 )
             except sqlite3.IntegrityError:
-                print(
-                    f'choked updating MyopicNetCapacity on : {myopic_idx.base_year, r, p, t, v, val, lifetime}'
+                SE.write(
+                    f'choked updating MyopicNetCapacity on : {myopic_idx.base_year, r, p, t, v, val, lifetime}.\n'
+                    'check clearing process.'
                 )
         self.con.commit()
 
@@ -403,7 +407,7 @@ class MyopicSequencer:
                     p,
                 )
             except sqlite3.IntegrityError:
-                print(
+                SE.write(
                     f'choked updating MyopicNetCapacity on : {myopic_idx.base_year, r, p, t, v, None, lifetime}'
                 )
                 logger.error(
@@ -418,10 +422,6 @@ class MyopicSequencer:
         :param model: the solved model for this period
         :return: None
         """
-        data = defaultdict(dict)
-        # clean up the data
-        # for r, p, s, d, i, t, v, o in model.V_FlowOut:
-
         # erase in case we are over-writing
         self.cursor.execute(
             f'DELETE FROM main.MyopicFlowOut WHERE period >= {myopic_idx.base_year}'
@@ -530,14 +530,14 @@ class MyopicSequencer:
             f'  AND Efficiency.vintage <= {last_demand_year}'
         )
         if self.debugging:
-            x = self.cursor.execute(
+            raw = self.cursor.execute(
                 f'SELECT {base}, regions, input_comm, tech, vintage, output_comm, efficiency '
                 'FROM Efficiency '
                 f'  WHERE Efficiency.vintage >= {base}'
                 f'  AND Efficiency.vintage <= {last_demand_year}'
             ).fetchall()
             print('\n\n **** adding to MyopicEfficiency table from newly visible techs ****')
-            for idx, t in enumerate(x):
+            for idx, t in enumerate(raw):
                 print(idx, t)
             print()
         self.cursor.execute(query)
