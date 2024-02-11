@@ -49,9 +49,9 @@ class TemoaConfig:
         myopic: dict | None = None,
         config_file: Path | None = None,
         silent: bool = False,
-        stream_output:bool=False,
-        price_check:bool=True,
-        source_check:bool=True,
+        stream_output: bool = False,
+        price_check: bool = True,
+        source_check: bool = True,
     ):
         self.scenario = scenario
         # capture the operating mode
@@ -85,7 +85,7 @@ class TemoaConfig:
             raise FileNotFoundError(f'could not locate the input file: {self.input_file}')
         if self.input_file.suffix not in {'.dat', '.sqlite'}:
             logger.error('Input file is not of type .dat or .sqlite')
-            raise AttributeError(f'Input file is not of type .dat or .sqlite')
+            raise AttributeError('Input file is not of type .dat or .sqlite')
 
         # accept and validate the output db
         self.output_database = Path(output_database)
@@ -93,7 +93,7 @@ class TemoaConfig:
             raise FileNotFoundError(f'Could not locate the output db: {self.output_database}')
         if self.output_database.suffix != '.sqlite':
             logger.error('Output DB does not appear to be a sqlite db')
-            raise AttributeError(f'Output DB should be .sqlite type')
+            raise AttributeError('Output DB should be .sqlite type')
 
         # create a placeholder for .dat file.  If conversion is needed, this
         # is the destination...
@@ -151,7 +151,7 @@ class TemoaConfig:
                 'myopic': {'myopic_view': int(), 'keep_myopic_databases': bool()},
                 'stream_output': bool(),
                 'price_check': bool(),
-                'source_check': bool()
+                'source_check': bool(),
             }:
                 # full schema OK
                 pass
@@ -207,6 +207,9 @@ class TemoaConfig:
         msg += '{:>{}s}: {}\n'.format('Output database target', width, self.output_database)
         msg += '{:>{}s}: {}\n'.format('Path for outputs and log', width, self.output_path)
         msg += spacer
+        msg += '{:>{}s}: {}\n'.format('Price Check', width, self.price_check)
+        msg += '{:>{}s}: {}\n'.format('Source Check', width, self.source_check)
+        msg += spacer
         msg += '{:>{}s}: {}\n'.format('Selected solver', width, self.solver_name)
         msg += '{:>{}s}: {}\n'.format('NEOS status', width, self.neos)
         msg += '{:>{}s}: {}\n'.format('Price Check', width, self.price_check)
@@ -220,9 +223,12 @@ class TemoaConfig:
 
         if self.scenario_mode == TemoaMode.MYOPIC:
             msg += spacer
-            msg += '{:>{}s}: {}\n'.format('Myopic view depth', width, self.myopic_inputs.get('view_depth'))
-            msg += '{:>{}s}: {}\n'.format('Myopic step size', width, self.myopic_inputs.get('step_size'))
-
+            msg += '{:>{}s}: {}\n'.format(
+                'Myopic view depth', width, self.myopic_inputs.get('view_depth')
+            )
+            msg += '{:>{}s}: {}\n'.format(
+                'Myopic step size', width, self.myopic_inputs.get('step_size')
+            )
 
         # msg += '{:>{}s}: {}\n'.format('Retain myopic databases', width, self.KeepMyopicDBs)
         # msg += spacer
