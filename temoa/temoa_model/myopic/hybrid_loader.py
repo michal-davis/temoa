@@ -65,7 +65,7 @@ class HybridLoader:
     """
 
     def __init__(self, db_connection: Connection):
-        self.debugging = False  # for T/S
+        self.debugging = False  # for T/S, will print to screen the data load values
         self.con = db_connection
 
         # filters for myopic ops
@@ -180,8 +180,8 @@ class HybridLoader:
                          'dropping unused commodities: %s',
                          len(phys_commodities), len(input_commodities), phys_commodities - input_commodities)
 
-
-        for row in ok_techs:
+        # now, we want to use the existing techs unioned with the screened new techs to form our filter basis
+        for row in ok_techs | existing_techs:
             r, c1, t, v, c2, _ = row
             self.viable_techs.add(t)
             self.viable_input_comms.add(c1)
@@ -193,7 +193,7 @@ class HybridLoader:
 
         # book the EfficiencyTable
         # we should sort here for deterministic results after pulling from set
-        self.efficiency_values = sorted(ok_techs)
+        self.efficiency_values = sorted(ok_techs | existing_techs)
 
     def _clear_filters(self):
         self.viable_techs.clear()
@@ -211,6 +211,7 @@ class HybridLoader:
         :param table_name: the table name to check
         :return: True if it exists in the schema
         """
+        # TODO:  This could switch to fetchone
         table_name_check = (
             self.con.cursor()
             .execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
