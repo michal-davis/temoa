@@ -59,17 +59,28 @@ class MyopicSequencer:
     """
 
     # these are the tables that are incrementally built by the myopic instances
-    myopic_tables = [
+    tables_with_scenarior_reference = [
         'MyopicNetCapacity',
         'MyopicCost',
-        'MyopicEmission',
-        'MyopicCurtailment',
-        'MyopicRetirement',
-        'MyopicFlowIn',
-        'MyopicFlowOut',
+        'Output_CapacityByPeriodAndTech',
+        'Output_Curtailment',
+        'Output_Emissions',
+        'Output_V_Capacity',
+        'Output_V_RetiredCapacity',
+        'Output_VFlow_In',
+        'Output_VFlow_Out',
+    ]
+    tables_without_scenario_reference = [
         'MyopicEfficiency',
     ]
-    legacy_output_tables_with_period_reference = [
+
+    # note:  below excludes MyopicEfficiency, which is managed separately
+    tables_with_period_reference = [
+        'MyopicNetCapacity',
+        'MyopicCost',
+        ]
+
+    legacy_tables_with_period_reference = [
         'Output_CapacityByPeriodAndTech',
         'Output_Curtailment',
         'Output_Emissions',
@@ -602,18 +613,18 @@ class MyopicSequencer:
         """
         scenario_name = self.config.scenario
         logger.debug('Deleting old results for scenario name %s', scenario_name)
-        for table in self.myopic_tables:
+        for table in self.tables_with_scenarior_reference:
             try:
                 self.cursor.execute(f'DELETE FROM {table} WHERE scenario = (?)', (scenario_name,))
             except sqlite3.OperationalError:
-                print(f'no scenario ref in table {table}, clearing whole table.')
-                self.cursor.execute(f'DELETE FROM {table}')
-        for table in self.legacy_output_tables_with_period_reference:
+                SE.write(f'no scenario ref in table {table}\n')
+                raise sqlite3.OperationalError
+        for table in self.tables_without_scenario_reference:
             try:
-                self.cursor.execute(f'DELETE FROM {table} WHERE scenario = (?)', (scenario_name,))
-            except sqlite3.OperationalError:
-                print(f'no scenario ref in table {table}, clearing whole table.')
                 self.cursor.execute(f'DELETE FROM {table}')
+            except sqlite3.OperationalError:
+                SE.write(f'Failed to clear table {table}.\n')
+                raise sqlite3.OperationalError
         self.con.commit()
 
     def clear_results_after(self, period):
@@ -630,16 +641,20 @@ class MyopicSequencer:
             )
             raise ValueError(f'Trying to clear a year {period} that is not in the optimize periods')
         logger.debug('Clearing periods %s+ from output tables', period)
-        for table in self.myopic_tables:
-            # the MyopicEfficiency table update process takes care of that table separately.
-            if table != 'MyopicEfficiency':
+        for table in self.tables_with_period_reference:
+            try:
                 self.cursor.execute(f'DELETE FROM {table} WHERE period >= {period}')
-        for table in self.legacy_output_tables_with_period_reference:
+            except sqlite3.OperationalError:
+                SE.write(f'Failed trying to clear periods from table {table}\n')
+                raise sqlite3.OperationalError
+        for table in self.legacy_tables_with_period_reference:
             try:
                 self.cursor.execute(f'DELETE FROM {table} WHERE t_periods >= {period}')
             except sqlite3.OperationalError:
-                print(f'Could not delete from table {table}')
-        # new capacity has vintage only...
+                SE.write(f'Failed trying to clear periods from table {table}\n')
+                raise sqlite3.OperationalError
+
+        # special case... new capacity has vintage only...
         self.cursor.execute(
             'DELETE FROM main.Output_V_NewCapacity WHERE main.Output_V_NewCapacity.vintage >= (?)',
             (period,),
