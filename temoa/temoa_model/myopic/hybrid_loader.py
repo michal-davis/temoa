@@ -96,8 +96,8 @@ class HybridLoader:
         ).fetchall()
         logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
 
-        # We will need to ID the non-demand commodities (production / emission) for filtering...
-        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag <> 'd'").fetchall()
+        # We will need to ID the physical commodities for later filtering...
+        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 'p' OR flag = 's'").fetchall()
         phys_commodities = {t[0] for t in raw}
         assert len(phys_commodities) > 0, 'Failsafe...we should find some!  Did flag change?'
 
@@ -115,6 +115,7 @@ class HybridLoader:
 
         techs_by_production_output = defaultdict(set)  # {phys_output_comm: { techs } }
         ok_techs = set()
+        existing_techs = set()
         suppressed_techs = set()
         input_commodities = set()
         for r, c1, t, v, c2, eff, lifetime in contents:
@@ -122,7 +123,12 @@ class HybridLoader:
             if c1 not in phys_commodities:
                 raise ValueError(f'Tech {t} has a non-physical input: {c1}')
             input_commodities.add(c1)
-
+            # TODO:  think of alternatives here....
+            # we will add any already built (existing capacity) techs to "OK techs" because they are de-facto
+            # already in existence.  This *might* cause a model warning regarding unused outputs if there is no
+            # longer a receiver for their output.
+            if v < myopic_index.base_year:
+                existing_techs.add(row)
             ok_techs.add(row)
             # we screen here to not worry about demand/emission outputs
             if c2 in phys_commodities:
@@ -132,11 +138,17 @@ class HybridLoader:
         # itself
         illegal_outputs = set(techs_by_production_output.keys()) - input_commodities
 
+        # we want to exclude any existing techs from this screening...  they should persist, even if no value ATT.
+        # removing them from ok_techs will give them a free pass and  enable the loop below to complete
+        ok_techs -= existing_techs
         # this needs to be done iteratively because pulling 1 tech *might* make an output from another tech
         # illegal
+        iter_count = 0
         while illegal_outputs:
             for output in illegal_outputs:
-                # mark all the techs that push that output as "suppressed"
+                # mark all the techs that push that output as "suppressed", UNLESS they are existing capacity techs
+                # this should effectively suppress any NEW techs in this window, but still allow legacy/existing ones
+                # through
                 suppressed_techs.update(techs_by_production_output[output])
             # remove from viable
             ok_techs -= suppressed_techs
@@ -150,19 +162,24 @@ class HybridLoader:
             # re-screen for a new list of viable commodities from inputs
             input_commodities = {row[1] for row in ok_techs}
             illegal_outputs = set(techs_by_production_output.keys()) - input_commodities
+            iter_count += 1
+            if iter_count%10 == 0: print(f'Iteration {iter_count}, suppressed techs: {len(suppressed_techs)}')
 
         # log the deltas
-        logger.debug('Reduced techs in Efficiency from %d to %d', len(contents), len(ok_techs))
-        logger.debug('Reduced Physical Commodities from %d to %d', len(raw), len(input_commodities))
-        # for tech in sorted(suppressed_techs, key = lambda tech: tech[2]):
-        #     print(tech)
-        for tech in suppressed_techs:
-            logger.info(
-                'Tech: %s\n'
-                ' is SUPPRESSED as it has a Physical Commodity output that has no viable '
-                'receiver',
-                tech,
-            )
+        if suppressed_techs:
+            logger.debug('Reduced techs in Efficiency from %d to %d', len(contents), len(ok_techs))
+            for tech in suppressed_techs:
+                logger.info(
+                    'Tech: %s\n'
+                    ' is SUPPRESSED as it has a Physical Commodity output that has no viable '
+                    'receiver',
+                    tech,
+                )
+        if len(input_commodities) < len(raw):
+            logger.debug('Reduced Input (Physical/Supply) Commodities from %d to %d by '
+                         'dropping unused commodities: %s',
+                         len(phys_commodities), len(input_commodities), phys_commodities - input_commodities)
+
 
         for row in ok_techs:
             r, c1, t, v, c2, _ = row
@@ -523,7 +540,7 @@ class HybridLoader:
             # to prevent them from getting in to the capacity variables.
             # noinspection SqlUnused
             raw = cur.execute(
-                'SELECT region, tech, vintage, capacity FROM main.MyopicCapacity '
+                'SELECT region, tech, vintage, capacity FROM main.MyopicNetCapacity '
                 f' WHERE vintage < {mi.base_year} '
                 '  AND tech not in (SELECT tech FROM main.technologies WHERE technologies.unlim_cap > 0)'
                 'UNION '

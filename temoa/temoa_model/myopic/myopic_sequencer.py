@@ -60,7 +60,7 @@ class MyopicSequencer:
 
     # these are the tables that are incrementally built by the myopic instances
     myopic_tables = [
-        'MyopicCapacity',
+        'MyopicNetCapacity',
         'MyopicCost',
         'MyopicEmission',
         'MyopicCurtailment',
@@ -69,18 +69,14 @@ class MyopicSequencer:
         'MyopicFlowOut',
         'MyopicEfficiency',
     ]
-    legacy_output_tables = [
+    legacy_output_tables_with_period_reference = [
         'Output_CapacityByPeriodAndTech',
-        'Output_Costs',
         'Output_Curtailment',
-        'Output_Duals',
         'Output_Emissions',
-        'Output_Objective',
         'Output_V_Capacity',
-        'Output_V_NewCapacity',
         'Output_V_RetiredCapacity',
         'Output_VFlow_In',
-        'Output_VFlow_Out'
+        'Output_VFlow_Out',
     ]
 
     def __init__(self, config: TemoaConfig | None):
@@ -164,11 +160,11 @@ class MyopicSequencer:
         # load up the instance queue
         self.characterize_run()
 
-        # clear out the old riff-raff
-        self.drop_old_results()
-
         # create the Myopic Output tables
         self.execute_script(table_script_file)
+
+        # clear out the old riff-raff
+        self.drop_old_results()
 
         # start building the MyopicEfficiency table.  (need to do this prior to data build to get Existing
         # Capacity accounted for)
@@ -239,11 +235,19 @@ class MyopicSequencer:
             # 6b.  check the commodity network
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'check')
-            good_network = source_trace(instance)
-            if not good_network:
-                raise RuntimeError(
-                    'Source Trace of the Commodity Network failed for some demands.  See log file.'
-                )
+            if self.config.source_check:
+                good_network = source_trace(instance)
+                if not good_network:
+                    SE.write(
+                        'Source Trace of the Commodity Network failed for some demands.  '
+                        'Rolling back.  See log file for failed demands.\n'
+                    )
+                    logger.warning(
+                        'FAILED myopic iteration due to bad demand trace.  Rolling back...'
+                    )
+                    last_instance_status = 'roll_back'
+                    # skip the rest of the loop
+                    continue
 
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'solve')
@@ -321,7 +325,7 @@ class MyopicSequencer:
 
     def update_capacity_table(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
         """
-        Update the MyopicCapacity table with whatever was built in this increment
+        Update the MyopicNetCapacity table with whatever was built in this increment
         :param myopic_idx: the current MyopicIndex
         :param model: the solved model
         :return: None
@@ -351,12 +355,12 @@ class MyopicSequencer:
             sector = raw[0][0]
             try:
                 self.cursor.execute(
-                    'INSERT INTO MyopicCapacity ' 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT INTO MyopicNetCapacity ' 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     (myopic_idx.base_year, self.config.scenario, r, p, sector, t, v, val, lifetime),
                 )
             except sqlite3.IntegrityError:
                 print(
-                    f'choked updating MyopicCapacity on : {myopic_idx.base_year, r, p, t, v, val, lifetime}'
+                    f'choked updating MyopicNetCapacity on : {myopic_idx.base_year, r, p, t, v, val, lifetime}'
                 )
         self.con.commit()
 
@@ -379,7 +383,7 @@ class MyopicSequencer:
             sector = raw[0][0]
             try:
                 self.cursor.execute(
-                    'INSERT INTO MyopicCapacity ' 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT INTO MyopicNetCapacity ' 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     (
                         myopic_idx.base_year,
                         self.config.scenario,
@@ -393,17 +397,17 @@ class MyopicSequencer:
                     ),
                 )
                 logger.debug(
-                    'Added unrestricted cap tech %s to MyopicCapacity table at vintage %d, period %d',
+                    'Added unrestricted cap tech %s to MyopicNetCapacity table at vintage %d, period %d',
                     t,
                     v,
                     p,
                 )
             except sqlite3.IntegrityError:
                 print(
-                    f'choked updating MyopicCapacity on : {myopic_idx.base_year, r, p, t, v, None, lifetime}'
+                    f'choked updating MyopicNetCapacity on : {myopic_idx.base_year, r, p, t, v, None, lifetime}'
                 )
                 logger.error(
-                    'Failed to add unrestricted cap tech %s to MyopicCapacity in vintage %d', t, v
+                    'Failed to add unrestricted cap tech %s to MyopicNetCapacity in vintage %d', t, v
                 )
         self.con.commit()
 
@@ -463,7 +467,7 @@ class MyopicSequencer:
         # We already captured the ExistingCapacity efficiency values when the table
         # was initialized, so now we need to incrementally:
         # 0.  REMOVE anything past the current base year that may have been added
-        # 1.  REMOVE things that were NOT added to the MyopicCapacity from the last base year forward (if any)
+        # 1.  REMOVE things that were NOT added to the MyopicNetCapacity from the last base year forward (if any)
         # 2.  Add the new stuff that is visible in the current myopic period
 
         base = myopic_index.base_year
@@ -482,20 +486,20 @@ class MyopicSequencer:
         # 1.  Clean up stuff not implemented in previous step
         query = (
             'DELETE FROM MyopicEfficiency WHERE NOT EXISTS ('
-            '  SELECT * FROM MyopicCapacity WHERE '
-            '    MyopicEfficiency.region = MyopicCapacity.region AND '
-            '    MyopicEfficiency.tech = MyopicCapacity.tech AND '
-            '    MyopicEfficiency.vintage = MyopicCapacity.vintage) AND '
+            '  SELECT * FROM MyopicNetCapacity WHERE '
+            '    MyopicEfficiency.region = MyopicNetCapacity.region AND '
+            '    MyopicEfficiency.tech = MyopicNetCapacity.tech AND '
+            '    MyopicEfficiency.vintage = MyopicNetCapacity.vintage) AND '
             f'    MyopicEfficiency.vintage >= {prev_base}'
         )
 
         if self.debugging:
             debug_query = (
                 'SELECT * FROM MyopicEfficiency WHERE NOT EXISTS ('
-                '  SELECT * FROM MyopicCapacity WHERE '
-                '    MyopicEfficiency.region = MyopicCapacity.region AND '
-                '    MyopicEfficiency.tech = MyopicCapacity.tech AND '
-                '    MyopicEfficiency.vintage = MyopicCapacity.vintage) AND '
+                '  SELECT * FROM MyopicNetCapacity WHERE '
+                '    MyopicEfficiency.region = MyopicNetCapacity.region AND '
+                '    MyopicEfficiency.tech = MyopicNetCapacity.tech AND '
+                '    MyopicEfficiency.vintage = MyopicNetCapacity.vintage) AND '
                 f'    MyopicEfficiency.vintage >= {prev_base}'
             )
             print('\n\n **** Removing these unused region-tech-vintage combos ****')
@@ -602,12 +606,14 @@ class MyopicSequencer:
             try:
                 self.cursor.execute(f'DELETE FROM {table} WHERE scenario = (?)', (scenario_name,))
             except sqlite3.OperationalError:
-                print(f'no scenario ref in table {table}')
-        for table in self.legacy_output_tables:
+                print(f'no scenario ref in table {table}, clearing whole table.')
+                self.cursor.execute(f'DELETE FROM {table}')
+        for table in self.legacy_output_tables_with_period_reference:
             try:
                 self.cursor.execute(f'DELETE FROM {table} WHERE scenario = (?)', (scenario_name,))
             except sqlite3.OperationalError:
-                print(f'no scenario ref in table {table}')
+                print(f'no scenario ref in table {table}, clearing whole table.')
+                self.cursor.execute(f'DELETE FROM {table}')
         self.con.commit()
 
     def clear_results_after(self, period):
@@ -628,12 +634,17 @@ class MyopicSequencer:
             # the MyopicEfficiency table update process takes care of that table separately.
             if table != 'MyopicEfficiency':
                 self.cursor.execute(f'DELETE FROM {table} WHERE period >= {period}')
-        self.con.commit()
-        for table in self.legacy_output_tables:
+        for table in self.legacy_output_tables_with_period_reference:
             try:
                 self.cursor.execute(f'DELETE FROM {table} WHERE t_periods >= {period}')
             except sqlite3.OperationalError:
                 print(f'Could not delete from table {table}')
+        # new capacity has vintage only...
+        self.cursor.execute(
+            'DELETE FROM main.Output_V_NewCapacity WHERE main.Output_V_NewCapacity.vintage >= (?)',
+            (period,),
+        )
+        self.con.commit()
 
     def __del__(self):
         """ensure the connection is closed when destructor is called."""

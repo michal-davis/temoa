@@ -490,7 +490,7 @@ def pformat_results(pyomo_instance: 'TemoaModel', results: SolverResults, config
     :param config: the TemoaConfig object
     :return:
     """
-    logger.info('Starting results processing')
+    logger.debug('Starting results processing')
 
     output = StringIO()
     m = pyomo_instance  # lazy typist
@@ -686,7 +686,7 @@ def pformat_results(pyomo_instance: 'TemoaModel', results: SolverResults, config
                 excel_filename = config.output_path / config.scenario
                 make_excel(str(config.output_database), excel_filename, temp_scenario)
 
-    logger.info('Finished results processing')
+    logger.debug('Finished results processing')
     return output
 
 

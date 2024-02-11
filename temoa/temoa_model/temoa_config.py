@@ -209,14 +209,21 @@ class TemoaConfig:
         msg += spacer
         msg += '{:>{}s}: {}\n'.format('Selected solver', width, self.solver_name)
         msg += '{:>{}s}: {}\n'.format('NEOS status', width, self.neos)
+        msg += '{:>{}s}: {}\n'.format('Price Check', width, self.price_check)
+        msg += '{:>{}s}: {}\n'.format('Source Check', width, self.source_check)
         msg += spacer
         msg += '{:>{}s}: {}\n'.format('Spreadsheet output', width, self.save_excel)
         msg += '{:>{}s}: {}\n'.format('Pyomo LP write status', width, self.save_lp_file)
         msg += '{:>{}s}: {}\n'.format('Save duals to output db', width, self.save_duals)
+        msg += '{:>{}s}: {}\n'.format('Stream output', width, self.stream_output)
         # TODO:  conditionally add in the mode options
 
-        # msg += '{:>{}s}: {}\n'.format('Myopic scheme', width, self.myopic)
-        # msg += '{:>{}s}: {}\n'.format('Myopic years', width, self.myopic_periods)
+        if self.scenario_mode == TemoaMode.MYOPIC:
+            msg += spacer
+            msg += '{:>{}s}: {}\n'.format('Myopic view depth', width, self.myopic_inputs.get('view_depth'))
+            msg += '{:>{}s}: {}\n'.format('Myopic step size', width, self.myopic_inputs.get('step_size'))
+
+
         # msg += '{:>{}s}: {}\n'.format('Retain myopic databases', width, self.KeepMyopicDBs)
         # msg += spacer
         # msg += '{:>{}s}: {}\n'.format('Citation output status', width, self.how_to_cite)
