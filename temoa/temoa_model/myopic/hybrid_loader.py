@@ -211,13 +211,12 @@ class HybridLoader:
         :param table_name: the table name to check
         :return: True if it exists in the schema
         """
-        # TODO:  This could switch to fetchone
         table_name_check = (
             self.con.cursor()
             .execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
-            .fetchall()
+            .fetchone()
         )
-        if len(table_name_check) > 0:
+        if table_name_check:
             return True
         return False
 
