@@ -18,7 +18,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
-
+from collections import defaultdict
 from itertools import product as cross_product
 from operator import itemgetter as iget
 from sys import stderr as SE
@@ -65,8 +65,7 @@ def get_str_padding(obj):
 
 
 def CommodityBalanceConstraintErrorCheck(vflow_out, vflow_in, r, p, s, d, c):
-    # TODO:  This needs a deep-dive.  Not clear why we are triggering on an instance of int to do
-    #  "stuff"
+    # an "int" here indicates that the summation ended up without any variables (empty)
     if isinstance(vflow_out, int):
         flow_in_expr = StringIO()
         vflow_in.pprint(ostream=flow_in_expr)
@@ -79,7 +78,8 @@ def CommodityBalanceConstraintErrorCheck(vflow_out, vflow_in, r, p, s, d, c):
                " - Is there a missing commodity in set 'commodity_physical'?\n"
                ' - Are there missing entries in the Efficiency parameter?\n'
                ' - Does a process need a longer LifetimeProcess parameter setting?')
-        logger.error(msg)
+        logger.error(msg.format(
+            r, c, s, d, p, flow_in_expr.getvalue()))
         raise Exception(msg.format(
             r, c, s, d, p, flow_in_expr.getvalue()
         ))
@@ -146,14 +146,14 @@ def validate_time(M: 'TemoaModel'):
         raise Exception(msg)
 
     if len(M.time_future) < 2:
-        msg = ('Set "time_future" needs at least 2 specified years.  Temoa '
-               'treats the integer numbers specified in this set as boundary years '
-               'between periods, and uses them to automatically ascertain the length '
-               '(in years) of each period.  Note that this means that there will be '
+        msg = ('Set "time_future" needs at least 2 specified years.  \nTemoa '
+               'treats the integer numbers specified in this set as boundary years \n'
+               'between periods, and uses them to automatically ascertain the length \n'
+               '(in years) of each period.  Note that this means that there will be \n'
                'one less optimization period than the number of elements in this set.')
 
         logger.error(msg)
-        raise Exception(msg)
+        raise RuntimeError(msg)
 
     # Ensure that the time_exist < time_future
     max_exist = max(M.time_exist)
@@ -196,6 +196,7 @@ def CheckEfficiencyIndices(M: 'TemoaModel'):
     """
     Ensure that there are no unused items in any of the Efficiency index sets.
     """
+    # TODO:  This probably needs more resolution and a check by REGION and PERIOD...
     c_physical = set(i for r, i, t, v, o in M.Efficiency.sparse_iterkeys())
     techs = set(t for r, i, t, v, o in M.Efficiency.sparse_iterkeys())
     c_outputs = set(o for r, i, t, v, o in M.Efficiency.sparse_iterkeys())
@@ -564,13 +565,14 @@ def CreateSparseDicts(M: 'TemoaModel'):
         l_process = (r, t, v)
         l_lifetime = value(M.LifetimeProcess[l_process])
         # Do some error checking for the user.
+        # TODO:  Marker for the section that is culling out vintages that are in time_exist, but with no capacity...
         if v in M.vintage_exist:
-            if l_process not in l_exist_indices:
+            if l_process not in l_exist_indices and t not in M.tech_uncap:
                 msg = ('Warning: %s has a specified Efficiency, but does not '
                        'have any existing install base (ExistingCapacity).\n')
                 SE.write(msg % str(l_process))
                 continue
-            if 0 == M.ExistingCapacity[l_process]:
+            if t not in M.tech_uncap and M.ExistingCapacity[l_process] == 0:
                 msg = ('Notice: Unnecessary specification of ExistingCapacity '
                        '%s.  If specifying a capacity of zero, you may simply '
                        'omit the declaration.\n')
@@ -787,20 +789,26 @@ def CreateSparseDicts(M: 'TemoaModel'):
                                 for r, p, t in M.processVintages.keys() for v in
                                 M.processVintages[r, p, t])
 
+    M.activeRegionsForTech = defaultdict(set)
+    for r, p, t, v in M.activeActivity_rptv:
+        M.activeRegionsForTech[p, t].add(r)
+
     M.activeCapacity_rtv = set((r, t, v)
 
                                for r, p, t in M.processVintages.keys() for v in
-                               M.processVintages[r, p, t])
+                               M.processVintages[r, p, t]
+                               if t not in M.tech_uncap)
 
     M.activeCapacityAvailable_rpt = set((r, p, t)
-
                                         for r, p, t in M.processVintages.keys() if
-                                        M.processVintages[r, p, t])
+                                        M.processVintages[r, p, t]
+                                        if t not in M.tech_uncap)
 
+    # TODO:  Look into combining this set, it MAY be same as CapacityByPeriodAndTech index
     M.activeCapacityAvailable_rptv = set((r, p, t, v)
-
                                          for r, p, t in M.processVintages.keys() for v in
-                                         M.processVintages[r, p, t])
+                                         M.processVintages[r, p, t]
+                                         if t not in M.tech_uncap)
     logger.debug('Completed creation of SparseDicts')
 
 
@@ -828,7 +836,8 @@ def CapacityFactorTechIndices(M: 'TemoaModel'):
 
 
 def CostFixedIndices(M: 'TemoaModel'):
-    return M.activeActivity_rptv
+    # we pull the unlimited capacity techs from this index.  They cannot have fixed costs
+    return {(r, p, t, v) for r, p, t, v in M.activeActivity_rptv if t not in M.tech_uncap}
 
 
 def CostVariableIndices(M: 'TemoaModel'):
@@ -929,13 +938,12 @@ def CapacityVariableIndices(M: 'TemoaModel'):
     return M.activeCapacity_rtv
 
 
-def RetiredCapacityVariableIndices(M):
+def RetiredCapacityVariableIndices(M: 'TemoaModel'):
     return set((r, p, t, v)
-
                for r, p, t in M.processVintages.keys() if t in M.tech_retirement for v in
                M.processVintages[r, p, t] if
-               p > v)
-
+               p > v
+               and t not in M.tech_uncap)
 
 def CapacityAvailableVariableIndices(M: 'TemoaModel'):
     return M.activeCapacityAvailable_rpt
@@ -972,8 +980,10 @@ def CurtailmentVariableIndices(M: 'TemoaModel'):
 def CapacityConstraintIndices(M: 'TemoaModel'):
     capacity_indices = set((r, p, s, d, t, v)
 
-                           for r, p, t, v in M.activeActivity_rptv if t not in M.tech_annual for s
-                           in M.time_season for
+                           for r, p, t, v in M.activeActivity_rptv
+                           if t not in M.tech_annual
+                           if t not in M.tech_uncap
+                           for s in M.time_season for
                            d in M.time_of_day)
 
     return capacity_indices
@@ -997,7 +1007,7 @@ def LinkedTechConstraintIndices(M: 'TemoaModel'):
 def CapacityAnnualConstraintIndices(M: 'TemoaModel'):
     capacity_indices = set((r, p, t, v)
 
-                           for r, p, t, v in M.activeActivity_rptv if t in M.tech_annual
+                           for r, p, t, v in M.activeActivity_rptv if t in M.tech_annual if t not in M.tech_uncap
 
                            )
 

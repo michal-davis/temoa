@@ -41,8 +41,26 @@ from temoa.temoa_model.temoa_model import TemoaModel
 
 logger = getLogger(__name__)
 
+def load_portal_from_dat(dat_file: Path, silent: bool = False) -> DataPortal:
+    loaded_portal = DataPortal(model=TemoaModel())
 
-def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
+    if dat_file.suffix != '.dat':
+        logger.error('Attempted to load data from file %s which is not a .dat file', dat_file)
+        raise TypeError('file loading error occurred, see log')
+    hack = time()
+    if not silent:
+        SE.write('[        ] Reading data files.')
+        SE.flush()
+
+    logger.debug('Started loading the DataPortal from the .dat file: %s', dat_file)
+    loaded_portal.load(filename=str(dat_file))
+
+    if not silent:
+        SE.write('\r[%8.2f] Data read.\n' % (time() - hack))
+    logger.debug('Finished creating the DataPortal from the .dat')
+    return loaded_portal
+
+def build_instance(loaded_portal: DataPortal, model_name=None, silent=False) -> TemoaModel:
     """
     Build a Temoa Instance from data
     :param silent: Run silently
@@ -51,22 +69,6 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
     :return: a built TemoaModel
     """
     model = TemoaModel()
-    model_data = DataPortal(model=model)
-
-    if dat_file.suffix != '.dat':
-        logger.error('Attempted to load data from file %d which is not a .dat file', dat_file)
-        raise TypeError('file loading error occurred, see log')
-    hack = time()
-    if not silent:
-        SE.write('[        ] Reading data files.')
-        SE.flush()
-
-    logger.debug('Started loading the DataPortal from the .dat file: %s', dat_file)
-    model_data.load(filename=str(dat_file))
-
-    if not silent:
-        SE.write('\r[%8.2f] Data read.\n' % (time() - hack))
-    logger.debug('Finished reading the .dat file')
 
     # TODO:  Look at this.  HiGHS doesn't support this yet, others do.
     model.dual = Suffix(direction=Suffix.IMPORT)
@@ -78,7 +80,7 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
         SE.write('[        ] Creating model instance.')
         SE.flush()
     logger.info('Started creating model instance from data')
-    instance = model.create_instance(model_data, name=model_name)
+    instance = model.create_instance(loaded_portal, name=model_name)
     if not silent:
         SE.write('\r[%8.2f] Instance created.\n' % (time() - hack))
         SE.flush()
@@ -135,12 +137,13 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
             # result = options.optimizer.solve(instance, opt=options.solver)
         else:
             if solver_name == 'cbc':
+                pass
                 # Solver options. Reference:
                 # https://genxproject.github.io/GenX/dev/solver_configuration/
-                optimizer.options["dualTolerance"] = 1e-6
-                optimizer.options["primalTolerance"] = 1e-6
-                optimizer.options["zeroTolerance"] = 1e-12
-                optimizer.options["crossover"] = 'off'
+                # optimizer.options["dualTolerance"] = 1e-6
+                # optimizer.options["primalTolerance"] = 1e-6
+                # optimizer.options["zeroTolerance"] = 1e-12
+                # optimizer.options["crossover"] = 'off'
 
             elif solver_name == 'cplex':
                 # Note: these parameter values are taken to be the same as those in PyPSA
@@ -158,6 +161,16 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
             result = optimizer.solve(instance, suffixes=['dual'],  # 'rc', 'slack'],
                                      keepfiles=keep_LP_files,
                                      symbolic_solver_labels=keep_LP_files)
+
+            # opt = appsi.solvers.Highs()
+            # # opt.config.load_solution=False
+            # try:
+            #     res = opt.solve(instance)
+            #     result = res.termination_condition.name
+            # except RuntimeError as e:
+            #     print('failed highs solve')
+            #     result = None
+
             logger.info('Solve process complete')
             logger.debug('Solver results: \n %s', result)
 
@@ -172,8 +185,8 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
         SE.write(str(model_exc))
         raise model_exc
 
-    # TODO:  What is this transformation??  I think this should change and just work
-    #        with termination condition, which is all that appears to be needed downstream
+    # TODO:  It isn't clear that we need to push the solution values into the Result object:  it appears to be used in
+    #        pformat results, but why not just use the instance?
     instance.solutions.store_to(result)
     return instance, result
 
@@ -184,6 +197,14 @@ def check_solve_status(result: SolverResults) -> tuple[bool, str]:
     :param result: the results object returned by the solver
     :return: tuple of status boolean (True='optimal', others False), and string message if not optimal
     """
+    # # TODO:  for T/S highs...
+    # if result is None:
+    #     return False, 'highs barf'
+    #
+    # elif result == 'optimal':
+    #     return True, 'optimal'
+    # else:
+    #     pass
     soln = result['Solution']
     solv = result['Solver']  # currently unused, but may want it later
     prob = result['Problem']  # currently unused, but may want it later

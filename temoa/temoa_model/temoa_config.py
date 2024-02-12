@@ -21,6 +21,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 import tomllib
 from logging import getLogger
 from pathlib import Path
+from sys import stderr as SE
 
 from temoa.temoa_model.temoa_mode import TemoaMode
 
@@ -48,7 +49,9 @@ class TemoaConfig:
         myopic: dict | None = None,
         config_file: Path | None = None,
         silent: bool = False,
-        stream_output=False,
+        stream_output: bool = False,
+        price_check: bool = True,
+        source_check: bool = True,
     ):
         self.scenario = scenario
         # capture the operating mode
@@ -82,7 +85,7 @@ class TemoaConfig:
             raise FileNotFoundError(f'could not locate the input file: {self.input_file}')
         if self.input_file.suffix not in {'.dat', '.sqlite'}:
             logger.error('Input file is not of type .dat or .sqlite')
-            raise AttributeError(f'Input file is not of type .dat or .sqlite')
+            raise AttributeError('Input file is not of type .dat or .sqlite')
 
         # accept and validate the output db
         self.output_database = Path(output_database)
@@ -90,7 +93,14 @@ class TemoaConfig:
             raise FileNotFoundError(f'Could not locate the output db: {self.output_database}')
         if self.output_database.suffix != '.sqlite':
             logger.error('Output DB does not appear to be a sqlite db')
-            raise AttributeError(f'Output DB should be .sqlite type')
+            raise AttributeError('Output DB should be .sqlite type')
+
+        # create a placeholder for .dat file.  If conversion is needed, this
+        # is the destination...
+        self.dat_file: Path | None
+        if self.input_file.suffix == '.dat':
+            self.dat_file = self.input_file
+
         self.output_path = output_path
         self.neos = neos
 
@@ -103,6 +113,19 @@ class TemoaConfig:
         self.myopic_inputs = myopic
         self.silent = silent
         self.stream_output = stream_output
+        self.price_check = price_check
+        self.source_check = source_check
+
+        # warn if output db != input db
+        if self.input_file.suffix == self.output_database.suffix:  # they are both .db/.sqlite
+            if self.input_file != self.output_database:  # they are not the same db
+                msg = (
+                    'Input file, which is a database, does not match the output file\n User '
+                    'is responsible to ensure the data ~ results congruency in the output db'
+                )
+                logger.warning(msg)
+                if not self.silent:
+                    SE.write('Warning: ' + msg)
 
     @staticmethod
     def validate_schema(data: dict):
@@ -127,6 +150,8 @@ class TemoaConfig:
                 'MGA': {'slack': int(), 'iterations': int(), 'weight': str()},
                 'myopic': {'myopic_view': int(), 'keep_myopic_databases': bool()},
                 'stream_output': bool(),
+                'price_check': bool(),
+                'source_check': bool(),
             }:
                 # full schema OK
                 pass
@@ -148,9 +173,10 @@ class TemoaConfig:
                 )
 
     @staticmethod
-    def build_config(config_file: Path, output_path: Path) -> 'TemoaConfig':
+    def build_config(config_file: Path, output_path: Path, silent=False) -> 'TemoaConfig':
         """
         build a Temoa Config from a config file
+        :param silent: suppress warnings and confirmations
         :param output_path:
         :param config_file: the path to the config file to use
         :return: a TemoaConfig instance
@@ -158,7 +184,7 @@ class TemoaConfig:
         with open(config_file, 'rb') as f:
             data = tomllib.load(f)
         TemoaConfig.validate_schema(data=data)
-        tc = TemoaConfig(output_path=output_path, config_file=config_file, **data)
+        tc = TemoaConfig(output_path=output_path, config_file=config_file, silent=silent, **data)
         logger.info('Scenario Name:  %s', tc.scenario)
         logger.info('Data source:  %s', tc.input_file)
         logger.info('Data target:  %s', tc.output_database)
@@ -181,16 +207,29 @@ class TemoaConfig:
         msg += '{:>{}s}: {}\n'.format('Output database target', width, self.output_database)
         msg += '{:>{}s}: {}\n'.format('Path for outputs and log', width, self.output_path)
         msg += spacer
+        msg += '{:>{}s}: {}\n'.format('Price Check', width, self.price_check)
+        msg += '{:>{}s}: {}\n'.format('Source Check', width, self.source_check)
+        msg += spacer
         msg += '{:>{}s}: {}\n'.format('Selected solver', width, self.solver_name)
         msg += '{:>{}s}: {}\n'.format('NEOS status', width, self.neos)
+        msg += '{:>{}s}: {}\n'.format('Price Check', width, self.price_check)
+        msg += '{:>{}s}: {}\n'.format('Source Check', width, self.source_check)
         msg += spacer
         msg += '{:>{}s}: {}\n'.format('Spreadsheet output', width, self.save_excel)
         msg += '{:>{}s}: {}\n'.format('Pyomo LP write status', width, self.save_lp_file)
         msg += '{:>{}s}: {}\n'.format('Save duals to output db', width, self.save_duals)
+        msg += '{:>{}s}: {}\n'.format('Stream output', width, self.stream_output)
         # TODO:  conditionally add in the mode options
 
-        # msg += '{:>{}s}: {}\n'.format('Myopic scheme', width, self.myopic)
-        # msg += '{:>{}s}: {}\n'.format('Myopic years', width, self.myopic_periods)
+        if self.scenario_mode == TemoaMode.MYOPIC:
+            msg += spacer
+            msg += '{:>{}s}: {}\n'.format(
+                'Myopic view depth', width, self.myopic_inputs.get('view_depth')
+            )
+            msg += '{:>{}s}: {}\n'.format(
+                'Myopic step size', width, self.myopic_inputs.get('step_size')
+            )
+
         # msg += '{:>{}s}: {}\n'.format('Retain myopic databases', width, self.KeepMyopicDBs)
         # msg += spacer
         # msg += '{:>{}s}: {}\n'.format('Citation output status', width, self.how_to_cite)

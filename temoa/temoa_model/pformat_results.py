@@ -490,7 +490,7 @@ def pformat_results(pyomo_instance: 'TemoaModel', results: SolverResults, config
     :param config: the TemoaConfig object
     :return:
     """
-    logger.info('Starting results processing')
+    logger.debug('Starting results processing')
 
     output = StringIO()
     m = pyomo_instance  # lazy typist
@@ -582,51 +582,51 @@ def pformat_results(pyomo_instance: 'TemoaModel', results: SolverResults, config
         output database.  Even if it were to work, it is a shabby guarantee that the input data is the same
         without a table-by-table comparison, which seems nonsensical
         """
-        # if db_has_inputs:  # This file could be schema with populated results from previous run. Or it could be a normal db file.
-        #
-        #     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='input_file';")
-        #     input_file_table_exists = False
-        #     for i in cur:  # This means that the 'input_file' table exists in db.
-        #         input_file_table_exists = True
-        #     if input_file_table_exists:  # This block distinguishes normal database from schema.
-        #         # This is schema file.
-        #         cur.execute("SELECT file FROM input_file WHERE id is '1';")
-        #         for i in cur:
-        #             tagged_file = i[0]
-        #         tagged_file = re.sub('["]', "", tagged_file)
-        #
-        #         if tagged_file == config.input_file:
-        #             # If Input_file name matches, add output and check tech/comm
-        #             dat_to_db(config.input_file, con)
-        #         else:  # the database was not created from the input file...  ??
-        #             # If not a match, delete output tables and update input_file. Call dat_to_db
-        #             for i in db_tables:
-        #                 cur.execute("DELETE FROM " + i + ";")
-        #                 cur.execute("VACUUM;")
-        #
-        #             for i in tables.keys():
-        #                 cur.execute("DELETE FROM " + tables[i] + ";")
-        #                 cur.execute("VACUUM;")
-        #
-        #             cur.execute("DELETE FROM input_file WHERE id=1;")
-        #             cur.execute("INSERT INTO input_file VALUES(1, '" + str(config.input_file) +
-        #                         "');")
-        #
-        #             dat_to_db(i, con)
-        #
-        # else:  # empty schema db file
-        #     cur.execute(
-        #         "CREATE TABLE IF NOT EXISTS input_file ( id integer PRIMARY KEY, file varchar(30));")
-        #
-        #     for i in tables.keys():
-        #         cur.execute("DELETE FROM " + tables[i] + ";")
-        #         cur.execute("VACUUM;")
-        #
-        #     for i in config.dot_dat:
-        #         cur.execute("DELETE FROM input_file WHERE id=1;")
-        #         cur.execute("INSERT INTO input_file(id, file) VALUES(?, ?);", (1, '"' + i + '"'))
-        #         break
-        #     dat_to_db(i, con)
+        if db_has_inputs:  # This file could be schema with populated results from previous run. Or it could be a normal db file.
+
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='input_file';")
+            input_file_table_exists = False
+            for i in cur:  # This means that the 'input_file' table exists in db.
+                input_file_table_exists = True
+            if input_file_table_exists:  # This block distinguishes normal database from schema.
+                # This is schema file.
+                cur.execute("SELECT file FROM input_file WHERE id is '1';")
+                for i in cur:
+                    tagged_file = i[0]
+                tagged_file = re.sub('["]', "", tagged_file)
+
+                if tagged_file == config.input_file:
+                    # If Input_file name matches, add output and check tech/comm
+                    dat_to_db(config.input_file, con)
+                else:  # the database was not created from the input file...  ??
+                    # If not a match, delete output tables and update input_file. Call dat_to_db
+                    for i in db_tables:
+                        cur.execute("DELETE FROM " + i + ";")
+                        cur.execute("VACUUM;")
+
+                    for i in tables.keys():
+                        cur.execute("DELETE FROM " + tables[i] + ";")
+                        cur.execute("VACUUM;")
+
+                    cur.execute("DELETE FROM input_file WHERE id=1;")
+                    cur.execute("INSERT INTO input_file VALUES(1, '" + str(config.input_file) +
+                                "');")
+
+                    dat_to_db(i, con)
+
+        else:  # empty schema db file
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS input_file ( id integer PRIMARY KEY, file varchar(30));")
+
+            for i in tables.keys():
+                cur.execute("DELETE FROM " + tables[i] + ";")
+                cur.execute("VACUUM;")
+
+            for i in config.dot_dat:
+                cur.execute("DELETE FROM input_file WHERE id=1;")
+                cur.execute("INSERT INTO input_file(id, file) VALUES(?, ?);", (1, '"' + i + '"'))
+                break
+            dat_to_db(i, con)
 
         # start updating the tables
         for var_name in svars.keys():
@@ -686,7 +686,7 @@ def pformat_results(pyomo_instance: 'TemoaModel', results: SolverResults, config
                 excel_filename = config.output_path / config.scenario
                 make_excel(str(config.output_database), excel_filename, temp_scenario)
 
-    logger.info('Finished results processing')
+    logger.debug('Finished results processing')
     return output
 
 
