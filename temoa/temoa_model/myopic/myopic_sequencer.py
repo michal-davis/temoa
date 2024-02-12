@@ -389,7 +389,7 @@ class MyopicSequencer:
             for r, p, s, d, i, t, v, o in model.activeFlow_rpsditvo
             if t in model.tech_uncap
         }
-        for r, p, t, v in new_unrestricted_cap_entries:
+        for r, p, t, v in sorted(new_unrestricted_cap_entries):
             lifetime = model.LifetimeProcess[r, t, v]
             # need to pull the sector...
             raw = self.cursor.execute(
@@ -412,8 +412,9 @@ class MyopicSequencer:
                     ),
                 )
                 logger.debug(
-                    'Added unrestricted cap tech %s to MyopicNetCapacity table at vintage %d, period %d',
+                    'Added unrestricted cap tech %s to MyopicNetCapacity table for region %s at vintage %d, period %d',
                     t,
+                    r,
                     v,
                     p,
                 )

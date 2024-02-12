@@ -81,7 +81,7 @@ iterations = 4
 weight = "integer"   # currently supported: [integer, normalized]
 
 [myopic]
-myopic_view = 2  # number of periods seen/analyzed per iteration
+view_depth = 2  # number of periods seen/analyzed per iteration
 step_size = 1    # number of periods to step by
 
 
