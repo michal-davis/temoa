@@ -85,7 +85,7 @@ def price_checker(M: 'TemoaModel'):
     # Check 0:  Look for techs that have NO fixed/invest/var cost at all
     # This is now a DEBUG level alert because it is possible/ok for uncap techs to have no costs
     # and techs that are not in tech_uncap are already screened below in check #1
-    logger.debug('  Starting price check #0:  No costs at all. :(')
+    logger.debug('  Starting price check #0:  No costs at all.')
     no_invest = efficiency_rtv - registered_inv_costs
     no_fixed_costs = no_invest - fixed_costs.keys()
     no_var_costs = no_fixed_costs - var_costs.keys()
