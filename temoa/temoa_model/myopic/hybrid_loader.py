@@ -218,6 +218,7 @@ class HybridLoader:
         )
         if table_name_check:
             return True
+        logger.info('Did not find existing table data for %s', table_name)
         return False
 
     @staticmethod
@@ -421,7 +422,8 @@ class HybridLoader:
         load_element(M.RegionalGlobalIndices, list_of_groups)
 
         # region-exchanges
-        # TODO:  Perhaps tease the exchanges out of the efficiency table...?
+        # TODO:  Perhaps tease the exchanges out of the efficiency table...?  RN, they are all auto-generated.
+
 
         #  === TECH SETS ===
 
@@ -677,8 +679,36 @@ class HybridLoader:
         ).fetchall()
         load_element(M.MaxCapacity, raw, self.viable_rt, (0, 2))
 
-        # MinNewCap, MaxNewCap
-        # TODO:  later
+        # MinNewCap
+        if self.table_exists('MinNewCapacity'):
+            raw = cur.execute(
+                'SELECT regions, periods, tech, mincap FROM main.MinNewCapacity'
+            ).fetchall()
+            load_element(M.MinNewCapacity, raw, self.viable_rt, (0,2))
+
+        # MaxNewCap
+        if self.table_exists('MaxNewCapacity'):
+            raw = cur.execute(
+                'SELECT regions, periods, tech, maxcap FROM main.MaxNewCapacity'
+            ).fetchall()
+            load_element(M.MaxNewCapacity, raw, self.viable_rt, (0,2))
+
+        # MinNewCapacityGroup
+        # TODO:  part of RPS restructure...
+
+        # MaxNewCapacityGroup
+        # TODO:  part of RPS restructure...
+
+        # MinCapacityShare
+        # TODO:  part of RPS restructure...
+
+        # MaxCapacityShare
+        # TODO:  part of RPS restructure...
+        # Min(Max)ActivityGroup
+        # TODO:  part of RPS restructure...
+
+        # Min(Max)ActivityShare
+        # TODO:  part of RPS restructure...
 
         # MaxResource
         raw = cur.execute('SELECT regions, tech, maxres from main.MaxResource').fetchall()
@@ -750,10 +780,6 @@ class HybridLoader:
             and o in self.viable_comms
         ]
         load_element(M.EmissionActivity, filtered)
-
-        # Min(Max)ActivityGroup, Min(Max)ActivityGroup, Min(Max)NewCapacityGroup,
-        # Min(Max)CapacityShare, Min(Max)ActivityShare
-        # TODO:  later
 
         # LinkedTechs
         # Note:  Both of the linked techs must be viable.  As this is non period/vintage
