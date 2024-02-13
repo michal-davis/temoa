@@ -92,7 +92,7 @@ class HybridLoader:
         contents = cur.execute(
             'SELECT region, input_comm, tech, vintage, output_comm, efficiency, lifetime  '
             'FROM MyopicEfficiency '
-            f'WHERE vintage + lifetime > {myopic_index.base_year}'
+            'WHERE vintage + lifetime > ?', (myopic_index.base_year,)
         ).fetchall()
         logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
 
@@ -213,12 +213,12 @@ class HybridLoader:
         """
         table_name_check = (
             self.con.cursor()
-            .execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+            .execute("SELECT name FROM sqlite_master WHERE type='table' AND name= ?", (table_name,))
             .fetchone()
         )
         if table_name_check:
             return True
-        logger.info('Did not find existing table data for %s', table_name)
+        logger.info('Did not find existing table data for (optional):  %s', table_name)
         return False
 
     @staticmethod
@@ -381,7 +381,7 @@ class HybridLoader:
         # time_exist
         if mi:
             raw = cur.execute(
-                f'SELECT t_periods from main.time_periods WHERE t_periods < {mi.base_year}'
+                'SELECT t_periods from main.time_periods WHERE t_periods < ?', (mi.base_year,)
             ).fetchall()
         else:
             raw = cur.execute("SELECT t_periods from main.time_periods WHERE flag = 'e'").fetchall()
@@ -391,7 +391,7 @@ class HybridLoader:
         if mi:
             raw = cur.execute(
                 'SELECT t_periods from main.time_periods WHERE '
-                f't_periods >= {mi.base_year} AND t_periods <= {mi.last_year}',
+                't_periods >= ? AND t_periods <= ?', (mi.base_year, mi.last_year)
             ).fetchall()
         else:
             raw = cur.execute("SELECT t_periods from main.time_periods WHERE flag = 'f'").fetchall()
@@ -543,10 +543,11 @@ class HybridLoader:
             # noinspection SqlUnused
             raw = cur.execute(
                 'SELECT region, tech, vintage, capacity FROM main.MyopicNetCapacity '
-                f' WHERE vintage < {mi.base_year} '
+                ' WHERE vintage < ? '
                 '  AND tech not in (SELECT tech FROM main.technologies WHERE technologies.unlim_cap > 0)'
                 'UNION '
-                '  SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity '
+                '  SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity ',
+                (mi.base_year,)
             ).fetchall()
         else:
             raw = cur.execute(
@@ -573,8 +574,8 @@ class HybridLoader:
 
         # Demand
         raw = cur.execute(
-            f'SELECT regions, periods, demand_comm, demand FROM main.Demand '
-            f'WHERE {mi.base_year} <= Demand.periods AND Demand.periods <= {mi.last_demand_year}'
+            'SELECT regions, periods, demand_comm, demand FROM main.Demand '
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         load_element(M.Demand, raw)
 
@@ -616,7 +617,7 @@ class HybridLoader:
         # TechInputSplit
         raw = cur.execute(
             'SELECT regions, periods, input_comm, tech, ti_split FROM main.TechInputSplit '
-            f'WHERE {mi.base_year} <= periods AND periods <= {mi.last_demand_year}'
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         load_element(M.TechInputSplit, raw, self.viable_rt, (0, 3))
 
@@ -625,12 +626,17 @@ class HybridLoader:
             raw = cur.execute(
                 'SELECT regions, periods, input_comm, tech, ti_split '
                 'FROM main.TechInputSplitAverage '
-                f'WHERE {mi.base_year} <= periods AND periods <={mi.last_demand_year}'
+                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
             ).fetchall()
             load_element(M.TechInputSplitAverage, raw, self.viable_rt, (0, 3))
 
         # TechOutputSplit
-        # TODO:  later
+        if self.table_exists('TechOutputSplit'):
+            raw = cur.execute(
+                'SELECT regions, periods, tech, output_comm, to_split FROM main.TechOutputSplit '
+                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            ).fetchall()
+            load_element(M.TechOutputSplit, raw, self.viable_rt, (0, 2))
 
         # RenewablePortfolioStandard
         # TODO:  later
@@ -638,7 +644,7 @@ class HybridLoader:
         # CostFixed
         raw = cur.execute(
             'SELECT regions, periods, tech, vintage, cost_fixed FROM main.CostFixed '
-            f'WHERE {mi.base_year} <= CostFixed.periods AND CostFixed.periods <= {mi.last_demand_year}'
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         load_element(M.CostFixed, raw, self.viable_rtv, val_loc=(0, 2, 3))
 
@@ -647,42 +653,43 @@ class HybridLoader:
         # the "viable_rtv" will filter anything beyond view
         raw = cur.execute(
             'SELECT regions, tech, vintage, cost_invest FROM main.CostInvest '
-            f'WHERE {mi.base_year} <= vintage'
+            'WHERE vintage >= ?', (mi.base_year,)
         ).fetchall()
         load_element(M.CostInvest, raw, self.viable_rtv, (0, 1, 2))
 
         # CostVariable
         raw = cur.execute(
             'SELECT regions, periods, tech, vintage, cost_variable FROM main.CostVariable '
-            f'WHERE {mi.base_year} <= periods AND periods <= {mi.last_demand_year}'
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         load_element(M.CostVariable, raw, self.viable_rtv, (0, 2, 3))
 
         # DiscountRate
         raw = cur.execute(
             'SELECT regions, tech, vintage, tech_rate FROM main.DiscountRate '
-            f'WHERE vintage >= {mi.base_year}'
+            'WHERE vintage >= ?', (mi.base_year,)
         ).fetchall()
         load_element(M.DiscountRate, raw, self.viable_rtv, (0, 1, 2))
 
         # MinCapacity
         raw = cur.execute(
             'SELECT regions, periods, tech, mincap FROM main.MinCapacity '
-            f'WHERE {mi.base_year} <= periods AND periods <= {mi.last_demand_year}'
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         load_element(M.MinCapacity, raw, self.viable_rt, (0, 2))
 
         # MaxCapacity
         raw = cur.execute(
             'SELECT regions, periods, tech, maxcap FROM main.MaxCapacity '
-            f'WHERE {mi.base_year} <= periods AND periods <= {mi.last_demand_year}'
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         load_element(M.MaxCapacity, raw, self.viable_rt, (0, 2))
 
         # MinNewCap
         if self.table_exists('MinNewCapacity'):
             raw = cur.execute(
-                'SELECT regions, periods, tech, mincap FROM main.MinNewCapacity'
+                'SELECT regions, periods, tech, mincap FROM main.MinNewCapacity '
+                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
             ).fetchall()
             load_element(M.MinNewCapacity, raw, self.viable_rt, (0,2))
 
@@ -704,6 +711,7 @@ class HybridLoader:
 
         # MaxCapacityShare
         # TODO:  part of RPS restructure...
+
         # Min(Max)ActivityGroup
         # TODO:  part of RPS restructure...
 
@@ -711,23 +719,25 @@ class HybridLoader:
         # TODO:  part of RPS restructure...
 
         # MaxResource
-        raw = cur.execute('SELECT regions, tech, maxres from main.MaxResource').fetchall()
-        load_element(M.MaxResource, raw, self.viable_rt, (0, 1))
+        if self.table_exists('MaxResource'):
+            raw = cur.execute('SELECT regions, tech, maxres from main.MaxResource').fetchall()
+            load_element(M.MaxResource, raw, self.viable_rt, (0, 1))
 
         # MaxActivity
         if self.table_exists('MaxActivity'):
             raw = cur.execute(
                 'SELECT regions, periods, tech, maxact FROM main.MaxActivity '
-                f'WHERE periods >= {mi.base_year} and periods <= {mi.last_demand_year}'
+                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
             ).fetchall()
             load_element(M.MaxActivity, raw, self.viable_rt, (0, 2))
 
         # MinActivity
-        raw = cur.execute(
-            'SELECT regions, periods, tech, minact FROM main.MinActivity '
-            f'WHERE periods >= {mi.base_year} and periods <= {mi.last_demand_year}'
-        ).fetchall()
-        load_element(M.MinActivity, raw, self.viable_rt, (1, 2))
+        if self.table_exists('MinActivity'):
+            raw = cur.execute(
+                'SELECT regions, periods, tech, minact FROM main.MinActivity '
+                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            ).fetchall()
+            load_element(M.MinActivity, raw, self.viable_rt, (1, 2))
 
         # MinAnnualCapacityFactor
         if self.table_exists('MinAnnualCapacityFactor'):
@@ -756,7 +766,7 @@ class HybridLoader:
         # EmissionLimit
         raw = cur.execute(
             'SELECT regions, periods, emis_comm, emis_limit FROM main.EmissionLimit '
-            f'WHERE periods >= {mi.base_year} AND periods <= {mi.last_demand_year}'
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         # emission commodities are always legal, so we don't need to filter down
         load_element(M.EmissionLimit, raw)
@@ -802,7 +812,7 @@ class HybridLoader:
         # CapacityCredit
         raw = cur.execute(
             'SELECT regions, periods, tech, vintage, cf_tech FROM main.CapacityCredit '
-            f'WHERE periods >= {mi.base_year} AND periods <= {mi.last_demand_year}'
+            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
         ).fetchall()
         load_element(M.CapacityCredit, raw, self.viable_rtv, (0, 2, 3))
 

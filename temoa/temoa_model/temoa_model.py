@@ -124,7 +124,7 @@ class TemoaModel(AbstractModel):
         M.tech_storage = Set(within=M.tech_all)
         M.tech_reserve = Set(within=M.tech_all)
         M.tech_ramping = Set(within=M.tech_all)
-        # TODO:  both of these are outdated and can be removed / tests updated
+        # TODO:  both of these below are outdated and can be removed / tests updated
         M.tech_capacity_min = Set(within=M.tech_all)
         M.tech_capacity_max = Set(within=M.tech_all)
         M.tech_curtailment = Set(within=M.tech_all)
@@ -139,6 +139,9 @@ class TemoaModel(AbstractModel):
         M.tech_annual = Set(within=M.tech_all)
         M.tech_uncap = Set(within=M.tech_all - M.tech_annual)
         """techs with unlimited capacity, ALWAYS available within lifespan"""
+        # the below is a convenience for domain checking in params below that should not accept uncap techs...
+        M.tech_with_capacity = Set(initialize=M.tech_all - M.tech_uncap)
+        """techs eligible for capacitization"""
         # Define techs for use with TechInputSplitAverage constraint,
         # where techs have variable annual output but the user wishes to constrain them annually
         M.tech_variable = Set(
@@ -210,7 +213,7 @@ class TemoaModel(AbstractModel):
         # Define technology performance parameters
         M.CapacityToActivity = Param(M.RegionalIndices, M.tech_all, default=1)
 
-        M.ExistingCapacity = Param(M.RegionalIndices, M.tech_all - M.tech_uncap, M.vintage_exist)
+        M.ExistingCapacity = Param(M.RegionalIndices, M.tech_with_capacity, M.vintage_exist)
 
         # temporarily useful for passing down to validator to find set violations
         # M.Efficiency = Param(
@@ -234,7 +237,7 @@ class TemoaModel(AbstractModel):
         # Devnote:  using a default function below alleviates need to make this set.
         # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
         M.CapacityFactorProcess = Param(M.regions, M.time_season,
-                                        M.time_of_day, M.tech_all - M.tech_uncap, M.vintage_all,
+                                        M.time_of_day, M.tech_with_capacity, M.vintage_all,
                                         validate=validate_CapacityFactorProcess,
                                         default=get_default_capacity_factor)
 
@@ -295,10 +298,10 @@ class TemoaModel(AbstractModel):
             M.ProcessLifeFrac_rptv, initialize=ParamProcessLifeFraction_rule
         )
 
-        M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
-        M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
-        M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
-        M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all - M.tech_uncap)
+        M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
+        M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
+        M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
+        M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
         M.MaxResource = Param(M.RegionalIndices, M.tech_all)
         # TODO:  Both of the below sets are obsolete and can be removed w/ tests updated
         # M.MinCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
