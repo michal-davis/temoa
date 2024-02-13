@@ -35,9 +35,9 @@ from pathlib import Path
 import pyomo.opt
 from pyomo.dataportal import DataPortal
 
-from temoa.temoa_model import source_check
 from temoa.temoa_model.dat_file_maker import db_2_dat
 from temoa.temoa_model.myopic.myopic_sequencer import MyopicSequencer
+from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
     check_solve_status, load_portal_from_dat
 from temoa.temoa_model.temoa_config import TemoaConfig
@@ -150,10 +150,11 @@ class TemoaSequencer:
                     # update the config to point to the .dat file newly created
                     self.config.dat_file = dat_file
                 data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
-                # override the price check, if it isn't selected
-                self.config.price_check = True
                 instance = build_instance(data_portal, silent=self.config.silent)
-                source_check.source_trace(instance)
+                # disregard what the config says about price_check and source_check and just do it...
+                price_checker(instance)
+                # source check requires use of hybrid loader... not ready yet for non-myopic
+                # source_check.source_trace(instance)
 
 
             case TemoaMode.PERFECT_FORESIGHT:
@@ -166,8 +167,12 @@ class TemoaSequencer:
 
                 data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, self.config.silent)
                 instance = build_instance(data_portal, silent=self.config.silent)
-                # For T/S:
-                instance.MaxActivityConstraint_rpt.display()
+                if self.config.price_check:
+                    price_checker(instance)
+                if self.config.source_check:
+                    pass
+                    # source check requires use of hybrid loader... not ready yet for non-myopic
+                    # source_check.source_trace(instance)
                 self.pf_solved_instance, self.pf_results = solve_instance(instance,
                                                                           self.config.solver_name,
                                                                           self.config.save_lp_file,
@@ -181,12 +186,6 @@ class TemoaSequencer:
                     sys.exit(-1)
                 handle_results(self.pf_solved_instance, self.pf_results, self.config)
 
-                # self.pf_solved_instance.StorageEnergyUpperBoundConstraint.pprint()
-                # self.pf_solved_instance.StorageEnergyUpperBoundConstraint.display()
-                # self.pf_solved_instance.V_Capacity.display()
-                # self.pf_solved_instance.V_StorageLevel.display()
-                # self.pf_solved_instance.TotalCost.display()
-                # self.pf_solved_instance.V_Capacity.display()
             case TemoaMode.MYOPIC:
                 # create a myopic sequencer and shift control to it
                 myopic_sequencer = MyopicSequencer(config=self.config)

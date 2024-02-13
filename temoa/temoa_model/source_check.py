@@ -45,6 +45,17 @@ class CommodityNetwork:
     """
 
     def __init__(self, region, period: int, M: TemoaModel):
+        # check the marking of source commodities first, as the db may not be configured for source check...
+        self.source_commodities: set[str] = set(M.commodity_source)
+        if not self.source_commodities:
+            logger.error(
+                'No source commodities discovered when initializing CommodityNetwork.  Have source commodities been identified in commodities '
+                "table with 's'?"
+            )
+            raise ValueError(
+                'Attempted to do source trace with no source commodities marked.  Have source commodities been identified in commodities '
+                "table with 's'?"
+            )
         self.bad_connections: set[tuple] | None = None
         self.good_connections: set[tuple] | None = None
         self.M = M
@@ -58,17 +69,10 @@ class CommodityNetwork:
         self.demand_commodities: set[str] = {
             d for (r, p, d) in M.Demand if r == self.region and p == self.period
         }
-        self.source_commodities: set[str] = set(M.commodity_source)
         if not self.demand_commodities:
             raise ValueError(
                 f'No demand commodities discovered in region {self.region} period {self.period}.  Check '
                 f'Demand table data'
-            )
-        if not self.source_commodities:
-            logger.error('No source commodities discovered')
-            raise ValueError(
-                'No source commodities marked.  Have source commodities been identified in commodities '
-                "table with 's'?"
             )
         # scan non-annual techs...
         for r, p, s, d, ic, tech, v, oc in self.M.activeFlow_rpsditvo:
@@ -286,7 +290,10 @@ def source_trace(M: 'TemoaModel') -> bool:
     demands_traceable = True
     for region in M.regions:
         for p in M.time_optimize:
-            commodity_network = CommodityNetwork(region=region, period=p, M=M)
+            try:
+                commodity_network = CommodityNetwork(region=region, period=p, M=M)
+            except ValueError:  # failed to initialize, just quit...
+                break
             commodity_network.analyze_network()
             unsupported_demands = commodity_network.unsupported_demands()
             if unsupported_demands:

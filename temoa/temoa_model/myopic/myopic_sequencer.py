@@ -78,7 +78,7 @@ class MyopicSequencer:
     tables_with_period_reference = [
         'MyopicNetCapacity',
         'MyopicCost',
-        ]
+    ]
 
     legacy_tables_with_period_reference = [
         'Output_CapacityByPeriodAndTech',
@@ -293,7 +293,6 @@ class MyopicSequencer:
             # prep next loop
             last_base_year = idx.base_year  # update
 
-
     def initialize_myopic_efficiency_table(self):
         """
         create a new MyopicEfficiency table and pre-load it with all ExistingCapacity
@@ -423,7 +422,9 @@ class MyopicSequencer:
                     f'choked updating MyopicNetCapacity on : {myopic_idx.base_year, r, p, t, v, None, lifetime}'
                 )
                 logger.error(
-                    'Failed to add unrestricted cap tech %s to MyopicNetCapacity in vintage %d', t, v
+                    'Failed to add unrestricted cap tech %s to MyopicNetCapacity in vintage %d',
+                    t,
+                    v,
                 )
         self.con.commit()
 

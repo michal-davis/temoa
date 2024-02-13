@@ -92,12 +92,15 @@ class HybridLoader:
         contents = cur.execute(
             'SELECT region, input_comm, tech, vintage, output_comm, efficiency, lifetime  '
             'FROM MyopicEfficiency '
-            'WHERE vintage + lifetime > ?', (myopic_index.base_year,)
+            'WHERE vintage + lifetime > ?',
+            (myopic_index.base_year,),
         ).fetchall()
         logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
 
         # We will need to ID the physical commodities for later filtering...
-        raw = cur.execute("SELECT comm_name FROM main.commodities WHERE flag = 'p' OR flag = 's'").fetchall()
+        raw = cur.execute(
+            "SELECT comm_name FROM main.commodities WHERE flag = 'p' OR flag = 's'"
+        ).fetchall()
         phys_commodities = {t[0] for t in raw}
         assert len(phys_commodities) > 0, 'Failsafe...we should find some!  Did flag change?'
 
@@ -163,7 +166,8 @@ class HybridLoader:
             input_commodities = {row[1] for row in ok_techs}
             illegal_outputs = set(techs_by_production_output.keys()) - input_commodities
             iter_count += 1
-            if iter_count%10 == 0: print(f'Iteration {iter_count}, suppressed techs: {len(suppressed_techs)}')
+            if iter_count % 10 == 0:
+                print(f'Iteration {iter_count}, suppressed techs: {len(suppressed_techs)}')
 
         # log the deltas
         if suppressed_techs:
@@ -176,9 +180,13 @@ class HybridLoader:
                     tech,
                 )
         if len(input_commodities) < len(raw):
-            logger.debug('Reduced Input (Physical/Supply) Commodities from %d to %d by '
-                         'dropping unused commodities: %s',
-                         len(phys_commodities), len(input_commodities), phys_commodities - input_commodities)
+            logger.debug(
+                'Reduced Input (Physical/Supply) Commodities from %d to %d by '
+                'dropping unused commodities: %s',
+                len(phys_commodities),
+                len(input_commodities),
+                phys_commodities - input_commodities,
+            )
 
         # now, we want to use the existing techs unioned with the screened new techs to form our filter basis
         for row in ok_techs | existing_techs:
@@ -391,7 +399,8 @@ class HybridLoader:
         if mi:
             raw = cur.execute(
                 'SELECT t_periods from main.time_periods WHERE '
-                't_periods >= ? AND t_periods <= ?', (mi.base_year, mi.last_year)
+                't_periods >= ? AND t_periods <= ?',
+                (mi.base_year, mi.last_year),
             ).fetchall()
         else:
             raw = cur.execute("SELECT t_periods from main.time_periods WHERE flag = 'f'").fetchall()
@@ -423,7 +432,6 @@ class HybridLoader:
 
         # region-exchanges
         # TODO:  Perhaps tease the exchanges out of the efficiency table...?  RN, they are all auto-generated.
-
 
         #  === TECH SETS ===
 
@@ -536,7 +544,6 @@ class HybridLoader:
         load_element(M.Efficiency, raw)
 
         # ExistingCapacity
-        default_lifetime = TemoaModel.default_lifetime_tech
         if mi:
             # on this pull, we need to exclude techs that are unrestricted capacity from the past
             # to prevent them from getting in to the capacity variables.
@@ -547,7 +554,7 @@ class HybridLoader:
                 '  AND tech not in (SELECT tech FROM main.technologies WHERE technologies.unlim_cap > 0)'
                 'UNION '
                 '  SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity ',
-                (mi.base_year,)
+                (mi.base_year,),
             ).fetchall()
         else:
             raw = cur.execute(
@@ -575,7 +582,8 @@ class HybridLoader:
         # Demand
         raw = cur.execute(
             'SELECT regions, periods, demand_comm, demand FROM main.Demand '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         load_element(M.Demand, raw)
 
@@ -617,7 +625,8 @@ class HybridLoader:
         # TechInputSplit
         raw = cur.execute(
             'SELECT regions, periods, input_comm, tech, ti_split FROM main.TechInputSplit '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         load_element(M.TechInputSplit, raw, self.viable_rt, (0, 3))
 
@@ -626,7 +635,8 @@ class HybridLoader:
             raw = cur.execute(
                 'SELECT regions, periods, input_comm, tech, ti_split '
                 'FROM main.TechInputSplitAverage '
-                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+                'WHERE periods >= ? AND periods <= ?',
+                (mi.base_year, mi.last_demand_year),
             ).fetchall()
             load_element(M.TechInputSplitAverage, raw, self.viable_rt, (0, 3))
 
@@ -634,7 +644,8 @@ class HybridLoader:
         if self.table_exists('TechOutputSplit'):
             raw = cur.execute(
                 'SELECT regions, periods, tech, output_comm, to_split FROM main.TechOutputSplit '
-                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+                'WHERE periods >= ? AND periods <= ?',
+                (mi.base_year, mi.last_demand_year),
             ).fetchall()
             load_element(M.TechOutputSplit, raw, self.viable_rt, (0, 2))
 
@@ -644,7 +655,8 @@ class HybridLoader:
         # CostFixed
         raw = cur.execute(
             'SELECT regions, periods, tech, vintage, cost_fixed FROM main.CostFixed '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         load_element(M.CostFixed, raw, self.viable_rtv, val_loc=(0, 2, 3))
 
@@ -652,36 +664,39 @@ class HybridLoader:
         # exclude "existing" vintages by screening for base year and beyond.
         # the "viable_rtv" will filter anything beyond view
         raw = cur.execute(
-            'SELECT regions, tech, vintage, cost_invest FROM main.CostInvest '
-            'WHERE vintage >= ?', (mi.base_year,)
+            'SELECT regions, tech, vintage, cost_invest FROM main.CostInvest ' 'WHERE vintage >= ?',
+            (mi.base_year,),
         ).fetchall()
         load_element(M.CostInvest, raw, self.viable_rtv, (0, 1, 2))
 
         # CostVariable
         raw = cur.execute(
             'SELECT regions, periods, tech, vintage, cost_variable FROM main.CostVariable '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         load_element(M.CostVariable, raw, self.viable_rtv, (0, 2, 3))
 
         # DiscountRate
         raw = cur.execute(
-            'SELECT regions, tech, vintage, tech_rate FROM main.DiscountRate '
-            'WHERE vintage >= ?', (mi.base_year,)
+            'SELECT regions, tech, vintage, tech_rate FROM main.DiscountRate ' 'WHERE vintage >= ?',
+            (mi.base_year,),
         ).fetchall()
         load_element(M.DiscountRate, raw, self.viable_rtv, (0, 1, 2))
 
         # MinCapacity
         raw = cur.execute(
             'SELECT regions, periods, tech, mincap FROM main.MinCapacity '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         load_element(M.MinCapacity, raw, self.viable_rt, (0, 2))
 
         # MaxCapacity
         raw = cur.execute(
             'SELECT regions, periods, tech, maxcap FROM main.MaxCapacity '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         load_element(M.MaxCapacity, raw, self.viable_rt, (0, 2))
 
@@ -689,16 +704,17 @@ class HybridLoader:
         if self.table_exists('MinNewCapacity'):
             raw = cur.execute(
                 'SELECT regions, periods, tech, mincap FROM main.MinNewCapacity '
-                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+                'WHERE periods >= ? AND periods <= ?',
+                (mi.base_year, mi.last_demand_year),
             ).fetchall()
-            load_element(M.MinNewCapacity, raw, self.viable_rt, (0,2))
+            load_element(M.MinNewCapacity, raw, self.viable_rt, (0, 2))
 
         # MaxNewCap
         if self.table_exists('MaxNewCapacity'):
             raw = cur.execute(
                 'SELECT regions, periods, tech, maxcap FROM main.MaxNewCapacity'
             ).fetchall()
-            load_element(M.MaxNewCapacity, raw, self.viable_rt, (0,2))
+            load_element(M.MaxNewCapacity, raw, self.viable_rt, (0, 2))
 
         # MinNewCapacityGroup
         # TODO:  part of RPS restructure...
@@ -727,7 +743,8 @@ class HybridLoader:
         if self.table_exists('MaxActivity'):
             raw = cur.execute(
                 'SELECT regions, periods, tech, maxact FROM main.MaxActivity '
-                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+                'WHERE periods >= ? AND periods <= ?',
+                (mi.base_year, mi.last_demand_year),
             ).fetchall()
             load_element(M.MaxActivity, raw, self.viable_rt, (0, 2))
 
@@ -735,7 +752,8 @@ class HybridLoader:
         if self.table_exists('MinActivity'):
             raw = cur.execute(
                 'SELECT regions, periods, tech, minact FROM main.MinActivity '
-                'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+                'WHERE periods >= ? AND periods <= ?',
+                (mi.base_year, mi.last_demand_year),
             ).fetchall()
             load_element(M.MinActivity, raw, self.viable_rt, (1, 2))
 
@@ -766,7 +784,8 @@ class HybridLoader:
         # EmissionLimit
         raw = cur.execute(
             'SELECT regions, periods, emis_comm, emis_limit FROM main.EmissionLimit '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         # emission commodities are always legal, so we don't need to filter down
         load_element(M.EmissionLimit, raw)
@@ -812,7 +831,8 @@ class HybridLoader:
         # CapacityCredit
         raw = cur.execute(
             'SELECT regions, periods, tech, vintage, cf_tech FROM main.CapacityCredit '
-            'WHERE periods >= ? AND periods <= ?', (mi.base_year, mi.last_demand_year)
+            'WHERE periods >= ? AND periods <= ?',
+            (mi.base_year, mi.last_demand_year),
         ).fetchall()
         load_element(M.CapacityCredit, raw, self.viable_rtv, (0, 2, 3))
 
