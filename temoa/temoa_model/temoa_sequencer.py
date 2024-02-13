@@ -28,6 +28,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+import sqlite3
 import sys
 from logging import getLogger
 from pathlib import Path
@@ -36,10 +37,12 @@ import pyomo.opt
 from pyomo.dataportal import DataPortal
 
 from temoa.temoa_model.dat_file_maker import db_2_dat
+from temoa.temoa_model.myopic.hybrid_loader import HybridLoader
 from temoa.temoa_model.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
     check_solve_status, load_portal_from_dat
+from temoa.temoa_model.source_check import source_trace
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -149,12 +152,17 @@ class TemoaSequencer:
                     db_2_dat(self.config.input_file, dat_file, self.config)
                     # update the config to point to the .dat file newly created
                     self.config.dat_file = dat_file
-                data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
+                # data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
+                # TODO:  This connection should probably be made in the loader?
+                con = sqlite3.connect(self.config.input_file)
+                hybrid_loader = HybridLoader(db_connection=con)
+                data_portal = hybrid_loader.load_data_portal(myopic_index=None)
+
                 instance = build_instance(data_portal, silent=self.config.silent)
                 # disregard what the config says about price_check and source_check and just do it...
                 price_checker(instance)
                 # source check requires use of hybrid loader... not ready yet for non-myopic
-                # source_check.source_trace(instance)
+                source_trace(instance)
 
 
             case TemoaMode.PERFECT_FORESIGHT:
