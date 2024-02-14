@@ -2,6 +2,7 @@
 This module is used to verify that all demand commodities are traceable back to designated
 source technologies
 """
+import sys
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
@@ -293,7 +294,7 @@ def source_trace(M: 'TemoaModel') -> bool:
             try:
                 commodity_network = CommodityNetwork(region=region, period=p, M=M)
             except ValueError:  # failed to initialize, just quit...
-                break
+                sys.exit(-1)
             commodity_network.analyze_network()
             unsupported_demands = commodity_network.unsupported_demands()
             if unsupported_demands:

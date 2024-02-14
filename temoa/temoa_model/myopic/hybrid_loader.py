@@ -66,7 +66,7 @@ class HybridLoader:
     """
 
     def __init__(self, db_connection: Connection):
-        self.debugging = True  # for T/S, will print to screen the data load values
+        self.debugging = False  # for T/S, will print to screen the data load values
         self.con = db_connection
 
         # filters for myopic ops
