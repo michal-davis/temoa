@@ -69,14 +69,34 @@ as well, unless they had replacement vintages and ``T3`` did not, etc.)  Several
 1.  Supply side orphans.  Technology ``T1`` is now a "supply side" orphan, which shouldn't cause model problems, but represents bloat
 in the model.  Temoa does screen for unused outputs (like ``P1`` in this case) that are not used by other
 processes and are not end demands, but it is currently only done 'globally' in all periods/regions.  Resultantly,
-this would not trigger a model error.  These will now generate **warnings** with source tracing.  It *could* be a source of unbounded behavior in the case where the
+this would not trigger a model error.  These will now generate **DEBUG** level log entries with source tracing.  It *could* be a source of unbounded behavior in the case where the
 modeler attempts to use negative values for costs.  
 
 2.  Technology ``T5`` and perhaps a now-available new vintage ``T5'`` are now "demand-side" orphans.  These are
-problematic and will generate **errors** by source tracing because they would allow a false supply of ``P3`` as
+problematic and will generate **ERROR** level log entries by source tracing because they would allow a false supply of ``P3`` as
 their inputs
 
-3.  New technology ``T7`` is a complete orphan.
-It will generate a warning during source tracing.
+3.  New technology ``T7`` (and any other linkages that are not reachable from either source or demand)
+are complete orphans.
+They will generate a **DEBUG** level log entry during source tracing.
+
+Note:  **DEBUG** level log entries are normally suppressed, but can be logged by adding the ``-d`` flag to the end
+end of the run command
 
 ![Bad Network](source/images/broken_commodity_network.png)
+
+Tech Suppression
+---------------
+The source-tracing described above currently is performed on a built model and utilizes an internal index of 
+active technologies to perform the screening described.  *Prior* to model construction, the loading process will
+assess all technologies globally for unused outputs in the optimization window.  For myopic runs, this process
+is performed on technologies within the myopic window.  In the general case, it is globally applied.  This first
+step suppresses technologies that have no possible use (and would generate errors within the model code) that
+are identified by having an output commodity that is neither a demand nor consumed as an input.  These 
+technologies are noted by an **INFO** level logging entry that they have been SUPPRESSED, implying that the
+data for them is excluded from model generation.
+
+This screening prevents model errors and helps to reduce the size of the model in some cases.  These processes
+with non-utilized outputs may be the result of erroneous data (perhaps a technology to produce liquid hydrogen
+before there is a user of same) or via myopic actions were a technology in a chain is not selected for build,
+rendering other processes in the chain irrelevant in a later period.
