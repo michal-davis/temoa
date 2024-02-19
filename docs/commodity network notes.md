@@ -4,7 +4,7 @@ Commodity Network
 
 This dcumentation segment highlights some of the concerns regarding the integrity of
 the commodity flow network within Temoa.  The modeler is advised to be aware of how
-Temoa processes flow of energy within an energy system and how "escapes" in network
+Temoa processes flow of energy within an energy system and how escapes in network
 integrity can lead to erroneous results.
 
 Network Flow
@@ -62,8 +62,8 @@ back to source.
 
 
 A defective network (shown below) may occur for a several reasons, as cited in the previous section.  Suppose that
-for some reason, `T3` is no longer available in a this or a subsequent period (never made available, lifetime
-exiration separate from other links, not selected by myopic process--which would normally remove the other links
+for some reason `T3` is no longer available in this or a subsequent period (never made available, lifetime
+expiration earlier than other links, not selected by myopic process--which would normally remove the other links
 as well, unless they had replacement vintages and ``T3`` did not, etc.)  Several problems now exist:
 
 1.  Supply side orphans.  Technology ``T1`` is now a "supply side" orphan, which shouldn't cause model problems, but represents bloat
@@ -74,7 +74,7 @@ modeler attempts to use negative values for costs.
 
 2.  Technology ``T5`` and perhaps a now-available new vintage ``T5'`` are now "demand-side" orphans.  These are
 problematic and will generate **ERROR** level log entries by source tracing because they would allow a false supply of ``P3`` as
-their inputs
+their inputs.
 
 3.  New technology ``T7`` (and any other linkages that are not reachable from either source or demand)
 are complete orphans.

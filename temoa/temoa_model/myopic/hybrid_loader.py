@@ -241,7 +241,7 @@ class HybridLoader:
         )
         if table_name_check:
             return True
-        logger.info('Did not find existing table data for (optional):  %s', table_name)
+        logger.info('Did not find existing table for (optional) table:  %s', table_name)
         return False
 
     @staticmethod
@@ -337,7 +337,7 @@ class HybridLoader:
             :return: None
             """
             if len(values) == 0:
-                logger.info('no values for param or set: %s', c.name)
+                logger.info('table, but no (usable) values for param or set: %s', c.name)
                 return
             if not isinstance(values[0], tuple):
                 raise ValueError('values must be an iterable of tuples')
