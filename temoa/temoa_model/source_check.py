@@ -2,11 +2,13 @@
 This module is used to verify that all demand commodities are traceable back to designated
 source technologies
 """
-import sys
+
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
 
+from temoa.temoa_model.commodity_graph import graph_connections
+from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_model import TemoaModel
 
 """
@@ -47,26 +49,32 @@ class CommodityNetwork:
 
     def __init__(self, region, period: int, M: TemoaModel):
         # check the marking of source commodities first, as the db may not be configured for source check...
+
         self.source_commodities: set[str] = set(M.commodity_source)
         if not self.source_commodities:
             logger.error(
-                'No source commodities discovered when initializing CommodityNetwork.  Have source commodities been identified in commodities '
+                'No source commodities discovered when initializing Commodity Network.  '
+                'Have source commodities been identified in commodities '
                 "table with 's'?"
             )
             raise ValueError(
-                'Attempted to do source trace with no source commodities marked.  Have source commodities been identified in commodities '
+                'Attempted to do source trace with no source commodities marked.  '
+                'Have source commodities been identified in commodities '
                 "table with 's'?"
             )
-        self.bad_connections: set[tuple] | None = None
+        self.demand_orphans: set[tuple] | None = None
+        self.other_orphans: set[tuple] | None = None
         self.good_connections: set[tuple] | None = None
+
         self.M = M
         self.region = region
         self.period = period
         # the cataloguing of inputs/outputs by tech is needed for implicit links like via emissions in LinkedTech
         self.tech_inputs: dict[str, set[str]] | None = defaultdict(set)
         self.tech_outputs: dict[str, set[str]] | None = defaultdict(set)
-        # {output comm: {input comm, tech} that source it}
         self.connections: dict[str, set[tuple]] = defaultdict(set)
+        """All connections in the model {oc: {(ic, tech), ...}}"""
+        self.orig_connex: set[tuple] | None = None
         self.demand_commodities: set[str] = {
             d for (r, p, d) in M.Demand if r == self.region and p == self.period
         }
@@ -88,12 +96,11 @@ class CommodityNetwork:
                 self.tech_inputs[tech].add(ic)
                 self.tech_outputs[tech].add(oc)
 
-        # network of {destination: {origins}}
-        self.network: dict[str, set[str]] = dict()
-
+        # make synthetic connection between linked techs
         self.connect_linked_techs()
 
-        # TODO:  perhaps sockets later to account for links, for now, we will just look at internal connex
+        # TODO:  perhaps sockets later to account for inter-regional links, for now,
+        #  we will just look at internal connex
         # # set of exchange techs FROM this region that supply commodity through link
         # # {tech: set(output commodities)}
         # self.output_sockets: dict[str, set[str]] = dict()
@@ -134,14 +141,18 @@ class CommodityNetwork:
                     )
                 elif driver in self.tech_outputs and driven not in self.tech_outputs:
                     logger.info(
-                        'No driven linked tech available for driver %s in regions %s, period %d.  Driver may function without it.',
+                        'No driven linked tech available for driver %s in regions %s, period %d.  '
+                        'Driver may function without it.',
                         driver,
                         self.region,
                         self.period,
                     )
-                else:  # the driver tech is not available, a problem because the driven could be allowed to run without constraint.
+                # the driver tech is not available, a problem because the driven
+                # could be allowed to run without constraint.
+                else:
                     logger.warning(
-                        'Driven linked tech %s is not connected to an active driver in region %s, period %d',
+                        'Driven linked tech %s is not connected to an active or available '
+                        'driver in region %s, period %d',
                         driven,
                         self.region,
                         self.period,
@@ -153,11 +164,11 @@ class CommodityNetwork:
     def analyze_network(self):
         # dev note:  send a copy of connections...
         # it is consumed by the function.  (easier than managing it in the recursion)
-        discovered_sources, visited = _visited_dfs(
+        discovered_sources, demand_side_connections = _visited_dfs(
             self.demand_commodities, self.source_commodities, self.connections.copy()
         )
         self.good_connections = _mark_good_connections(
-            good_ic=discovered_sources, connections=visited.copy()
+            good_ic=discovered_sources, connections=demand_side_connections.copy()
         )
 
         logger.info(
@@ -167,20 +178,85 @@ class CommodityNetwork:
             self.region,
             self.period,
         )
-        # report the bad connections
-        # need a flat list for comparison...
-        orig_connections = set()
-        for oc in self.connections:
-            orig_connections |= {(ic, tech, oc) for (ic, tech) in self.connections[oc]}
-        self.bad_connections = orig_connections - self.good_connections
-        for bc in self.bad_connections:
-            logger.warning(
-                'Bad (orphan/disconnected) process should be investigated/removed: \n'
-                '   %s in region %s, period %d',
-                bc,
+
+        # Sort out the demand-side and supply-side orphans
+        # Now we should have:
+        # 1.  The original connections
+        # 2.  The demand-side connections from the first search (all things backward from Demands)
+        # 3.  The "good" connections that have full linkage from source back to demand
+
+        # So we can infer (these are set operations):
+        # 4.  demand-side orphans = demand_side_connections - good_connections
+        # 5.  other orphans = original_connections - demand_side_connections - good_connections
+
+        # flat lists are easier for comparison, so...
+        self.orig_connex: set[tuple] = {
+            (ic, tech, oc) for oc in self.connections for (ic, tech) in self.connections[oc]
+        }
+        # dev note:  recall, the demand connex are inventoried by IC for use in the 2nd search, so we need to poll by IC...
+        demand_connex: set[tuple] = {
+            (ic, tech, oc)
+            for ic in demand_side_connections
+            for (oc, tech) in demand_side_connections[ic]
+        }
+
+        self.demand_orphans = demand_connex - self.good_connections
+        self.other_orphans = self.orig_connex - demand_connex - self.good_connections
+
+        if self.other_orphans:
+            logger.info(
+                'Source tracing revealed %d orphaned processes in region %s, period %d.  '
+                'Enable DEBUG level longging with "-d" to have them logged',
+                len(self.other_orphans),
                 self.region,
                 self.period,
             )
+        for orphan in self.other_orphans:
+            logger.debug(
+                'Bad (orphan/disconnected) process should be investigated/removed: \n'
+                '   %s in region %s, period %d',
+                orphan,
+                self.region,
+                self.period,
+            )
+        for orphan in self.demand_orphans:
+            logger.error(
+                'Orphan process on demand side may cause erroneous results: %s in region %s, period %d',
+                orphan,
+                self.region,
+                self.period,
+            )
+
+    def graph_network(self, temoa_config: TemoaConfig):
+        # trial graphing...
+        layers = {}
+        for c in self.M.commodity_all:
+            layers[c] = 2  # physical
+        for c in self.M.commodity_source:
+            layers[c] = 1
+        for c in self.M.commodity_demand:
+            layers[c] = 3
+        edge_colors = {}
+        edge_weights = {}
+        for edge in self.demand_orphans:
+            edge_colors[edge] = 'red'
+            edge_weights[edge] = 5
+        for edge in self.other_orphans:
+            edge_colors[edge] = 'yellow'
+            edge_weights[edge] = 3
+        for edge in self.orig_connex:
+            if edge[1] == '<<linked tech>>':
+                edge_colors[edge] = 'blue'
+                edge_weights[edge] = 3
+        filename_label = f'{self.region}_{self.period}'
+        graph_connections(
+            self.orig_connex,
+            layers,
+            edge_colors,
+            edge_weights,
+            file_label=filename_label,
+            output_path=temoa_config.output_path,
+        )
 
     def unsupported_demands(self) -> set[str]:
         """
@@ -189,7 +265,7 @@ class CommodityNetwork:
         dangling intermediate tech
         :return: set of improperly supported demands
         """
-        bad_demands = {oc for ic, tech, oc in self.bad_connections if oc in self.demand_commodities}
+        bad_demands = {oc for ic, tech, oc in self.other_orphans if oc in self.demand_commodities}
         return bad_demands
 
 
@@ -281,9 +357,10 @@ def _visited_dfs(
     return discovered_sources, visited
 
 
-def source_trace(M: 'TemoaModel') -> bool:
+def source_trace(M: 'TemoaModel', temoa_config: TemoaConfig) -> bool:
     """
     trace the demand commodities back to designated source technologies
+    :param temoa_config: the TemoaConfig instance
     :param M: the model to inspect
     :return: True if all demands are traceable, False otherwise
     """
@@ -291,11 +368,10 @@ def source_trace(M: 'TemoaModel') -> bool:
     demands_traceable = True
     for region in M.regions:
         for p in M.time_optimize:
-            try:
-                commodity_network = CommodityNetwork(region=region, period=p, M=M)
-            except ValueError:  # failed to initialize, just quit...
-                sys.exit(-1)
+            commodity_network = CommodityNetwork(region=region, period=p, M=M)
             commodity_network.analyze_network()
+            if temoa_config.plot_commodity_network:
+                commodity_network.graph_network(temoa_config)
             unsupported_demands = commodity_network.unsupported_demands()
             if unsupported_demands:
                 demands_traceable = False
@@ -306,5 +382,8 @@ def source_trace(M: 'TemoaModel') -> bool:
                         commodity_network.region,
                         commodity_network.period,
                     )
+            if commodity_network.demand_orphans:
+                demands_traceable = False
+                # they are already logged...
     logger.debug('Completed source trace')
     return demands_traceable

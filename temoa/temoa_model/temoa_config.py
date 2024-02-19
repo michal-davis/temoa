@@ -52,6 +52,7 @@ class TemoaConfig:
         stream_output: bool = False,
         price_check: bool = True,
         source_check: bool = True,
+        plot_commodity_network: bool = False
     ):
         self.scenario = scenario
         # capture the operating mode
@@ -115,6 +116,7 @@ class TemoaConfig:
         self.stream_output = stream_output
         self.price_check = price_check
         self.source_check = source_check
+        self.plot_commodity_network = plot_commodity_network
 
         # warn if output db != input db
         if self.input_file.suffix == self.output_database.suffix:  # they are both .db/.sqlite
@@ -152,6 +154,7 @@ class TemoaConfig:
                 'stream_output': bool(),
                 'price_check': bool(),
                 'source_check': bool(),
+                'plot_commodity_network': bool(),
             }:
                 # full schema OK
                 pass
@@ -207,8 +210,10 @@ class TemoaConfig:
         msg += '{:>{}s}: {}\n'.format('Output database target', width, self.output_database)
         msg += '{:>{}s}: {}\n'.format('Path for outputs and log', width, self.output_path)
         msg += spacer
-        msg += '{:>{}s}: {}\n'.format('Price Check', width, self.price_check)
-        msg += '{:>{}s}: {}\n'.format('Source Check', width, self.source_check)
+        msg += '{:>{}s}: {}\n'.format('Price check', width, self.price_check)
+        msg += '{:>{}s}: {}\n'.format('Source check', width, self.source_check)
+        msg += '{:>{}s}: {}\n'.format('Commodity network plots', width, self.plot_commodity_network)
+
         msg += spacer
         msg += '{:>{}s}: {}\n'.format('Selected solver', width, self.solver_name)
         msg += '{:>{}s}: {}\n'.format('NEOS status', width, self.neos)

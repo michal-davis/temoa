@@ -171,7 +171,7 @@ class MyopicSequencer:
         # load up the instance queue
         self.characterize_run()
 
-        # create the Myopic Output tables
+        # create the Myopic Output tables, if they don't already exist.
         self.execute_script(table_script_file)
 
         # clear out the old riff-raff
@@ -247,7 +247,7 @@ class MyopicSequencer:
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'check')
             if self.config.source_check:
-                good_network = source_trace(instance)
+                good_network = source_trace(instance, self.config)
                 if not good_network:
                     SE.write(
                         'Source Trace of the Commodity Network failed for some demands.  '
