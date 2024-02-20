@@ -28,6 +28,6 @@ Created on:  1/20/24
 import pytest
 
 
-@pytest.mark.skip(reason="Not implemented")
+@pytest.mark.skip(reason='Not implemented')
 def test_characterize_run():
     assert False

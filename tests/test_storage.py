@@ -23,7 +23,8 @@ storage_config_files = [
     {'name': 'test_system', 'filename': 'config_test_system.toml'},
 ]
 
-@pytest.mark.skip(reason="known not working...fix deferred")
+
+@pytest.mark.skip(reason='known not working...fix deferred')
 @pytest.mark.parametrize(
     'system_test_run',
     argvalues=storage_config_files,
@@ -143,9 +144,9 @@ def test_storage_flow_balance(system_test_run):
             outflow, rel=1e-3
         ), f'the inflow and outflow of storage tech {s_tech} do not match'
 
+
 @pytest.mark.skip('not ready for primetime')
 def test_hard_initialization():
-
     filename = 'config_storageville.toml'
     options = {'silent': True, 'debug': True}
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)

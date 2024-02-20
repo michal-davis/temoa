@@ -27,16 +27,12 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import logging
-import pathlib
 
 import pyomo.environ as pyo
 import pytest
 from pyomo.core import Constraint, Var
 
-from definitions import PROJECT_ROOT
-
 # from src.temoa_model.temoa_model import temoa_create_model
-from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 from tests.legacy_test_values import TestVals, test_vals
 
 logger = logging.getLogger(__name__)
@@ -71,12 +67,12 @@ def test_against_legacy_outputs(system_test_run):
     efficiency_param: pyo.Param = mdl.Efficiency
     # check the set membership
     assert (
-            len(tuple(efficiency_param.sparse_iterkeys())) == expected_vals[TestVals.EFF_INDEX_SIZE]
+        len(tuple(efficiency_param.sparse_iterkeys())) == expected_vals[TestVals.EFF_INDEX_SIZE]
     ), 'should match legacy numbers'
 
     # check the size of the domain.  NOTE:  The build of the domain here may be "expensive" for large models
     assert (
-            len((efficiency_param.index_set().domain)) == expected_vals[TestVals.EFF_DOMAIN_SIZE]
+        len((efficiency_param.index_set().domain)) == expected_vals[TestVals.EFF_DOMAIN_SIZE]
     ), 'should match legacy numbers'
 
     # inspect the total variable and constraint counts
@@ -129,5 +125,6 @@ def test_myopic_utopia():
     # assert abs(diesel_emissions_by_year[2000] - 2.4549) < eps
     # assert abs(diesel_emissions_by_year[2010] - 5.4539) < eps
     # os.remove(output_db)
+
 
 # TODO:  add additional tests for myopic that have retirement eligible things in them
