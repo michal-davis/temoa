@@ -39,9 +39,11 @@ from temoa.temoa_model.temoa_sequencer import TemoaSequencer
 
 logger = logging.getLogger(__name__)
 
-print("WARNING:  Continuing to execute this file will update the cached values for the set sizes for US_9R model in "
-      "the testing_data folder from the sqlite databases in the same folder.  This should only need to be done if the "
-      "schema or model have changed and that database has been updated.")
+print(
+    'WARNING:  Continuing to execute this file will update the cached values for the set sizes for US_9R model in '
+    'the testing_data folder from the sqlite databases in the same folder.  This should only need to be done if the '
+    'schema or model have changed and that database has been updated.'
+)
 
 t = input('Type "Y" to continue, any other key to exit now.')
 if t not in {'y', 'Y'}:
@@ -50,9 +52,7 @@ output_file = Path(PROJECT_ROOT, 'tests', 'testing_data', 'US_9R_8D_set_sizes.js
 config_file = Path(PROJECT_ROOT, 'tests', 'utilities', 'config_US_9R_8D.toml')
 options = {'silent': True, 'debug': True}
 sequencer = TemoaSequencer(
-    config_file=config_file,
-    output_path=Path(PROJECT_ROOT, 'tests', 'testing_log'),
-    **options
+    config_file=config_file, output_path=Path(PROJECT_ROOT, 'tests', 'testing_log'), **options
 )
 instance = sequencer.start()
 

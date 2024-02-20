@@ -43,7 +43,7 @@ from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 params = [
     ('utopia', 'config_utopia.toml', 'utopia_sets.json'),
     ('test_system', 'config_test_system.toml', 'test_system_sets.json'),
-    ('mediumville', 'config_mediumville.toml', 'mediumville_sets.json')
+    ('mediumville', 'config_mediumville.toml', 'mediumville_sets.json'),
 ]
 
 
@@ -72,27 +72,28 @@ def test_set_consistency(data_name, config_file, set_file, tmp_path):
         k: set(tuple(t) if isinstance(t, list) else t for t in v) for (k, v) in cached_sets.items()
     }
 
-    shortage_in_model = dict()
     overage_in_model = dict()
+    shortage_in_model = dict()
     for set_name, s in model_sets.items():
         if cached_sets.get(set_name) != s:
             if cached_sets.get(set_name):
-                shortage_in_model[set_name] = s - cached_sets.get(set_name)
-                overage_in_model[set_name] = cached_sets.get(set_name) - s
+                overage_in_model[set_name] = s - cached_sets.get(set_name)
+                shortage_in_model[set_name] = cached_sets.get(set_name) - s
     missing_in_model = cached_sets.keys() - model_sets.keys()
     # drop any set that has "_index" in the name as they are no longer reported by newer version of pyomo
     missing_in_model = {s for s in missing_in_model if '_index' not in s}
     assert not missing_in_model, f'one or more cached set not in model: {missing_in_model}'
-    if shortage_in_model:
+    if overage_in_model:
         print('Overages compared to cache: ')
-        for k, v in shortage_in_model.items():
+        for k, v in overage_in_model.items():
             if len(v) > 0:
                 print(k, v)
+    if shortage_in_model:
         print('Shortages compared to cache: ')
-        for k, v in overage_in_model.items():
+        for k, v in shortage_in_model.items():
             if len(v) > 0:
                 print(k, v)
 
     assert (
-        not shortage_in_model and not overage_in_model
+        not overage_in_model and not shortage_in_model
     ), f'The {data_name} run-produced sets did not match cached values'

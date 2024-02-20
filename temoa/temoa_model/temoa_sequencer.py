@@ -89,7 +89,7 @@ class TemoaSequencer:
         # for feedback to user
         self.silent = silent
 
-        # for results catching for perfect_foresight
+        # for results catching for perfect_foresight / testing
         self.pf_results: pyomo.opt.SolverResults | None = None
         self.pf_solved_instance: TemoaModel | None = None
 
@@ -105,7 +105,6 @@ class TemoaSequencer:
         # TODO:  Screen this vs. what is already done at this point
         temoa_checks(self.config)
 
-
         # Distill the TemoaMode
         # self.temoa_mode = self.mode_override if self.mode_override else self.config.scenario_mode
         if self.mode_override and self.mode_override != self.config.scenario_mode:
@@ -120,7 +119,6 @@ class TemoaSequencer:
                          self.mode_override, self.config.scenario_mode)
             raise RuntimeError('Problem with mode selection, see log file.')
 
-
         # Get user confirmation if not silent
         if not self.silent:
             try:
@@ -132,16 +130,20 @@ class TemoaSequencer:
                 print('\n\nUser requested quit.  Exiting Temoa ...\n')
                 sys.exit()
 
-        # Set up the individual runs & execute
+        # Select execution path based on mode
         match self.temoa_mode:
             case TemoaMode.BUILD_ONLY:
                 # convert the input file from .sqlite -> .dat if needed
-                if self.config.input_file.suffix == '.sqlite':
-                    dat_file = self.config.input_file.with_suffix('.dat')
-                    db_2_dat(self.config.input_file, dat_file, self.config)
-                    # update the config to point to the .dat file newly created
-                    self.config.dat_file = dat_file
-                data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
+                # if self.config.input_file.suffix == '.sqlite':
+                #     dat_file = self.config.input_file.with_suffix('.dat')
+                #     db_2_dat(self.config.input_file, dat_file, self.config)
+                #     # update the config to point to the .dat file newly created
+                #     self.config.dat_file = dat_file
+                # data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
+                # TODO:  This connection should probably be made in the loader?
+                con = sqlite3.connect(self.config.input_file)
+                hybrid_loader = HybridLoader(db_connection=con)
+                data_portal = hybrid_loader.load_data_portal(myopic_index=None)
                 instance = build_instance(data_portal, silent=self.config.silent)
                 return instance
 
@@ -162,8 +164,7 @@ class TemoaSequencer:
                 # disregard what the config says about price_check and source_check and just do it...
                 price_checker(instance)
                 # source check requires use of hybrid loader... not ready yet for non-myopic
-                source_trace(instance)
-
+                source_trace(instance, temoa_config=self.config)
 
             case TemoaMode.PERFECT_FORESIGHT:
                 # convert the input file from .sqlite -> .dat if needed
