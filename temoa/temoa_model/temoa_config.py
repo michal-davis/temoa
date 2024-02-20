@@ -51,8 +51,8 @@ class TemoaConfig:
         silent: bool = False,
         stream_output: bool = False,
         price_check: bool = True,
-        source_check: bool = True,
-        plot_commodity_network: bool = False
+        source_check: bool = False,
+        plot_commodity_network: bool = False,
     ):
         self.scenario = scenario
         # capture the operating mode
@@ -104,6 +104,8 @@ class TemoaConfig:
 
         self.output_path = output_path
         self.neos = neos
+        if self.neos:
+            raise NotImplementedError('Neos is currently not supported.')
 
         self.solver_name = solver_name
         self.save_excel = save_excel
@@ -116,7 +118,11 @@ class TemoaConfig:
         self.stream_output = stream_output
         self.price_check = price_check
         self.source_check = source_check
-        self.plot_commodity_network = plot_commodity_network
+        self.plot_commodity_network = plot_commodity_network & self.source_check
+        logger.warning(
+            'Commodity Network plotting was selected, but Source Check was not selected.  '
+            'Both are required to produce plots.'
+        )
 
         # warn if output db != input db
         if self.input_file.suffix == self.output_database.suffix:  # they are both .db/.sqlite

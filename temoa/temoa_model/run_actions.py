@@ -41,6 +41,7 @@ from temoa.temoa_model.temoa_model import TemoaModel
 
 logger = getLogger(__name__)
 
+
 def load_portal_from_dat(dat_file: Path, silent: bool = False) -> DataPortal:
     loaded_portal = DataPortal(model=TemoaModel())
 
@@ -59,6 +60,7 @@ def load_portal_from_dat(dat_file: Path, silent: bool = False) -> DataPortal:
         SE.write('\r[%8.2f] Data read.\n' % (time() - hack))
     logger.debug('Finished creating the DataPortal from the .dat')
     return loaded_portal
+
 
 def build_instance(loaded_portal: DataPortal, model_name=None, silent=False) -> TemoaModel:
     """
@@ -93,12 +95,13 @@ def build_instance(loaded_portal: DataPortal, model_name=None, silent=False) -> 
         c_count += len(constraint)
     for var in instance.component_objects(ctype=Var):
         v_count += len(var)
-    logger.info("model built...  Variables: %d, Constraints: %d", v_count, c_count)
+    logger.info('model built...  Variables: %d, Constraints: %d', v_count, c_count)
     return instance
 
 
-def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silent: bool = False) \
-        -> Tuple[TemoaModel, SolverResults]:
+def solve_instance(
+    instance: TemoaModel, solver_name, keep_LP_files: bool, silent: bool = False
+) -> Tuple[TemoaModel, SolverResults]:
     """
     Solve the instance and return a loaded instance
     :param silent: Run silently
@@ -118,11 +121,9 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
         logger.error(
             'Failed to create a solver instance for name: %s.  Check name and availability on '
             'this system',
-            solver_name)
+            solver_name,
+        )
         raise TypeError('Failed to make Solver instance.  See log.')
-    if solver_name not in {'cbc', 'neos', 'cplex'}:
-        logger.warning(
-            'Attempting to use solver named %d which does not have (optional?) options set')
 
     hack = time()
     if not silent:
@@ -130,14 +131,17 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
         SE.flush()
 
     try:
-        logger.info('Starting the solve process using %s solver on model %s', solver_name,
-                    instance.name)
+        logger.info(
+            'Starting the solve process using %s solver on model %s', solver_name, instance.name
+        )
         if solver_name == 'neos':
             raise NotImplementedError
             # result = options.optimizer.solve(instance, opt=options.solver)
         else:
             if solver_name == 'cbc':
                 pass
+                # dev note:  I think these options are outdated.  Getting decent results without them...
+                #            preserved for now.
                 # Solver options. Reference:
                 # https://genxproject.github.io/GenX/dev/solver_configuration/
                 # optimizer.options["dualTolerance"] = 1e-6
@@ -148,19 +152,22 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
             elif solver_name == 'cplex':
                 # Note: these parameter values are taken to be the same as those in PyPSA
                 # (see: https://pypsa-eur.readthedocs.io/en/latest/configuration.html)
-                optimizer.options["lpmethod"] = 4  # barrier
-                optimizer.options["solutiontype"] = 2  # non basic solution, ie no crossover
-                optimizer.options["barrier convergetol"] = 1.e-5
-                optimizer.options["feasopt tolerance"] = 1.e-6
+                optimizer.options['lpmethod'] = 4  # barrier
+                optimizer.options['solutiontype'] = 2  # non basic solution, ie no crossover
+                optimizer.options['barrier convergetol'] = 1.0e-5
+                optimizer.options['feasopt tolerance'] = 1.0e-6
 
             # TODO: still need to add gurobi parameters.
 
             # solver = pyomo.environ.SolverFactory('appsi_highs')
             # result = solver.solve(instance, tee=True)
 
-            result = optimizer.solve(instance, suffixes=['dual'],  # 'rc', 'slack'],
-                                     keepfiles=keep_LP_files,
-                                     symbolic_solver_labels=keep_LP_files)
+            result = optimizer.solve(
+                instance,
+                suffixes=['dual'],  # 'rc', 'slack'],
+                keepfiles=keep_LP_files,
+                symbolic_solver_labels=keep_LP_files,
+            )
 
             # opt = appsi.solvers.Highs()
             # # opt.config.load_solution=False
@@ -180,7 +187,7 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
 
     except Exception as model_exc:
         # yield "Exception found in solve_temoa_instance\n"
-        SE.write("Exception found in solve_temoa_instance\n")
+        SE.write('Exception found in solve_temoa_instance\n')
         # yield str(model_exc) + '\n'
         SE.write(str(model_exc))
         raise model_exc
@@ -211,9 +218,7 @@ def check_solve_status(result: SolverResults) -> tuple[bool, str]:
 
     # TODO:  need to consider other terms that the solver may return for acceptable solutions
     #        these are not currently used, but were included in legacy code...
-    lesser_responses = (
-        'feasible', 'globallyOptimal', 'locallyOptimal'
-    )
+    lesser_responses = ('feasible', 'globallyOptimal', 'locallyOptimal')
     logger.info('The solver reported status as: %s', soln.Status)
     if soln.Status == 'optimal':
         return True, ''
@@ -239,10 +244,10 @@ def handle_results(instance: TemoaModel, results, options: TemoaConfig):
         print(output_stream.getvalue())
     # normal (non-MGA) run will have a TotalCost as the OBJ:
     if hasattr(instance, 'TotalCost'):
-        logger.info("TotalCost value: %0.2f", value(instance.TotalCost))
+        logger.info('TotalCost value: %0.2f', value(instance.TotalCost))
     # MGA runs should have either a FirstObj or SecondObj
     if hasattr(instance, 'FirstObj'):
-        logger.info("MGA First Obj value: %0.2f", value(instance.FirstObj))
+        logger.info('MGA First Obj value: %0.2f', value(instance.FirstObj))
     elif hasattr(instance, 'SecondObj'):
-        logger.info("MGA Second Obj value: %0.2f", value(instance.SecondObj))
+        logger.info('MGA Second Obj value: %0.2f', value(instance.SecondObj))
     return

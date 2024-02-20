@@ -36,6 +36,7 @@ from collections import namedtuple
 from itertools import cycle
 from pathlib import Path
 
+import deprecated
 from pyomo.dataportal import DataPortal
 
 from temoa.temoa_model.myopic.myopic_index import MyopicIndex
@@ -49,6 +50,7 @@ ParamStatement = namedtuple('ParamStatement', ['file_path', 'param_ref', 'query'
 
 
 class DataPortalLoader:
+    @deprecated.deprecated('Please use the Hybrid Loader class instead')
     def __init__(self, input_db_path: Path):
         """
         A framework to load a data portal with data for a Temoa model
