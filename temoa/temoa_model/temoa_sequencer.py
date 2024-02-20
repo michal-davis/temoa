@@ -34,14 +34,17 @@ from logging import getLogger
 from pathlib import Path
 
 import pyomo.opt
-from pyomo.dataportal import DataPortal
 
-from temoa.temoa_model.dat_file_maker import db_2_dat
+from temoa.temoa_model import source_check
 from temoa.temoa_model.myopic.hybrid_loader import HybridLoader
 from temoa.temoa_model.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.pricing_check import price_checker
-from temoa.temoa_model.run_actions import build_instance, solve_instance, handle_results, \
-    check_solve_status, load_portal_from_dat
+from temoa.temoa_model.run_actions import (
+    build_instance,
+    solve_instance,
+    handle_results,
+    check_solve_status,
+)
 from temoa.temoa_model.source_check import source_trace
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
@@ -54,11 +57,14 @@ logger = getLogger(__name__)
 class TemoaSequencer:
     """A Sequencer instance to control all runs for a scenario based on the TemoaMode"""
 
-    def __init__(self, config_file: str | Path,
-                 output_path: str | Path,
-                 mode_override: TemoaMode | None = None,
-                 silent: bool = False,
-                 **kwargs):
+    def __init__(
+        self,
+        config_file: str | Path,
+        output_path: str | Path,
+        mode_override: TemoaMode | None = None,
+        silent: bool = False,
+        **kwargs,
+    ):
         """
         Create a new Sequencer
         :param config_file: Optional path to config file.  If not provided, it will be read
@@ -73,8 +79,9 @@ class TemoaSequencer:
         self.config_file: Path = Path(config_file)
         # check it...
         if not self.config_file.is_file():
-            logger.error('Config file location passed %s does not point to a file',
-                         self.config_file)
+            logger.error(
+                'Config file location passed %s does not point to a file', self.config_file
+            )
             raise FileNotFoundError(f'Invalid config file: {self.config_file}')
 
         self.output_path: Path = Path(output_path)
@@ -94,13 +101,13 @@ class TemoaSequencer:
         self.pf_solved_instance: TemoaModel | None = None
 
     def start(self) -> TemoaModel | None:
-        """ Start the processing of the scenario """
+        """Start the processing of the scenario"""
 
         # Run the preliminaries...
         # Build a TemoaConfig
-        self.config = TemoaConfig.build_config(config_file=self.config_file,
-                                               output_path=self.output_path,
-                                               silent=self.silent)
+        self.config = TemoaConfig.build_config(
+            config_file=self.config_file, output_path=self.output_path, silent=self.silent
+        )
 
         # TODO:  Screen this vs. what is already done at this point
         temoa_checks(self.config)
@@ -115,8 +122,11 @@ class TemoaSequencer:
             self.temoa_mode = self.config.scenario_mode
         # check it...
         if not isinstance(self.temoa_mode, TemoaMode):
-            logger.error('Temoa Mode not set properly.  Override: %d, Config File: %d',
-                         self.mode_override, self.config.scenario_mode)
+            logger.error(
+                'Temoa Mode not set properly.  Override: %d, Config File: %d',
+                self.mode_override,
+                self.config.scenario_mode,
+            )
             raise RuntimeError('Problem with mode selection, see log file.')
 
         # Get user confirmation if not silent
@@ -148,13 +158,6 @@ class TemoaSequencer:
                 return instance
 
             case TemoaMode.CHECK:
-                # convert the input file from .sqlite -> .dat if needed
-                if self.config.input_file.suffix == '.sqlite':
-                    dat_file = self.config.input_file.with_suffix('.dat')
-                    db_2_dat(self.config.input_file, dat_file, self.config)
-                    # update the config to point to the .dat file newly created
-                    self.config.dat_file = dat_file
-                # data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
                 # TODO:  This connection should probably be made in the loader?
                 con = sqlite3.connect(self.config.input_file)
                 hybrid_loader = HybridLoader(db_connection=con)
@@ -167,31 +170,28 @@ class TemoaSequencer:
                 source_trace(instance, temoa_config=self.config)
 
             case TemoaMode.PERFECT_FORESIGHT:
-                # convert the input file from .sqlite -> .dat if needed
-                if self.config.input_file.suffix == '.sqlite':
-                    dat_file = self.config.input_file.with_suffix('.dat')
-                    db_2_dat(self.config.input_file, dat_file, self.config)
-                    # update the config to point to the .dat file newly created
-                    self.config.dat_file = dat_file
-
-                data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, self.config.silent)
+                con = sqlite3.connect(self.config.input_file)
+                hybrid_loader = HybridLoader(db_connection=con)
+                data_portal = hybrid_loader.load_data_portal(myopic_index=None)
                 instance = build_instance(data_portal, silent=self.config.silent)
                 if self.config.price_check:
                     price_checker(instance)
                 if self.config.source_check:
-                    pass
-                    # source check requires use of hybrid loader... not ready yet for non-myopic
-                    # source_check.source_trace(instance)
-                self.pf_solved_instance, self.pf_results = solve_instance(instance,
-                                                                          self.config.solver_name,
-                                                                          self.config.save_lp_file,
-                                                                          silent=self.config.silent)
+                    source_check.source_trace(instance, temoa_config=self.config)
+                self.pf_solved_instance, self.pf_results = solve_instance(
+                    instance,
+                    self.config.solver_name,
+                    self.config.save_lp_file,
+                    silent=self.config.silent,
+                )
                 good_solve, msg = check_solve_status(self.pf_results)
                 if not good_solve:
                     logger.error('The solve result is reported as %s.  Aborting', msg)
-                    logger.error('This may be the result of the output messaging of the chosen solver'
-                                 'If this is deemed an acceptable status, adjustment may be needed to the '
-                                 'function check_solve_status in run_actions.py')
+                    logger.error(
+                        'This may be the result of the output messaging of the chosen solver'
+                        'If this is deemed an acceptable status, adjustment may be needed to the '
+                        'function check_solve_status in run_actions.py'
+                    )
                     sys.exit(-1)
                 handle_results(self.pf_solved_instance, self.pf_results, self.config)
 

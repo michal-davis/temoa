@@ -18,8 +18,6 @@ scenario = "test run 777"
 scenario_mode = "perfect_foresight"
 
 # Input file (Mandatory)
-# Input can be a .sqlite or .dat file
-# Both relative path and absolute path are accepted
 input_file = "data_files/temoa_utopia.sqlite"
 
 # Output file (Mandatory)
@@ -39,14 +37,18 @@ price_check = true
 
 # Check the network connectivity for processes in the model.  Strongly
 # recommended to ensure proper performance.  Results are reported in log file
+# temp note:  This requires that source commodities be marked with 's'
 source_check = true
+
+# Produce HTML files for Commodity Networks.  Requires source_check above
+plot_commodity_network = true
 
 # ------------------------------------
 #             SOLVER
 #        Solver Selection
 # ------------------------------------
 
-# use the NEOS server to solve
+# use the NEOS server to solve.  (Currently NOT supported)
 neos = false
 
 # solver (Mandatory)
@@ -58,6 +60,7 @@ solver_name = "cbc"
 # ------------------------------------
 
 # streaming output will stream the results in string format to the std output stream
+# when running in "perfect foresight" only.
 # This should probably only be used for "small" models
 stream_output = true
 
