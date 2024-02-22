@@ -30,24 +30,31 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
 import os
+import pathlib
 import shutil
 
+import pyomo.opt
+import pytest
+
 from definitions import PROJECT_ROOT
+from temoa.temoa_model.temoa_mode import TemoaMode
+from temoa.temoa_model.temoa_model import TemoaModel
+from temoa.temoa_model.temoa_sequencer import TemoaSequencer
 
 # set the target folder for output from testing
 output_path = os.path.join(PROJECT_ROOT, 'tests', 'testing_log')
 if not os.path.exists(output_path):
     os.mkdir(output_path)
 
-    # set up logger in conftest.py so that it is properly anchored in the test folder.
-    filename = 'testing.log'
-    logging.basicConfig(
-        filename=os.path.join(output_path, filename),
-        filemode='w',
-        format='%(asctime)s | %(module)s | %(levelname)s | %(message)s',
-        datefmt='%d-%b-%y %H:%M:%S',
-        level=logging.DEBUG,  # <-- global change for testing activities is here
-    )
+# set up logger in conftest.py so that it is properly anchored in the test folder.
+filename = 'testing.log'
+logging.basicConfig(
+    filename=os.path.join(output_path, filename),
+    filemode='w',
+    format='%(asctime)s | %(module)s | %(levelname)s | %(message)s',
+    datefmt='%d-%b-%y %H:%M:%S',
+    level=logging.DEBUG,  # <-- global change for testing activities is here
+)
 
 logging.getLogger('pyomo').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -61,3 +68,28 @@ databases = 'temoa_utopia.sqlite', 'temoa_test_system.sqlite'
 for db in databases:
     if not os.path.exists(os.path.join(data_output_path, db)):
         shutil.copy(os.path.join(data_source_path, db), os.path.join(data_output_path, db))
+
+logger = logging.getLogger(__name__)
+
+
+@pytest.fixture()
+def system_test_run(request, tmp_path) -> tuple[str, pyomo.opt.SolverResults, TemoaModel]:
+    """
+    spin up the model, solve it, and hand over the model and result for inspection
+    """
+    data_name = request.param['name']
+    logger.info('Setting up and solving: %s', data_name)
+    filename = request.param['filename']
+    options = {'silent': True, 'debug': True}
+    config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)
+
+    sequencer = TemoaSequencer(
+        config_file=config_file,
+        output_path=tmp_path,
+        mode_override=TemoaMode.PERFECT_FORESIGHT,
+        **options,
+    )
+    sequencer.start()
+    res = sequencer.pf_results
+    mdl = sequencer.pf_solved_instance
+    return data_name, res, mdl

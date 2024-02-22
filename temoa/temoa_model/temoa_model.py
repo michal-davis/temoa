@@ -26,19 +26,19 @@ from pyomo.core import BuildCheck
 from pyomo.environ import (Any, NonNegativeReals, AbstractModel, BuildAction, Param, Set, Var,
                            Objective, minimize)
 
-from temoa.temoa_model import validators
-from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.temoa_initialize import *
 from temoa.temoa_model.temoa_rules import *
 from temoa.temoa_model.validators import (validate_linked_tech, region_check,
-                                          validate_CapacityFactorProcess)
+                                          validate_CapacityFactorProcess, region_group_check,
+                                          validate_Efficiency)
 
 
 class TemoaModel(AbstractModel):
     """
     An instance of the abstract Temoa model
     """
-
+    # this is used in several places outside this class, and this provides no-build access to it
+    default_lifetime_tech = 40
     def __init__(M, *args, **kwds):
         AbstractModel.__init__(M, *args, **kwds)
 
@@ -47,16 +47,22 @@ class TemoaModel(AbstractModel):
         #       (not formal model elements)            #
         ################################################
 
+        # Dev Note:  The triple-quotes UNDER the items below pop up as dox in most IDEs
         M.processInputs = dict()
         M.processOutputs = dict()
         M.processLoans = dict()
         M.activeFlow_rpsditvo = None
+        """a flow index for techs NOT in tech_annual"""
         M.activeFlow_rpitvo = None
+        """a flow index for techs in tech_annual only"""
         M.activeFlex_rpsditvo = None
         M.activeFlex_rpitvo = None
         M.activeFlowInStorage_rpsditvo = None
         M.activeCurtailment_rpsditvo = None
         M.activeActivity_rptv = None
+        """currently available (within lifespan) (r, p, t, v) tuples (from M.processVintages)"""
+        M.activeRegionsForTech = None
+        """currently available regions by period and tech {(p, t) : r}"""
         M.activeCapacity_rtv = None
         M.activeCapacityAvailable_rpt = None
         M.activeCapacityAvailable_rptv = None
@@ -67,6 +73,7 @@ class TemoaModel(AbstractModel):
         M.processTechs = dict()
         M.processReservePeriods = dict()
         M.processVintages = dict()
+        """current available (within lifespan) vintages {(r, p, t) : set(v)}"""
         M.baseloadVintages = dict()
         M.curtailmentVintages = dict()
         M.storageVintages = dict()
@@ -89,7 +96,7 @@ class TemoaModel(AbstractModel):
         # Define time periods
         M.time_exist = Set(ordered=True)
         M.time_future = Set(ordered=True)
-        M.time_optimize = Set(ordered=True, initialize=init_set_time_optimize)
+        M.time_optimize = Set(ordered=True, initialize=init_set_time_optimize, within=M.time_future)
         # Define time period vintages to track capacity installation
         M.vintage_exist = Set(ordered=True, initialize=init_set_vintage_exist)
         M.vintage_optimize = Set(ordered=True, initialize=init_set_vintage_optimize)
@@ -103,10 +110,10 @@ class TemoaModel(AbstractModel):
 
         # Define regions
         M.regions = Set(validate=region_check)
-        # RegionalIndices is the set of all the possible combinations of interregional exhanges
+        # RegionalIndices is the set of all the possible combinations of interregional exchanges
         # plus original region indices. If tech_exchange is empty, RegionalIndices =regions.
         M.RegionalIndices = Set(initialize=CreateRegionalIndices)
-        M.RegionalGlobalIndices = Set(validate=validators.region_group_check)
+        M.RegionalGlobalIndices = Set(validate=region_group_check)
 
         # Define technology-related sets
         M.tech_resource = Set()
@@ -116,6 +123,7 @@ class TemoaModel(AbstractModel):
         M.tech_storage = Set(within=M.tech_all)
         M.tech_reserve = Set(within=M.tech_all)
         M.tech_ramping = Set(within=M.tech_all)
+        # TODO:  both of these below are outdated and can be removed / tests updated
         M.tech_capacity_min = Set(within=M.tech_all)
         M.tech_capacity_max = Set(within=M.tech_all)
         M.tech_curtailment = Set(within=M.tech_all)
@@ -128,18 +136,25 @@ class TemoaModel(AbstractModel):
         M.tech_groups = Set(within=M.RegionalGlobalIndices * M.groups * M.tech_all)
         # Define techs with constant output
         M.tech_annual = Set(within=M.tech_all)
+        M.tech_uncap = Set(within=M.tech_all - M.tech_annual)
+        """techs with unlimited capacity, ALWAYS available within lifespan"""
+        # the below is a convenience for domain checking in params below that should not accept uncap techs...
+        M.tech_with_capacity = Set(initialize=M.tech_all - M.tech_uncap)
+        """techs eligible for capacitization"""
         # Define techs for use with TechInputSplitAverage constraint,
         # where techs have variable annual output but the user wishes to constrain them annually
         M.tech_variable = Set(
             within=M.tech_all)
         # Define techs for which economic retirement is an option
-        M.tech_retirement = Set(
-            within=M.tech_all)
+        # Note:  Storage techs cannot (currently) be retired due to linkage to initialization
+        #        process, which is currently incapable of reducing initializations on retirements.
+        M.tech_retirement = Set(within=M.tech_all - M.tech_storage)
 
         # Define commodity-related sets
         M.commodity_demand = Set()
         M.commodity_emissions = Set()
         M.commodity_physical = Set()
+        M.commodity_source = Set(within=M.commodity_physical)
         M.commodity_carrier = Set(initialize=M.commodity_physical | M.commodity_demand)
         M.commodity_all = Set(initialize=M.commodity_carrier | M.commodity_emissions)
 
@@ -191,47 +206,52 @@ class TemoaModel(AbstractModel):
         M.Demand = Param(M.regions, M.time_optimize, M.commodity_demand)
         M.initialize_Demands = BuildAction(rule=CreateDemands)
 
+        # TODO:  Revive this with the DB schema and refactor the associated constraint
         M.ResourceBound = Param(M.regions, M.time_optimize, M.commodity_physical)
 
         # Define technology performance parameters
         M.CapacityToActivity = Param(M.RegionalIndices, M.tech_all, default=1)
 
-        M.ExistingCapacity = Param(M.RegionalIndices, M.tech_all, M.vintage_exist)
+        M.ExistingCapacity = Param(M.RegionalIndices, M.tech_with_capacity, M.vintage_exist)
 
+        # temporarily useful for passing down to validator to find set violations
+        # M.Efficiency = Param(
+        #     Any, Any, Any, Any, Any,
+        #     within=NonNegativeReals, validate=validate_Efficiency
+        # )
         M.Efficiency = Param(
-            M.RegionalIndices, M.commodity_physical, M.tech_all, M.vintage_all, M.commodity_carrier
+            M.RegionalIndices, M.commodity_physical, M.tech_all, M.vintage_all, M.commodity_carrier,
+            within=NonNegativeReals, validate=validate_Efficiency
         )
+        # TODO:  This doesn't work for myopic, where the Efficiency Param for a
+        #        particular myopic run may well exclude commodities, tech, etc.
+        #        for the myopic run in general.  Perhaps, make another version of
+        #        this that screens the full DB, instead of piecemeal, which is problem
+        # TODO:  Figure out a way to turn this back on for non-myopic runs
         M.validate_UsedEfficiencyIndices = BuildAction(rule=CheckEfficiencyIndices)
-
-        # TODO:  working on not filling CapacityFactorProcess with defaults...
-        #        may be able to use a validator here and alleviate the need for the index set
-        #        also
-        # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
-        M.CapacityFactorProcess = Param(M.regions, M.time_season,
-                                        M.time_of_day, M.tech_all, M.vintage_all,
-                                        validate=validate_CapacityFactorProcess)
 
         M.CapacityFactor_rsdt = Set(dimen=4, initialize=CapacityFactorTechIndices)
         M.CapacityFactorTech = Param(M.CapacityFactor_rsdt, default=1)
 
+        # Devnote:  using a default function below alleviates need to make this set.
+        # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
+        M.CapacityFactorProcess = Param(M.regions, M.time_season,
+                                        M.time_of_day, M.tech_with_capacity, M.vintage_all,
+                                        validate=validate_CapacityFactorProcess,
+                                        default=get_default_capacity_factor)
+
         # M.initialize_CapacityFactors = BuildAction(rule=CreateCapacityFactors)
 
-        M.LifetimeTech = Param(M.RegionalIndices, M.tech_all, default=40)
-        M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
+        M.LifetimeTech = Param(M.RegionalIndices, M.tech_all,
+                               default=TemoaModel.default_lifetime_tech)
 
         M.LifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeProcessIndices)
-        M.LifetimeProcess = Param(M.LifetimeProcess_rtv)
-        # devnote:  The param below is derived from LifetimeProcess and LifetimeTech by the
-        # initializer The name is unfortunate, as it would be better to change the others,
-        # but they are locked to the database schema.  It is all needed to make the param
-        # IMMUTABLE to support the LinkedEmissionsTech_Constraint.  Possible future change to
-        # schema or do the lifetime verification in data/db with query before build and get rid
-        # of LifetimeTech altogether.
-        M.LifetimeProcess_final = Param(M.LifetimeProcess_rtv,
-                                        initialize=initialize_process_lifetimes)
-        M.clear_helper_params = BuildAction(rule=clear_unused_params)
+        M.LifetimeProcess = Param(M.LifetimeProcess_rtv,
+                                  default=get_default_process_lifetime)
 
+        M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
         M.LifetimeLoanProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
+        # TODO:  Remove LifetimeLoanProcess....table no longer exists
         M.LifetimeLoanProcess = Param(M.LifetimeLoanProcess_rtv, mutable=True)
         M.initialize_Lifetimes = BuildAction(rule=CreateLifetimes)
 
@@ -251,26 +271,13 @@ class TemoaModel(AbstractModel):
 
         # Define technology cost parameters
         M.CostFixed_rptv = Set(dimen=4, initialize=CostFixedIndices)
-        M.CostFixed = Param(M.CostFixed_rptv, mutable=True)
-
-        M.CostFixedVintageDefault_rtv = Set(
-            dimen=3, initialize=lambda M: set((r, t, v) for r, p, t, v in M.CostFixed_rptv)
-        )
-        M.CostFixedVintageDefault = Param(M.CostFixedVintageDefault_rtv)
+        M.CostFixed = Param(M.CostFixed_rptv)
 
         M.CostInvest_rtv = Set(dimen=3, initialize=CostInvestIndices)
         M.CostInvest = Param(M.CostInvest_rtv)
 
         M.CostVariable_rptv = Set(dimen=4, initialize=CostVariableIndices)
-        M.CostVariable = Param(M.CostVariable_rptv, mutable=True)
-
-        M.CostVariableVintageDefault_rtv = Set(
-            dimen=3, initialize=lambda M: set((r, t, v) for r, p, t, v in M.CostVariable_rptv)
-        )
-        M.CostVariableVintageDefault = Param(M.CostVariableVintageDefault_rtv)
-
-        M.initialize_Costs = BuildAction(rule=CreateCosts)
-        M.validate_pricing = BuildAction(rule=price_checker)
+        M.CostVariable = Param(M.CostVariable_rptv)
 
         M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
@@ -288,13 +295,14 @@ class TemoaModel(AbstractModel):
             M.ProcessLifeFrac_rptv, initialize=ParamProcessLifeFraction_rule
         )
 
-        M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
-        M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
-        M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
-        M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_all)
+        M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
+        M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
+        M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
+        M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
         M.MaxResource = Param(M.RegionalIndices, M.tech_all)
-        M.MinCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
-        M.MaxCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
+        # TODO:  Both of the below sets are obsolete and can be removed w/ tests updated
+        # M.MinCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
+        # M.MaxCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
         M.MaxActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
         M.MinActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
         M.MinAnnualCapacityFactor = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all,

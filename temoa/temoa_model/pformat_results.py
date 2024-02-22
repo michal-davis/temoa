@@ -28,25 +28,22 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 
 __all__ = ('pformat_results', 'stringify_data')
 
-from collections import defaultdict
-from sys import stderr as SE, stdout as SO
-from shutil import rmtree
-import sqlite3
 import os
 import re
-import subprocess
-import sys
-import pandas as pd
-
+import sqlite3
+from collections import defaultdict
+from io import StringIO
 from logging import getLogger
+from shutil import rmtree
+from sys import stderr as SE, stdout as SO
 
+import pandas as pd
+from pyomo.core import Objective
 from pyomo.environ import value
+from pyomo.opt import SolverResults
 
 from temoa.data_processing.DB_to_Excel import make_excel
 from temoa.temoa_model.temoa_config import TemoaConfig
-
-from io import StringIO
-
 from temoa.temoa_model.temoa_mode import TemoaMode
 
 logger = getLogger(__name__)
@@ -71,98 +68,54 @@ def stringify_data(data, ostream=SO, format='plain'):
         ostream.write(fmt.format(*row))
 
 
-def pformat_results(pyomo_instance, pyomo_result, options):
-    logger.info('Starting results processing')
+def collect_result_data(cgroup, epsilon, scenario_name: str | None = None):
+    # TODO:  This needs a cleanup.  dox, use of pandas, dictionary/list/dataframe??
+    #        The logic of not doing anything if there is no scenario name, etc...
+    #        And it should probably be more than 1 function
 
-    from pyomo.core import Objective, Var, Constraint
+    # cgroup = "Component group"; i.e., Vars or Cons
+    # clist = "Component list"; i.e., where to store the data
+    # epsilon = absolute value below which to ignore a result
+    result_list = []
+    results = defaultdict(list)
+    for name, data in cgroup.items():
+        if 'Value' not in data.keys() or (abs(data['Value']) < epsilon): continue
 
-    output = StringIO()
+        # TODO: this portion is not used because we are only sending constraints here to get duals and constraints don't
+        #       have value.... this is dead code, but perhaps hints at a better approach using pandas?
 
-    m = pyomo_instance  # lazy typist
-    result = pyomo_result
+        # name looks like "Something[some,index]"
+        group, index = name[:-1].split('[')
+        results[group].append((name.replace("'", ''), data['Value']))
+    result_list.extend(t for i in sorted(results) for t in sorted(results[i]))
 
-    soln = result['Solution']
-    solv = result['Solver']  # currently unused, but may want it later
-    prob = result['Problem']  # currently unused, but may want it later
+    supp_outputs_df = pd.DataFrame.from_dict(cgroup, orient='index')
+    supp_outputs_df = supp_outputs_df.loc[(supp_outputs_df != 0).any(axis=1)]
+    if 'Dual' in supp_outputs_df.columns:
+        duals = supp_outputs_df['Dual'].copy()
+        duals = duals[abs(duals) > 1e-5]
+        duals.index.name = 'constraint_name'
+        duals = duals.to_frame()
+        if scenario_name and len(duals) > 0:
+            duals.loc[:, 'scenario'] = scenario_name
+            return result_list, duals
+        else:
+            return result_list, []
 
-    optimal_solutions = (
-        'feasible', 'globallyOptimal', 'locallyOptimal', 'optimal'
-    )
-    if str(soln.Status) not in optimal_solutions:
-        output.write('No solution found.')
-        # TODO:  We should stop the train here, log something and kill the program
-        return output
 
-    objs = list(m.component_data_objects(Objective))
-    if len(objs) > 1:
-        msg = '\nWarning: More than one objective.  Using first objective.\n'
-        SE.write(msg)
-
-    Cons = soln.Constraint
-
-    def collect_result_data(cgroup, clist, epsilon):
-        # cgroup = "Component group"; i.e., Vars or Cons
-        # clist = "Component list"; i.e., where to store the data
-        # epsilon = absolute value below which to ignore a result
-        results = defaultdict(list)
-        for name, data in cgroup.items():
-            if 'Value' not in data.keys() or (abs(data['Value']) < epsilon): continue
-
-            # name looks like "Something[some,index]"
-            group, index = name[:-1].split('[')
-            results[group].append((name.replace("'", ''), data['Value']))
-        clist.extend(t for i in sorted(results) for t in sorted(results[i]))
-
-        supp_outputs_df = pd.DataFrame.from_dict(cgroup, orient='index')
-        supp_outputs_df = supp_outputs_df.loc[(supp_outputs_df != 0).any(axis=1)]
-        if 'Dual' in supp_outputs_df.columns:
-            duals = supp_outputs_df['Dual'].copy()
-            duals = duals[abs(duals) > 1e-5]
-            duals.index.name = 'constraint_name'
-            duals = duals.to_frame()
-            if (hasattr(options, 'scenario')) & (len(duals) > 0):
-                duals.loc[:, 'scenario'] = options.scenario
-                return duals
-            else:
-                return []
-
+def gather_variable_data(m: 'TemoaModel', epsilon: float, capacity_epsilon: float,
+                         myopic_iteration=False) -> dict[
+    str, dict[tuple[str, ...], float]]:
+    """
+    Gather the variable values from the necessary model items into a dictionary
+    :param myopic_iteration: True if this iteration is myopic
+    :param m: the solved instance
+    :param epsilon: an epsilon value for non-capacity variables to distinguish from zero
+    :param capacity_epsilon: an epsilon value for capacity variables
+    :return: dictionary of results of format variable name -> {idx: value}
+    """
     # Create a dictionary in which to store "solved" variable values
     svars = defaultdict(lambda: defaultdict(float))
-
-    con_info = list()
-    epsilon = 1e-5  # threshold for "so small it's zero"
-    # we want a stricter threshold for printing out capacity values.
-    # This is primarily for numerical reasons. In myopic runs, optimal capacities
-    # are fed forward into the subsequent myopic solve as existing capacities. If
-    # those capacities are very small, then certain equations/inequalities can have
-    # very small or very large numbers. This results in a poorly conditioned problem
-    # and can lead to numeric instabilities.
-    capacity_epsilon = 0.001
-
-    emission_keys = {(r, i, t, v, o): set() for r, e, i, t, v, o in m.EmissionActivity}
-    for r, e, i, t, v, o in m.EmissionActivity:
-        emission_keys[(r, i, t, v, o)].add(e)
-    P_0 = min(m.time_optimize)
-    P_e = m.time_future.last()
-    GDR = value(m.GlobalDiscountRate)
-    MPL = m.ModelProcessLife
-    LLN = m.LifetimeLoanProcess
-    x = 1 + GDR  # convenience variable, nothing more
-
-    if hasattr(options, 'file_location') and os.path.join('temoa_model',
-                                                          'config_sample_myopic') in options.file_location:
-        original_dbpath = options.output_database
-        con = sqlite3.connect(original_dbpath)
-        cur = con.cursor()
-        time_periods = cur.execute("SELECT t_periods FROM time_periods WHERE flag='f'").fetchall()
-        P_0 = time_periods[0][0]
-        P_e = time_periods[-1][0]
-        # We need to know if a myopic run is the last run or not.
-        P_e_time_optimize = time_periods[-2][0]
-        P_e_current = int(options.file_location.split("_")[-1])
-        con.commit()
-        con.close()
-
     # Extract optimal decision variable values related to commodity flow:
     for r, p, s, d, t, v in m.V_StorageLevel:
         val = value(m.V_StorageLevel[r, p, s, d, t, v])
@@ -176,6 +129,12 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         if abs(val_in) < epsilon: continue
 
         svars['V_FlowIn'][r, p, s, d, i, t, v, o] = val_in
+
+    # we need to pre-identify the keys for emissions to pluck them out in the course of
+    # inspecting the flows below...
+    emission_keys = {(r, i, t, v, o): set() for r, e, i, t, v, o in m.EmissionActivity}
+    for r, e, i, t, v, o in m.EmissionActivity:
+        emission_keys[(r, i, t, v, o)].add(e)
 
     for r, p, s, d, i, t, v, o in m.V_FlowOut:
         val_out = value(m.V_FlowOut[r, p, s, d, i, t, v, o])
@@ -238,8 +197,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         svars['V_FlowOut'][r, p, s, d, i, t, v, o] -= val_out
 
     # Extract optimal decision variable values related to capacity:
-    if hasattr(options, 'file_location') and os.path.join('temoa_model',
-                                                          'config_sample_myopic') not in options.file_location:
+    if not myopic_iteration:
         for r, p, t, v in m.V_Capacity:
             val = value(m.V_Capacity[r, p, t, v])
             if abs(val) < capacity_epsilon: continue
@@ -251,8 +209,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 if abs(val) < capacity_epsilon: continue
                 svars['V_Capacity'][r, p, t, v] = val
 
-    if hasattr(options, 'file_location') and os.path.join('temoa_model',
-                                                          'config_sample_myopic') not in options.file_location:
+    if not myopic_iteration:
         for r, t, v in m.V_NewCapacity:
             val = value(m.V_NewCapacity[r, t, v])
             if abs(val) < capacity_epsilon: continue
@@ -264,8 +221,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 if abs(val) < capacity_epsilon: continue
                 svars['V_NewCapacity'][r, t, v] = val
 
-    if hasattr(options, 'file_location') and os.path.join('temoa_model',
-                                                          'config_sample_myopic') not in options.file_location:
+    if not myopic_iteration:
         for r, p, t, v in m.V_RetiredCapacity:
             val = value(m.V_RetiredCapacity[r, p, t, v])
             if abs(val) < capacity_epsilon: continue
@@ -282,9 +238,50 @@ def pformat_results(pyomo_instance, pyomo_result, options):
         if abs(val) < epsilon: continue
         svars['V_CapacityAvailableByPeriodAndTech'][r, p, t] = val
 
+    return svars
+
+
+def gather_cost_data(m: 'TemoaModel', epsilon: float, myopic_iteration) -> dict[
+    str, dict[tuple[str, ...], float]]:
+    """
+    Gather the cost data vars
+    :param m: the Temoa Model
+    :param epsilon: cutoff to ignore as zero
+    :param myopic_iteration: True if the iteration is myopic
+    :return: dictionary of results of format variable name -> {idx: value}
+    """
+
+    svars = defaultdict(lambda: defaultdict(float))
+    P_0 = min(m.time_optimize)
+    P_e = m.time_future.last()
+    GDR = value(m.GlobalDiscountRate)
+    MPL = m.ModelProcessLife
+    LLN = m.LifetimeLoanProcess
+    rate = 1 + GDR  # convenience variable, nothing more
+
+    # this block seems nonsensical.  If it is read, it is ignored below by the other if statement
+    if myopic_iteration:
+        pass
+        # original_dbpath = config.output_database
+        # con = sqlite3.connect(original_dbpath)
+        # cur = con.cursor()
+        # time_periods = cur.execute("SELECT t_periods FROM time_periods WHERE flag='f'").fetchall()
+        # P_0 = time_periods[0][0]
+        # P_e = time_periods[-1][0]
+        # # We need to know if a myopic run is the last run or not.
+        # P_e_time_optimize = time_periods[-2][0]
+        # P_e_current = int(config.file_location.split("_")[-1])
+        # con.commit()
+        # con.close()
+
     # Calculate model costs:
-    if hasattr(options, 'file_location') and os.path.join('temoa_model',
-                                                          'config_sample_myopic') not in options.file_location:
+    # TODO:  The 'file_location' variable in the old config was the path to the config file, and it was used
+    #        to key some operations (as below) and also to determine the running mode (myopic or not)
+    if not myopic_iteration:
+        objs = list(m.component_data_objects(Objective))
+        if len(objs) > 1:
+            msg = '\nWarning: More than one objective.  Using first objective.\n'
+            SE.write(msg)
         # This is a generic workaround.  Not sure how else to automatically discover
         # the objective name
         obj_name, obj_value = objs[0].getname(True), value(objs[0])
@@ -296,9 +293,9 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             if abs(icost) < epsilon: continue
             icost *= value(m.CostInvest[r, t, v]) * (
                     (
-                            1 - x ** (-min(value(m.LifetimeProcess_final[r, t, v]), P_e - v))
+                            1 - rate ** (-min(value(m.LifetimeProcess[r, t, v]), P_e - v))
                     ) / (
-                            1 - x ** (-value(m.LifetimeProcess_final[r, t, v]))
+                            1 - rate ** (-value(m.LifetimeProcess[r, t, v]))
                     )
             )
             svars['Costs']['V_UndiscountedInvestmentByProcess', r, t, v] += icost
@@ -306,7 +303,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
             icost *= value(m.LoanAnnualize[r, t, v])
             icost *= (
                 value(LLN[r, t, v]) if not GDR else
-                (x ** (P_0 - v + 1) * (1 - x ** (-value(LLN[r, t, v]))) / GDR)
+                (rate ** (P_0 - v + 1) * (1 - rate ** (-value(LLN[r, t, v]))) / GDR)
             )
 
             svars['Costs']['V_DiscountedInvestmentByProcess', r, t, v] += icost
@@ -321,7 +318,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
 
             fcost *= (
                 value(MPL[r, p, t, v]) if not GDR else
-                (x ** (P_0 - p + 1) * (1 - x ** (-value(MPL[r, p, t, v]))) / GDR)
+                (rate ** (P_0 - p + 1) * (1 - rate ** (-value(MPL[r, p, t, v]))) / GDR)
             )
 
             svars['Costs']['V_DiscountedFixedCostsByProcess', r, t, v] += fcost
@@ -348,7 +345,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 MPL[r, p, t, v])
             vcost *= (
                 value(MPL[r, p, t, v]) if not GDR else
-                (x ** (P_0 - p + 1) * (1 - x ** (-value(MPL[r, p, t, v]))) / GDR)
+                (rate ** (P_0 - p + 1) * (1 - rate ** (-value(MPL[r, p, t, v]))) / GDR)
             )
             svars['Costs']['V_DiscountedVariableCostsByProcess', r, t, v] += vcost
 
@@ -373,7 +370,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir1 = value(sum(m.V_FlowOut[reg_dir1, p, s, d, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for s in m.time_season
                                      for d in m.time_of_day
@@ -384,7 +381,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir2 = value(sum(m.V_FlowOut[reg_dir2, p, s, d, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for s in m.time_season
                                      for d in m.time_of_day
@@ -396,7 +393,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir1 = value(sum(m.V_FlowOutAnnual[reg_dir1, p, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for S_i in m.processInputs[reg_dir1, p, tech, vintage]
                                      for S_o in
@@ -405,7 +402,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 act_dir2 = value(sum(m.V_FlowOutAnnual[reg_dir2, p, S_i, tech, vintage, S_o]
                                      for p in m.time_optimize if
                                      (p < vintage + value(
-                                         m.LifetimeProcess_final[reg_dir1, tech, vintage])) and (
+                                         m.LifetimeProcess[reg_dir1, tech, vintage])) and (
                                              p >= vintage)
                                      for S_i in m.processInputs[reg_dir2, p, tech, vintage]
                                      for S_o in
@@ -424,26 +421,38 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                                                                                         item] * act_dir2 / (
                                                                                             act_dir1 + act_dir2)
                             svars['Costs'][item] = svars['Costs'][item] * act_dir1 / (
-                                        act_dir1 + act_dir2)
+                                    act_dir1 + act_dir2)
 
         # Remove Ri-Rj entries from being populated in the Outputs_Costs. Ri-Rj means a cost
         # for region Rj
         for item in list(svars['Costs']):
             if item[2] in m.tech_exchange:
                 svars['Costs'][(item[0], item[1][item[1].find("-") + 1:], item[2], item[3])] = \
-                svars['Costs'][item]
+                    svars['Costs'][item]
                 del svars['Costs'][item]
 
-    if options.save_duals:
-        duals = collect_result_data(Cons, con_info, epsilon=1e-9)
+    return svars
 
-    msg = ('Model name: %s\n'
-           'Objective function value (%s): %s\n'
-           'Non-zero variable values:\n'
-           )
-    if hasattr(options, 'file_location') and os.path.join('temoa_model',
-                                                          'config_sample_myopic') not in options.file_location:
-        output.write(msg % (m.name, obj_name, obj_value))
+
+def stream_results(svars, con_info) -> StringIO:
+    """
+    process the variables and constraint info into a StringIO object
+
+    Dev Note:  This function and the associated ones needs an overhaul.
+    this update merely chops up the big function into bits.
+    :param svars:
+    :param con_info:
+    :return: StringIO object
+    """
+    output = StringIO()
+
+    # TODO:  This kicks off the output stream.  Come back to it
+    # if not myopic_iteration:
+    #     msg = ('Model name: %s\n'
+    #            'Objective function value (%s): %s\n'
+    #            'Non-zero variable values:\n'
+    #            )
+    #     output.write(msg % (m.name, obj_name, obj_value))
 
     def make_var_list(variables):
         var_list = []
@@ -459,7 +468,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
     else:
         output.write('\nAll variables have a zero (0) value.\n')
 
-    if len(con_info) > 0:
+    if con_info and len(con_info) > 0:
         output.write('\nBinding constraint values:\n')
         stringify_data(con_info, output)
         del con_info
@@ -471,6 +480,51 @@ def pformat_results(pyomo_instance, pyomo_result, options):
     output.write('\n\nIf you use these results for a published article, '
                  "please run Temoa with the '--how_to_cite' command line argument for "
                  'citation information.\n')
+    return output
+
+
+def pformat_results(pyomo_instance: 'TemoaModel', results: SolverResults, config: TemoaConfig):
+    """
+    The main function to initiate the processing of results
+    :param pyomo_instance: the solved instance
+    :param config: the TemoaConfig object
+    :return:
+    """
+    logger.debug('Starting results processing')
+
+    output = StringIO()
+    m = pyomo_instance  # lazy typist
+
+    epsilon = 1e-5  # threshold for "so small it's zero"
+    # we want a stricter threshold for printing out capacity values.
+    # This is primarily for numerical reasons. In myopic runs, optimal capacities
+    # are fed forward into the subsequent myopic solve as existing capacities. If
+    # those capacities are very small, then certain equations/inequalities can have
+    # very small or very large numbers. This results in a poorly conditioned problem
+    # and can lead to numeric instabilities.
+    capacity_epsilon = 0.001
+
+    # Gather the variable data...
+    myopic_iteration = True if config.scenario_mode == TemoaMode.MYOPIC else False
+    svars = gather_variable_data(m, epsilon=epsilon, capacity_epsilon=capacity_epsilon,
+                                 myopic_iteration=myopic_iteration)
+
+    # Gather the cost data...
+    cost_data = gather_cost_data(m, epsilon=epsilon, myopic_iteration=myopic_iteration)
+    # Update the aggregate result
+    svars.update(cost_data)
+
+    if config.save_duals:
+        soln = results['Solution']
+        Cons = soln.Constraint
+        con_info, duals = collect_result_data(Cons, epsilon=1e-9, scenario_name=config.scenario)
+    else:
+        con_info, duals = None, None
+
+    # gather the outputs thus far
+    var_stream = stream_results(svars, con_info)
+    # concatenate it into the main output stream
+    output.write(var_stream.getvalue())
 
     # -----------------------------------------------------------------
     # Write outputs stored in dictionary to the user-specified database
@@ -490,39 +544,46 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                  'LifetimeTech', 'LifetimeProcess', 'Efficiency', 'EmissionActivity',
                  'ExistingCapacity']
 
-    if isinstance(options, TemoaConfig):
-        if not options.output_database:
+    # TODO:  This logic is carried forward from previous and odd.  Not clear what the run mode
+    #        was from before without a config, but it is required now
+    if isinstance(config, TemoaConfig):
+        if not config.output_database:
             # TODO:  What is intent of below ???
-            if options.saveTEXTFILE or options.save_lp_file:
-                for inpu in options.dot_dat:
+            if config.saveTEXTFILE or config.save_lp_file:
+                for inpu in config.dot_dat:
                     print(inpu)
                     file_ty = re.search(r"\b([\w-]+)\.(\w+)\b", inpu)
-                new_dir = options.path_to_data + os.sep + file_ty.group(
-                    1) + '_' + options.scenario + '_model'
+                new_dir = config.path_to_data + os.sep + file_ty.group(
+                    1) + '_' + config.scenario + '_model'
                 if os.path.exists(new_dir):
                     rmtree(new_dir)
                 os.mkdir(new_dir)
             print("No Output File specified.")
             return output
 
-        if not os.path.exists(options.output_database):
-            print("Please put the " + options.output_database + " file in the right Directory")
-            return output
-
-        con = sqlite3.connect(options.output_database)
+        con = sqlite3.connect(config.output_database)
         cur = con.cursor()  # A database cursor enables traversal over DB records
         con.text_factory = str  # This ensures data is explored with UTF-8 encoding
 
-        ### Copy tables from Input File to DB file.
+        # Copy tables from Input File to DB file.
         # IF output file is empty database.
-        # TODO:  The syntax here is backwards.  is_db_empty is "false" if it is empty???!!!
+
         cur.execute("SELECT * FROM technologies")
-        db_has_results = False  # False for empty db file
+        db_has_inputs = False  # False for empty db file
         for elem in cur:
-            db_has_results = True  # True for non-empty db file
+            db_has_inputs = True  # True for non-empty db file
             break
 
-        if db_has_results:  # This file could be schema with populated results from previous run. Or it could be a normal db file.
+        # TODO:  This below segment is currently broke, and it isn't clear if it should be revived.  See note below.
+        """
+        this segment below tries to implement logic around ensuring that the output db file is constructed
+        from the same data as the input file, by comparing the filename in a table called input_file that
+        may not exist.  As a result, it is possible to inject output into an "other"
+        output database.  Even if it were to work, it is a shabby guarantee that the input data is the same
+        without a table-by-table comparison, which seems nonsensical
+        """
+        if db_has_inputs:  # This file could be schema with populated results from previous run. Or it could be a normal db file.
+
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='input_file';")
             input_file_table_exists = False
             for i in cur:  # This means that the 'input_file' table exists in db.
@@ -534,13 +595,12 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                     tagged_file = i[0]
                 tagged_file = re.sub('["]', "", tagged_file)
 
-                if tagged_file == options.input_file:
+                if tagged_file == config.input_file:
                     # If Input_file name matches, add output and check tech/comm
-                    dat_to_db(options.input_file, con)
+                    dat_to_db(config.input_file, con)
                 else:  # the database was not created from the input file...  ??
                     # If not a match, delete output tables and update input_file. Call dat_to_db
                     for i in db_tables:
-                        # TODO:  This is deleting the data tables ?
                         cur.execute("DELETE FROM " + i + ";")
                         cur.execute("VACUUM;")
 
@@ -549,7 +609,7 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                         cur.execute("VACUUM;")
 
                     cur.execute("DELETE FROM input_file WHERE id=1;")
-                    cur.execute("INSERT INTO input_file VALUES(1, '" + str(options.input_file) +
+                    cur.execute("INSERT INTO input_file VALUES(1, '" + str(config.input_file) +
                                 "');")
 
                     dat_to_db(i, con)
@@ -562,73 +622,71 @@ def pformat_results(pyomo_instance, pyomo_result, options):
                 cur.execute("DELETE FROM " + tables[i] + ";")
                 cur.execute("VACUUM;")
 
-            for i in options.dot_dat:
+            for i in config.dot_dat:
                 cur.execute("DELETE FROM input_file WHERE id=1;")
                 cur.execute("INSERT INTO input_file(id, file) VALUES(?, ?);", (1, '"' + i + '"'))
                 break
             dat_to_db(i, con)
 
-        for table in svars.keys():
-            if table in tables:
-                cur.execute("SELECT DISTINCT scenario FROM '" + tables[table] + "'")
+        # start updating the tables
+        for var_name in svars.keys():
+            if var_name in tables:
+                cur.execute("SELECT DISTINCT scenario FROM '" + tables[var_name] + "'")
                 for val in cur:
                     # If scenario exists, delete unless it's a myopic run (for myopic, the scenario results are deleted
                     # before the run in temoa_config.py)
-                    if options.scenario == val[0] and options.scenario_mode != TemoaMode.MYOPIC:
-                        cur.execute("DELETE FROM " + tables[table] + " \
-									WHERE scenario is '" + options.scenario + "'")
-                if table == 'Objective':  # Only table without sector info
-                    for key in svars[table].keys():
-                        key_str = str(key)  # only 1 row to write
+                    if config.scenario == val[0] and config.scenario_mode != TemoaMode.MYOPIC:
+                        cur.execute("DELETE FROM " + tables[var_name] + " \
+									WHERE scenario is '" + config.scenario + "'")
+                if var_name == 'Objective':  # Only associated table without sector info
+                    for var_idx in svars[var_name].keys():
+                        key_str = str(var_idx)  # only 1 row to write
                         key_str = key_str[1:-1]  # Remove parentheses
-                        cur.execute("INSERT INTO " + tables[table] + " \
-									VALUES('" + options.scenario + "'," + key_str + ", \
-									" + str(svars[table][key]) + ");")
+                        cur.execute("INSERT INTO " + tables[var_name] + " \
+									VALUES('" + config.scenario + "'," + key_str + ", \
+									" + str(svars[var_name][var_idx]) + ");")
                 else:  # First add 'NULL' for sector then update
-                    for key in svars[table].keys():  # Need to loop over keys (rows)
-                        key_str = str(key)
+                    # Need to loop over keys, which are the index values for the variable 'key'
+                    for var_idx in svars[var_name].keys():
+                        key_str = str(var_idx)
                         key_str = key_str[1:-1]  # Remove parentheses
-                        if table != 'Costs':
-                            cur.execute("INSERT INTO " + tables[table] + \
-                                        " VALUES('" + str(key[0]) + "', '" + options.scenario + "','NULL', \
+                        if var_name != 'Costs':
+                            cur.execute("INSERT INTO " + tables[var_name] + \
+                                        " VALUES('" + str(var_idx[0]) + "', '" + config.scenario + "','NULL', \
 											" + key_str[key_str.find(',') + 1:] + "," + str(
-                                svars[table][key]) + ");")
+                                svars[var_name][var_idx]) + ");")
                         else:
-                            key_str = str((key[0], key[2], key[3]))
+                            key_str = str((var_idx[0], var_idx[2], var_idx[3]))
                             key_str = key_str[1:-1]  # Remove parentheses
-                            cur.execute("INSERT INTO " + tables[table] + \
-                                        " VALUES('" + str(key[1]) + "', '" + options.scenario + "','NULL', \
-										" + key_str + "," + str(svars[table][key]) + ");")
-                    cur.execute("UPDATE " + tables[table] + " SET sector = \
+                            cur.execute("INSERT INTO " + tables[var_name] + \
+                                        " VALUES('" + str(var_idx[1]) + "', '" + config.scenario + "','NULL', \
+										" + key_str + "," + str(svars[var_name][var_idx]) + ");")
+                    cur.execute("UPDATE " + tables[var_name] + " SET sector = \
 								(SELECT technologies.sector FROM technologies \
-								WHERE " + tables[table] + ".tech = technologies.tech);")
+								WHERE " + tables[var_name] + ".tech = technologies.tech);")
 
-        # WRITE DUALS RESULTS
-        if (options.save_duals):
+        # Write the duals...
+
+        # always erase any dual records for this scenario to either (a) start clean or (b) remove stale results
+
+        cur.execute("DELETE FROM main.Output_Duals WHERE main.Output_Duals.scenario = ?", (config.scenario,))
+        if config.save_duals:
             if (len(duals) != 0):
-                overwrite_keys = [str(tuple(x)) for x in
-                                  duals.reset_index()[['constraint_name', 'scenario']].to_records(
-                                      index=False)]
-                # delete records that will be overwritten by new duals dataframe
-                cur.execute(
-                    "DELETE FROM Output_Duals WHERE (constraint_name, scenario) IN (VALUES " + ','.join(
-                        overwrite_keys) + ")")
-                # write new records from new duals dataframe
                 duals.to_sql('Output_Duals', con, if_exists='append')
 
         con.commit()
         con.close()
 
-        if options.save_excel or options.save_lp_file:
+        if config.save_excel or config.save_lp_file:
             # TODO:  It isn't clear why we are screening for save_lp_file here ... ?
-            if options.save_excel:
+            if config.save_excel:
                 temp_scenario = set()
-                temp_scenario.add(options.scenario)
+                temp_scenario.add(config.scenario)
                 # make_excel function imported near the top
-                excel_filename = options.output_path / options.scenario
-                make_excel(str(options.output_database), excel_filename, temp_scenario)
+                excel_filename = config.output_path / config.scenario
+                make_excel(str(config.output_database), excel_filename, temp_scenario)
 
-    logger.info('Finished results processing')
+    logger.debug('Finished results processing')
     return output
 
 

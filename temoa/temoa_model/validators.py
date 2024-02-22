@@ -29,6 +29,7 @@ import re
 from collections import defaultdict
 from logging import getLogger
 from typing import TYPE_CHECKING
+
 from pyomo.environ import NonNegativeReals
 
 if TYPE_CHECKING:
@@ -46,12 +47,13 @@ def validate_linked_tech(M: 'TemoaModel') -> bool:
     """
     logger.debug('Starting to validate linked techs.')
     # gather the tech-linked_tech pairs
-    tech_pairs = {(k[0], k[1], v) for (k, v) in M.LinkedTechs.items()}  # (r, t, linked_tech) tuples
+    tech_pairs = {(k[0], k[1], v) for (k, v) in M.LinkedTechs.items() if v in M.time_optimize}  # (r, t,
+    # linked_tech) tuples
 
     # get the lifetimes by (r, t) and v for comparison
     lifetimes: dict[tuple, dict] = defaultdict(dict)
-    for r, t, v in M.LifetimeProcess_final:
-        lifetimes[r, t][v] = M.LifetimeProcess_final[r, t, v]
+    for r, t, v in M.LifetimeProcess:
+        lifetimes[r, t][v] = M.LifetimeProcess[r, t, v]
     # compare the dictionary of v: lifetime for each pair
     success = all(
         (lifetimes[r, t] == lifetimes[r, linked_tech] for (r, t, linked_tech) in tech_pairs)
@@ -84,7 +86,7 @@ def validate_linked_tech(M: 'TemoaModel') -> bool:
                 vintage_disparities = lifetimes[r, t].keys() ^ lifetimes[r, linked_tech].keys()
                 if vintage_disparities:
                     logger.error(
-                        'Tech %s and %s are linked but have differing vintages in Lifetime process in vintages:\n  %s',
+                        'Tech %s and %s are linked but have differing baseline vintages:\n  %s',
                         t,
                         linked_tech,
                         vintage_disparities,
@@ -268,3 +270,25 @@ def validate_CapacityFactorProcess(M: 'TemoaModel', val, r, s, d, t, v) -> bool:
             0 <= val <= 1.0,
         )
     )
+
+def validate_Efficiency(M: 'TemoaModel', val, r, si, t, v, so) -> bool:
+
+
+    if all(
+        (
+            isinstance(val, float),
+            val > 0,
+            r in M.RegionalIndices,
+            si in M.commodity_physical,
+            t in M.tech_all,
+            so in M.commodity_carrier,
+            v in M.vintage_all,
+        )
+    ):
+        return True
+    print ('r', r in M.RegionalIndices)
+    print( 'si', si in M.commodity_physical )
+    print( 't', t in M.tech_all)
+    print( 'v', v in M.vintage_all)
+    print( 'so', so in M.commodity_carrier )
+    return False

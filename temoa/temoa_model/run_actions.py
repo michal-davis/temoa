@@ -42,7 +42,27 @@ from temoa.temoa_model.temoa_model import TemoaModel
 logger = getLogger(__name__)
 
 
-def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
+def load_portal_from_dat(dat_file: Path, silent: bool = False) -> DataPortal:
+    loaded_portal = DataPortal(model=TemoaModel())
+
+    if dat_file.suffix != '.dat':
+        logger.error('Attempted to load data from file %s which is not a .dat file', dat_file)
+        raise TypeError('file loading error occurred, see log')
+    hack = time()
+    if not silent:
+        SE.write('[        ] Reading data files.')
+        SE.flush()
+
+    logger.debug('Started loading the DataPortal from the .dat file: %s', dat_file)
+    loaded_portal.load(filename=str(dat_file))
+
+    if not silent:
+        SE.write('\r[%8.2f] Data read.\n' % (time() - hack))
+    logger.debug('Finished creating the DataPortal from the .dat')
+    return loaded_portal
+
+
+def build_instance(loaded_portal: DataPortal, model_name=None, silent=False) -> TemoaModel:
     """
     Build a Temoa Instance from data
     :param silent: Run silently
@@ -51,22 +71,6 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
     :return: a built TemoaModel
     """
     model = TemoaModel()
-    model_data = DataPortal(model=model)
-
-    if dat_file.suffix != '.dat':
-        logger.error('Attempted to load data from file %d which is not a .dat file', dat_file)
-        raise TypeError('file loading error occurred, see log')
-    hack = time()
-    if not silent:
-        SE.write('[        ] Reading data files.')
-        SE.flush()
-
-    logger.debug('Started loading the DataPortal from the .dat file: %s', dat_file)
-    model_data.load(filename=str(dat_file))
-
-    if not silent:
-        SE.write('\r[%8.2f] Data read.\n' % (time() - hack))
-    logger.debug('Finished reading the .dat file')
 
     # TODO:  Look at this.  HiGHS doesn't support this yet, others do.
     model.dual = Suffix(direction=Suffix.IMPORT)
@@ -78,7 +82,7 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
         SE.write('[        ] Creating model instance.')
         SE.flush()
     logger.info('Started creating model instance from data')
-    instance = model.create_instance(model_data, name=model_name)
+    instance = model.create_instance(loaded_portal, name=model_name)
     if not silent:
         SE.write('\r[%8.2f] Instance created.\n' % (time() - hack))
         SE.flush()
@@ -91,12 +95,13 @@ def build_instance(dat_file: Path, model_name=None, silent=False) -> TemoaModel:
         c_count += len(constraint)
     for var in instance.component_objects(ctype=Var):
         v_count += len(var)
-    logger.info("model built...  Variables: %d, Constraints: %d", v_count, c_count)
+    logger.info('model built...  Variables: %d, Constraints: %d', v_count, c_count)
     return instance
 
 
-def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silent: bool = False) \
-        -> Tuple[TemoaModel, SolverResults]:
+def solve_instance(
+    instance: TemoaModel, solver_name, keep_LP_files: bool, silent: bool = False
+) -> Tuple[TemoaModel, SolverResults]:
     """
     Solve the instance and return a loaded instance
     :param silent: Run silently
@@ -116,11 +121,9 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
         logger.error(
             'Failed to create a solver instance for name: %s.  Check name and availability on '
             'this system',
-            solver_name)
+            solver_name,
+        )
         raise TypeError('Failed to make Solver instance.  See log.')
-    if solver_name not in {'cbc', 'neos', 'cplex'}:
-        logger.warning(
-            'Attempting to use solver named %d which does not have (optional?) options set')
 
     hack = time()
     if not silent:
@@ -128,36 +131,53 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
         SE.flush()
 
     try:
-        logger.info('Starting the solve process using %s solver on model %s', solver_name,
-                    instance.name)
+        logger.info(
+            'Starting the solve process using %s solver on model %s', solver_name, instance.name
+        )
         if solver_name == 'neos':
             raise NotImplementedError
             # result = options.optimizer.solve(instance, opt=options.solver)
         else:
             if solver_name == 'cbc':
+                pass
+                # dev note:  I think these options are outdated.  Getting decent results without them...
+                #            preserved for now.
                 # Solver options. Reference:
                 # https://genxproject.github.io/GenX/dev/solver_configuration/
-                optimizer.options["dualTolerance"] = 1e-6
-                optimizer.options["primalTolerance"] = 1e-6
-                optimizer.options["zeroTolerance"] = 1e-12
-                optimizer.options["crossover"] = 'off'
+                # optimizer.options["dualTolerance"] = 1e-6
+                # optimizer.options["primalTolerance"] = 1e-6
+                # optimizer.options["zeroTolerance"] = 1e-12
+                # optimizer.options["crossover"] = 'off'
 
             elif solver_name == 'cplex':
                 # Note: these parameter values are taken to be the same as those in PyPSA
                 # (see: https://pypsa-eur.readthedocs.io/en/latest/configuration.html)
-                optimizer.options["lpmethod"] = 4  # barrier
-                optimizer.options["solutiontype"] = 2  # non basic solution, ie no crossover
-                optimizer.options["barrier convergetol"] = 1.e-5
-                optimizer.options["feasopt tolerance"] = 1.e-6
+                optimizer.options['lpmethod'] = 4  # barrier
+                optimizer.options['solutiontype'] = 2  # non basic solution, ie no crossover
+                optimizer.options['barrier convergetol'] = 1.0e-5
+                optimizer.options['feasopt tolerance'] = 1.0e-6
 
             # TODO: still need to add gurobi parameters.
 
             # solver = pyomo.environ.SolverFactory('appsi_highs')
             # result = solver.solve(instance, tee=True)
 
-            result = optimizer.solve(instance, suffixes=['dual'],  # 'rc', 'slack'],
-                                     keepfiles=keep_LP_files,
-                                     symbolic_solver_labels=keep_LP_files)
+            result = optimizer.solve(
+                instance,
+                suffixes=['dual'],  # 'rc', 'slack'],
+                keepfiles=keep_LP_files,
+                symbolic_solver_labels=keep_LP_files,
+            )
+
+            # opt = appsi.solvers.Highs()
+            # # opt.config.load_solution=False
+            # try:
+            #     res = opt.solve(instance)
+            #     result = res.termination_condition.name
+            # except RuntimeError as e:
+            #     print('failed highs solve')
+            #     result = None
+
             logger.info('Solve process complete')
             logger.debug('Solver results: \n %s', result)
 
@@ -167,15 +187,43 @@ def solve_instance(instance: TemoaModel, solver_name, keep_LP_files: bool, silen
 
     except Exception as model_exc:
         # yield "Exception found in solve_temoa_instance\n"
-        SE.write("Exception found in solve_temoa_instance\n")
+        SE.write('Exception found in solve_temoa_instance\n')
         # yield str(model_exc) + '\n'
         SE.write(str(model_exc))
         raise model_exc
 
-    # TODO:  What is this transformation??  I think this should change and just work
-    #        with termination condition, which is all that appears to be needed downstream
+    # TODO:  It isn't clear that we need to push the solution values into the Result object:  it appears to be used in
+    #        pformat results, but why not just use the instance?
     instance.solutions.store_to(result)
     return instance, result
+
+
+def check_solve_status(result: SolverResults) -> tuple[bool, str]:
+    """
+    Check the status of the solve.
+    :param result: the results object returned by the solver
+    :return: tuple of status boolean (True='optimal', others False), and string message if not optimal
+    """
+    # # TODO:  for T/S highs...
+    # if result is None:
+    #     return False, 'highs barf'
+    #
+    # elif result == 'optimal':
+    #     return True, 'optimal'
+    # else:
+    #     pass
+    soln = result['Solution']
+    solv = result['Solver']  # currently unused, but may want it later
+    prob = result['Problem']  # currently unused, but may want it later
+
+    # TODO:  need to consider other terms that the solver may return for acceptable solutions
+    #        these are not currently used, but were included in legacy code...
+    lesser_responses = ('feasible', 'globallyOptimal', 'locallyOptimal')
+    logger.info('The solver reported status as: %s', soln.Status)
+    if soln.Status == 'optimal':
+        return True, ''
+    else:
+        return False, f'{soln.Status} was returned from solve'
 
 
 def handle_results(instance: TemoaModel, results, options: TemoaConfig):
@@ -186,20 +234,20 @@ def handle_results(instance: TemoaModel, results, options: TemoaConfig):
         SE.write(msg)
         SE.flush()
 
-    formatted_results = pformat_results(instance, results, options)
+    output_stream = pformat_results(instance, results, options)
 
     if not options.silent:
         SE.write('\r[%8.2f] Results processed.\n' % (time() - hack))
         SE.flush()
 
-    if formatted_results.getvalue() == 'No solution found.':
-        SE.write(formatted_results.getvalue() + '\n')
+    if options.stream_output:
+        print(output_stream.getvalue())
     # normal (non-MGA) run will have a TotalCost as the OBJ:
     if hasattr(instance, 'TotalCost'):
-        logger.info("TotalCost value: %0.2f", value(instance.TotalCost))
+        logger.info('TotalCost value: %0.2f', value(instance.TotalCost))
     # MGA runs should have either a FirstObj or SecondObj
     if hasattr(instance, 'FirstObj'):
-        logger.info("MGA First Obj value: %0.2f", value(instance.FirstObj))
+        logger.info('MGA First Obj value: %0.2f', value(instance.FirstObj))
     elif hasattr(instance, 'SecondObj'):
-        logger.info("MGA Second Obj value: %0.2f", value(instance.SecondObj))
+        logger.info('MGA Second Obj value: %0.2f', value(instance.SecondObj))
     return

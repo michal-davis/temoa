@@ -21,6 +21,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 import tomllib
 from logging import getLogger
 from pathlib import Path
+from sys import stderr as SE
 
 from temoa.temoa_model.temoa_mode import TemoaMode
 
@@ -32,22 +33,27 @@ class TemoaConfig:
     The overall configuration for a Temoa Scenario
     """
 
-    def __init__(self,
-                 scenario: str,
-                 scenario_mode: TemoaMode | str,
-                 input_file: Path,
-                 output_database: Path,
-                 output_path: Path,
-                 solver_name: str,
-                 neos: bool = False,
-                 save_excel: bool = False,
-                 save_duals: bool = False,
-                 save_lp_file: bool = False,
-                 MGA: dict | None = None,
-                 myopic: dict | None = None,
-                 config_file: Path | None = None,
-                 silent: bool = False):
-
+    def __init__(
+        self,
+        scenario: str,
+        scenario_mode: TemoaMode | str,
+        input_file: Path,
+        output_database: Path,
+        output_path: Path,
+        solver_name: str,
+        neos: bool = False,
+        save_excel: bool = False,
+        save_duals: bool = False,
+        save_lp_file: bool = False,
+        MGA: dict | None = None,
+        myopic: dict | None = None,
+        config_file: Path | None = None,
+        silent: bool = False,
+        stream_output: bool = False,
+        price_check: bool = True,
+        source_check: bool = False,
+        plot_commodity_network: bool = False,
+    ):
         self.scenario = scenario
         # capture the operating mode
         self.scenario_mode: TemoaMode
@@ -58,15 +64,19 @@ class TemoaConfig:
                 try:
                     self.scenario_mode = TemoaMode[scenario_mode.upper()]
                 except KeyError:
-                    raise AttributeError(f'The mode selection received by TemoaConfig: '
-                                         f'{scenario_mode} is invalid.\nPossible choices are '
-                                         f'{list(TemoaMode.__members__.keys())} (case '
-                                         f'insensitive).')
+                    raise AttributeError(
+                        f'The mode selection received by TemoaConfig: '
+                        f'{scenario_mode} is invalid.\nPossible choices are '
+                        f'{list(TemoaMode.__members__.keys())} (case '
+                        f'insensitive).'
+                    )
             case _:
-                raise AttributeError(f'The mode selection received by TemoaConfig: '
-                                     f'{scenario_mode} is invalid.\nPossible choices are '
-                                     f'{list(TemoaMode.__members__.keys())} (case '
-                                     f'insensitive).')
+                raise AttributeError(
+                    f'The mode selection received by TemoaConfig: '
+                    f'{scenario_mode} is invalid.\nPossible choices are '
+                    f'{list(TemoaMode.__members__.keys())} (case '
+                    f'insensitive).'
+                )
 
         self.config_file = config_file
 
@@ -76,7 +86,7 @@ class TemoaConfig:
             raise FileNotFoundError(f'could not locate the input file: {self.input_file}')
         if self.input_file.suffix not in {'.dat', '.sqlite'}:
             logger.error('Input file is not of type .dat or .sqlite')
-            raise AttributeError(f'Input file is not of type .dat or .sqlite')
+            raise AttributeError('Input file is not of type .dat or .sqlite')
 
         # accept and validate the output db
         self.output_database = Path(output_database)
@@ -84,9 +94,18 @@ class TemoaConfig:
             raise FileNotFoundError(f'Could not locate the output db: {self.output_database}')
         if self.output_database.suffix != '.sqlite':
             logger.error('Output DB does not appear to be a sqlite db')
-            raise AttributeError(f'Output DB should be .sqlite type')
+            raise AttributeError('Output DB should be .sqlite type')
+
+        # create a placeholder for .dat file.  If conversion is needed, this
+        # is the destination...
+        self.dat_file: Path | None
+        if self.input_file.suffix == '.dat':
+            self.dat_file = self.input_file
+
         self.output_path = output_path
         self.neos = neos
+        if self.neos:
+            raise NotImplementedError('Neos is currently not supported.')
 
         self.solver_name = solver_name
         self.save_excel = save_excel
@@ -96,6 +115,25 @@ class TemoaConfig:
         self.mga_inputs = MGA
         self.myopic_inputs = myopic
         self.silent = silent
+        self.stream_output = stream_output
+        self.price_check = price_check
+        self.source_check = source_check
+        self.plot_commodity_network = plot_commodity_network & self.source_check
+        logger.warning(
+            'Commodity Network plotting was selected, but Source Check was not selected.  '
+            'Both are required to produce plots.'
+        )
+
+        # warn if output db != input db
+        if self.input_file.suffix == self.output_database.suffix:  # they are both .db/.sqlite
+            if self.input_file != self.output_database:  # they are not the same db
+                msg = (
+                    'Input file, which is a database, does not match the output file\n User '
+                    'is responsible to ensure the data ~ results congruency in the output db'
+                )
+                logger.warning(msg)
+                if not self.silent:
+                    SE.write('Warning: ' + msg)
 
     @staticmethod
     def validate_schema(data: dict):
@@ -107,35 +145,55 @@ class TemoaConfig:
         #            This does not provide great feedback.  If it gets more complicated, a shift
         #            to Pydantic would be in order.
         match data:
-            case {'scenario': str(), 'scenario_mode': str(), 'input_file': str(),
-                  'output_database': str(), 'neos': bool(), 'solver_name': str(),
-                  'save_excel': bool(), 'save_duals': bool(), 'save_lp_file': bool(),
-                  'MGA': {'slack': int(), 'iterations': int(), 'weight': str()},
-                  'myopic': {'myopic_view': int(), 'keep_myopic_databases': bool()}}:
+            case {
+                'scenario': str(),
+                'scenario_mode': str(),
+                'input_file': str(),
+                'output_database': str(),
+                'neos': bool(),
+                'solver_name': str(),
+                'save_excel': bool(),
+                'save_duals': bool(),
+                'save_lp_file': bool(),
+                'MGA': {'slack': int(), 'iterations': int(), 'weight': str()},
+                'myopic': {'myopic_view': int(), 'keep_myopic_databases': bool()},
+                'stream_output': bool(),
+                'price_check': bool(),
+                'source_check': bool(),
+                'plot_commodity_network': bool(),
+            }:
                 # full schema OK
                 pass
-            case {'scenario': str(), 'scenario_mode': str(), 'input_file': str(),
-                  'output_database': str(), 'solver_name': str(),
-                  'save_excel': bool()}:
+            case {
+                'scenario': str(),
+                'scenario_mode': str(),
+                'input_file': str(),
+                'output_database': str(),
+                'solver_name': str(),
+                'save_excel': bool(),
+            }:
                 # ALL optional args omitted, OK
                 pass
             case _:
                 # didn't match
-                raise ValueError('Schema received from TOML is not correct.  x-check field names '
-                                 'and values with example')
+                raise ValueError(
+                    'Schema received from TOML is not correct.  x-check field names '
+                    'and values with example'
+                )
 
     @staticmethod
-    def build_config(config_file: Path, output_path: Path) -> 'TemoaConfig':
+    def build_config(config_file: Path, output_path: Path, silent=False) -> 'TemoaConfig':
         """
         build a Temoa Config from a config file
-        :param output_path: 
+        :param silent: suppress warnings and confirmations
+        :param output_path:
         :param config_file: the path to the config file to use
         :return: a TemoaConfig instance
         """
         with open(config_file, 'rb') as f:
             data = tomllib.load(f)
         TemoaConfig.validate_schema(data=data)
-        tc = TemoaConfig(**data, config_file=config_file, output_path=output_path)
+        tc = TemoaConfig(output_path=output_path, config_file=config_file, silent=silent, **data)
         logger.info('Scenario Name:  %s', tc.scenario)
         logger.info('Data source:  %s', tc.input_file)
         logger.info('Data target:  %s', tc.output_database)
@@ -158,16 +216,31 @@ class TemoaConfig:
         msg += '{:>{}s}: {}\n'.format('Output database target', width, self.output_database)
         msg += '{:>{}s}: {}\n'.format('Path for outputs and log', width, self.output_path)
         msg += spacer
+        msg += '{:>{}s}: {}\n'.format('Price check', width, self.price_check)
+        msg += '{:>{}s}: {}\n'.format('Source check', width, self.source_check)
+        msg += '{:>{}s}: {}\n'.format('Commodity network plots', width, self.plot_commodity_network)
+
+        msg += spacer
         msg += '{:>{}s}: {}\n'.format('Selected solver', width, self.solver_name)
         msg += '{:>{}s}: {}\n'.format('NEOS status', width, self.neos)
+        msg += '{:>{}s}: {}\n'.format('Price Check', width, self.price_check)
+        msg += '{:>{}s}: {}\n'.format('Source Check', width, self.source_check)
         msg += spacer
         msg += '{:>{}s}: {}\n'.format('Spreadsheet output', width, self.save_excel)
         msg += '{:>{}s}: {}\n'.format('Pyomo LP write status', width, self.save_lp_file)
         msg += '{:>{}s}: {}\n'.format('Save duals to output db', width, self.save_duals)
+        msg += '{:>{}s}: {}\n'.format('Stream output', width, self.stream_output)
         # TODO:  conditionally add in the mode options
 
-        # msg += '{:>{}s}: {}\n'.format('Myopic scheme', width, self.myopic)
-        # msg += '{:>{}s}: {}\n'.format('Myopic years', width, self.myopic_periods)
+        if self.scenario_mode == TemoaMode.MYOPIC:
+            msg += spacer
+            msg += '{:>{}s}: {}\n'.format(
+                'Myopic view depth', width, self.myopic_inputs.get('view_depth')
+            )
+            msg += '{:>{}s}: {}\n'.format(
+                'Myopic step size', width, self.myopic_inputs.get('step_size')
+            )
+
         # msg += '{:>{}s}: {}\n'.format('Retain myopic databases', width, self.KeepMyopicDBs)
         # msg += spacer
         # msg += '{:>{}s}: {}\n'.format('Citation output status', width, self.how_to_cite)

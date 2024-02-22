@@ -27,18 +27,13 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import logging
-import pathlib
 
 import pyomo.environ as pyo
 import pytest
 from pyomo.core import Constraint, Var
 
-from definitions import PROJECT_ROOT
-
 # from src.temoa_model.temoa_model import temoa_create_model
-from temoa.temoa_model.temoa_sequencer import TemoaSequencer, TemoaMode
 from tests.legacy_test_values import TestVals, test_vals
-
 
 logger = logging.getLogger(__name__)
 # list of test scenarios for which we have captured results in legacy_test_values.py
@@ -46,29 +41,6 @@ legacy_config_files = [
     {'name': 'utopia', 'filename': 'config_utopia.toml'},
     {'name': 'test_system', 'filename': 'config_test_system.toml'},
 ]
-
-
-@pytest.fixture()
-def system_test_run(request, tmp_path):
-    """
-    spin up the model, solve it, and hand over the model and result for inspection
-    """
-    data_name = request.param['name']
-    logger.info('Setting up and solving: %s', data_name)
-    filename = request.param['filename']
-    options = {'silent': True, 'debug': True}
-    config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)
-
-    sequencer = TemoaSequencer(
-        config_file=config_file,
-        output_path=tmp_path,
-        mode_override=TemoaMode.PERFECT_FORESIGHT,
-        **options,
-    )
-    sequencer.start()
-    res = sequencer.pf_results
-    mdl = sequencer.pf_solved_instance
-    return data_name, res, mdl
 
 
 @pytest.mark.parametrize(
