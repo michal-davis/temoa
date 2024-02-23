@@ -344,7 +344,7 @@ class TemoaModel(AbstractModel):
         M.StorageInit_rtv = Set(dimen=3, initialize=StorageInitIndices)
         M.StorageInitFrac = Param(M.StorageInit_rtv)
 
-        M.MyopicBaseyear = Param(default=0, mutable=True)
+        M.MyopicBaseyear = Param(default=0)
 
         ################################################
         #                 Model Variables              #

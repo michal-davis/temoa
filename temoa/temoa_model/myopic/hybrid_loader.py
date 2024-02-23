@@ -403,7 +403,7 @@ class HybridLoader:
                 case _:
                     raise ValueError(f'Component type unrecognized: {c}, {type(c)}')
 
-        M: TemoaModel = TemoaModel()  # for typing purposes only
+        M: TemoaModel = TemoaModel() # for typing purposes only
         cur = self.con.cursor()
 
         #   === TIME SETS ===
@@ -435,6 +435,16 @@ class HybridLoader:
         # time_season
         raw = cur.execute('SELECT t_season FROM main.time_season').fetchall()
         load_element(M.time_season, raw)
+
+        # myopic_base_year
+        if mi and self.table_exists('MyopicBaseyear'):
+            raw = cur.execute('SELECT year from main.MyopicBaseyear').fetchall()
+            # load as a singleton...
+            if not raw:
+                raise ValueError('No "year" found in MyopicBaseyear table.')
+            data[M.MyopicBaseyear.name] = {None: int(raw[0][0])}
+        elif mi:
+            raise ValueError('Running in myopic mode is not possible without MyopicBaseyear table.')
 
         #  === REGION SETS ===
 

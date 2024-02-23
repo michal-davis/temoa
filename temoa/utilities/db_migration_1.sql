@@ -5,8 +5,6 @@ ALTER TABLE technologies
 -- update the commodity flags.  REPLACE acts like "insert if not already there..."
 REPLACE INTO main.commodity_labels VALUES ('s', 'source commodity');
 
--- no longer used
-DROP TABLE IF EXISTS main.MyopicBaseyear;
 
 -- fix the FK assignment in OutputEmissions to ref the commodity table.  (the old ref was not a unique index)
 create table Output_Emissions_dg_tmp
