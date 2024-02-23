@@ -23,6 +23,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 from sys import stderr as SE
 from typing import TYPE_CHECKING
 
+from pyomo.core import Var, Expression
 from pyomo.environ import Constraint, value
 
 from temoa.temoa_model.temoa_initialize import (
@@ -351,6 +352,52 @@ def TotalCost_rule(M):
     return sum(PeriodCost_rule(M, p) for p in M.time_optimize)
 
 
+def loan_cost(
+    capacity: float | Var,
+    invest_cost: float,
+    loan_annualize: float,
+    lifetime_loan_process: float | int,
+    lifetime_process: int,
+    P_0: int,
+    P_e: int,
+    GDR: float,
+    vintage: int,
+) -> float | Expression:
+    """
+    function to calculate the loan cost.  It can be used with fixed values to produce a hard number or
+    pyomo variables/params to make a pyomo Expression
+    :param capacity: The capacity to use to calculate cost
+    :param invest_cost: the cost/capacity
+    :param loan_annualize: parameter
+    :param lifetime_loan_process: lifetime of the loan
+    :param lifetime_process: lifetime of the process
+    :param P_0: the year to discount the costs back to
+    :param P_e: the 'end year' or cutoff year for loan payments
+    :param GDR: Global Discount Rate
+    :param vintage: the base year of the loan
+    :return: fixed number or pyomo expression based on input types
+    """
+    x = 1 + GDR  # a convenience
+    res = (
+        capacity
+        * (
+            invest_cost
+            * loan_annualize
+            * (
+                lifetime_loan_process
+                if not GDR
+                else (
+                    x ** (P_0 - vintage + 1) * (1 - x ** (-lifetime_loan_process)) / GDR
+                )
+            )
+        )
+        * (
+            (1 - x ** (-min(lifetime_process, P_e - vintage)))
+            / (1 - x ** (-lifetime_process))
+        )
+    )
+    return res
+
 def PeriodCost_rule(M: 'TemoaModel', p):
     P_0 = min(M.time_optimize)
     P_e = M.time_future.last()  # End point of modeled horizon
@@ -362,24 +409,8 @@ def PeriodCost_rule(M: 'TemoaModel', p):
         P_0 = value(M.MyopicBaseyear)
 
     loan_costs = sum(
-        M.V_NewCapacity[r, S_t, S_v]
-        * (
-            value(M.CostInvest[r, S_t, S_v])
-            * value(M.LoanAnnualize[r, S_t, S_v])
-            * (
-                value(M.LifetimeLoanProcess[r, S_t, S_v])
-                if not GDR
-                else (
-                    x ** (P_0 - S_v + 1)
-                    * (1 - x ** (-value(M.LifetimeLoanProcess[r, S_t, S_v])))
-                    / GDR
-                )
-            )
-        )
-        * (
-            (1 - x ** (-min(value(M.LifetimeProcess[r, S_t, S_v]), P_e - S_v)))
-            / (1 - x ** (-value(M.LifetimeProcess[r, S_t, S_v])))
-        )
+        loan_cost(M.V_NewCapacity[r, S_t, S_v], M.CostInvest[r, S_t, S_v], M.LoanAnnualize[r, S_t, S_v],
+                  M.LifetimeLoanProcess[r, S_t, S_v], M.LifetimeProcess[r, S_t, S_v], P_0, P_e, GDR, vintage=S_v)
         for r, S_t, S_v in M.CostInvest.sparse_iterkeys()
         if S_v == p
     )
@@ -2868,13 +2899,23 @@ create useful output.
     return frac
 
 
+def loan_annualization_rate(discount_rate: float | None, loan_life: int | float) -> float:
+    """
+    This calculation is broken out specifically so that it can be used for param creation
+    and separately to calculate loan costs rather than rely on fully-built model parameters
+    :param discount_rate:
+    :param loan_life:
+    :return:
+    """
+    if not discount_rate:
+        return 1.0 / loan_life
+    annualized_rate = discount_rate / (1.0 - (1.0 + discount_rate) ** (-loan_life))
+    return annualized_rate
+
 def ParamLoanAnnualize_rule(M: 'TemoaModel', r, t, v):
     dr = value(M.DiscountRate[r, t, v])
     lln = value(M.LifetimeLoanProcess[r, t, v])
-    if not dr:
-        return 1.0 / lln
-    annualized_rate = dr / (1.0 - (1.0 + dr) ** (-lln))
-
+    annualized_rate = loan_annualization_rate(dr, lln)
     return annualized_rate
 
 
