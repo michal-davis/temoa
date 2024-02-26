@@ -386,17 +386,44 @@ def loan_cost(
             * (
                 lifetime_loan_process
                 if not GDR
-                else (
-                    x ** (P_0 - vintage + 1) * (1 - x ** (-lifetime_loan_process)) / GDR
-                )
+                else (x ** (P_0 - vintage + 1) * (1 - x ** (-lifetime_loan_process)) / GDR)
             )
         )
+        * ((1 - x ** (-min(lifetime_process, P_e - vintage))) / (1 - x ** (-lifetime_process)))
+    )
+    return res
+
+
+def fixed_or_variable_cost(
+    cap_or_flow: float | Var,
+    cost_factor: float,
+    process_lifetime: float,
+    GDR: float | None,
+    P_0: float,
+    p: int,
+) -> float | Expression:
+    """
+    Extraction of the fixed and var cost formulation.  (It is same for both with either capacity or
+    flow as the driving variable.)
+    :param cap_or_flow: Capacity if fixed cost / flow out if variable
+    :param cost_factor: the cost (either fixed or variable) of the cap/flow variable
+    :param process_lifetime: see the computation of this variable separately
+    :param GDR: discount rate or None
+    :param P_0: the period to discount this back to
+    :param p: the period under evaluation
+    :return:
+    """
+    x = 1 + GDR
+    res = cap_or_flow * (
+        cost_factor
         * (
-            (1 - x ** (-min(lifetime_process, P_e - vintage)))
-            / (1 - x ** (-lifetime_process))
+            process_lifetime
+            if not GDR
+            else (x ** (P_0 - p + 1) * (1 - x ** (-process_lifetime)) / GDR)
         )
     )
     return res
+
 
 def PeriodCost_rule(M: 'TemoaModel', p):
     P_0 = min(M.time_optimize)
@@ -409,35 +436,42 @@ def PeriodCost_rule(M: 'TemoaModel', p):
         P_0 = value(M.MyopicBaseyear)
 
     loan_costs = sum(
-        loan_cost(M.V_NewCapacity[r, S_t, S_v], M.CostInvest[r, S_t, S_v], M.LoanAnnualize[r, S_t, S_v],
-                  M.LifetimeLoanProcess[r, S_t, S_v], M.LifetimeProcess[r, S_t, S_v], P_0, P_e, GDR, vintage=S_v)
+        loan_cost(
+            M.V_NewCapacity[r, S_t, S_v],
+            M.CostInvest[r, S_t, S_v],
+            M.LoanAnnualize[r, S_t, S_v],
+            M.LifetimeLoanProcess[r, S_t, S_v],
+            M.LifetimeProcess[r, S_t, S_v],
+            P_0,
+            P_e,
+            GDR,
+            vintage=S_v,
+        )
         for r, S_t, S_v in M.CostInvest.sparse_iterkeys()
         if S_v == p
     )
 
     fixed_costs = sum(
-        M.V_Capacity[r, p, S_t, S_v]
-        * (
-            value(M.CostFixed[r, p, S_t, S_v])
-            * (
-                value(MPL[r, p, S_t, S_v])
-                if not GDR
-                else (x ** (P_0 - p + 1) * (1 - x ** (-value(MPL[r, p, S_t, S_v]))) / GDR)
-            )
+        fixed_or_variable_cost(
+            M.V_Capacity[r, p, S_t, S_v],
+            M.CostFixed[r, p, S_t, S_v],
+            MPL[r, p, S_t, S_v],
+            GDR,
+            P_0,
+            p=p,
         )
         for r, S_p, S_t, S_v in M.CostFixed.sparse_iterkeys()
         if S_p == p
     )
 
     variable_costs = sum(
-        M.V_FlowOut[r, p, s, d, S_i, S_t, S_v, S_o]
-        * (
-            value(M.CostVariable[r, p, S_t, S_v])
-            * (
-                value(MPL[r, p, S_t, S_v])
-                if not GDR
-                else (x ** (P_0 - p + 1) * (1 - x ** (-value(MPL[r, p, S_t, S_v]))) / GDR)
-            )
+        fixed_or_variable_cost(
+            M.V_FlowOut[r, p, s, d, S_i, S_t, S_v, S_o],
+            M.CostVariable[r, p, S_t, S_v],
+            MPL[r, p, S_t, S_v],
+            GDR,
+            P_0,
+            p,
         )
         for r, S_p, S_t, S_v in M.CostVariable.sparse_iterkeys()
         if S_p == p and S_t not in M.tech_annual
@@ -448,14 +482,13 @@ def PeriodCost_rule(M: 'TemoaModel', p):
     )
 
     variable_costs_annual = sum(
-        M.V_FlowOutAnnual[r, p, S_i, S_t, S_v, S_o]
-        * (
-            value(M.CostVariable[r, p, S_t, S_v])
-            * (
-                value(MPL[r, p, S_t, S_v])
-                if not GDR
-                else (x ** (P_0 - p + 1) * (1 - x ** (-value(MPL[r, p, S_t, S_v]))) / GDR)
-            )
+        fixed_or_variable_cost(
+            M.V_FlowOutAnnual[r, p, S_i, S_t, S_v, S_o],
+            M.CostVariable[r, p, S_t, S_v],
+            MPL[r, p, S_t, S_v],
+            GDR,
+            P_0,
+            p,
         )
         for r, S_p, S_t, S_v in M.CostVariable.sparse_iterkeys()
         if S_p == p and S_t in M.tech_annual
@@ -1257,7 +1290,9 @@ capacity could lead to more expensive solutions.
 """
     # TODO:  This is invalid with the "for p..." construct
     s = M.time_season.first()
-    vintage_period = v  # the only capacity of concern here is for the vintage year for initialization
+    vintage_period = (
+        v  # the only capacity of concern here is for the vintage year for initialization
+    )
     # devnote:  storage techs are currently excluded from the tech_retirements, so no change in
     #           capacity should ever occur
     energy_capacity = (
@@ -1745,7 +1780,7 @@ output in separate terms.
     elif '+' in r:
         regions = r.split('+')
     else:
-        regions = (r, )
+        regions = (r,)
 
     actual_emissions = sum(
         M.V_FlowOut[reg, p, S_s, S_d, S_i, S_t, S_v, S_o]
@@ -1908,7 +1943,7 @@ def MaxActivity_Constraint(M: 'TemoaModel', r, p, t):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -1965,7 +2000,7 @@ def MinActivity_Constraint(M: 'TemoaModel', r, p, t):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -2016,7 +2051,7 @@ def MinActivityGroup_Constraint(M: 'TemoaModel', r, p, g):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
 
     activity_p = 0
     activity_p_annual = 0
@@ -2092,7 +2127,7 @@ def MaxActivityGroup_Constraint(M: 'TemoaModel', r, p, g):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
 
     activity_p = 0
     activity_p_annual = 0
@@ -2230,7 +2265,7 @@ def MaxCapacityGroup_Constraint(M: 'TemoaModel', r, p, g):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
     max_capgroup = value(M.MaxCapacityGroup[r, p, g])
 
     cap = 0
@@ -2299,7 +2334,7 @@ def MinCapacityGroup_Constraint(M: 'TemoaModel', r, p, g):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
     min_capgroup = value(M.MinCapacityGroup[r, p, g])
 
     cap = 0
@@ -2366,7 +2401,7 @@ def MinActivityShare_Constraint(M: 'TemoaModel', r, p, t, g):
     if r == 'global':
         reg = M.regions
     else:
-        reg = (r, )
+        reg = (r,)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -2432,7 +2467,7 @@ def MaxActivityShare_Constraint(M: 'TemoaModel', r, p, t, g):
     if r == 'global':
         reg = M.regions
     else:
-        reg = (r, )
+        reg = (r,)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -2587,7 +2622,7 @@ def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -2639,7 +2674,7 @@ def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     elif '+' in r:
         reg = r.split('+')
     else:
-        reg = (r, )
+        reg = (r,)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -2911,6 +2946,7 @@ def loan_annualization_rate(discount_rate: float | None, loan_life: int | float)
         return 1.0 / loan_life
     annualized_rate = discount_rate / (1.0 - (1.0 + discount_rate) ** (-loan_life))
     return annualized_rate
+
 
 def ParamLoanAnnualize_rule(M: 'TemoaModel', r, t, v):
     dr = value(M.DiscountRate[r, t, v])
