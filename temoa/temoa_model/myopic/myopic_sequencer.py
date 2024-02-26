@@ -34,6 +34,7 @@ from shutil import copyfile
 from sqlite3 import Connection
 from sys import stderr as SE
 
+import deprecated
 from pyomo.core import value
 
 import definitions
@@ -175,7 +176,7 @@ class MyopicSequencer:
         self.execute_script(table_script_file)
 
         # clear out the old riff-raff
-        self.drop_old_results()
+        self.clear_old_results()
 
         # start building the MyopicEfficiency table.  (need to do this prior to data build to get Existing
         # Capacity accounted for)
@@ -207,7 +208,10 @@ class MyopicSequencer:
                 idx = self.instance_queue.pop()
             elif last_instance_status == 'roll_back':
                 curr_start_idx = self.optimization_periods.index(idx.base_year)
-                new_start_idx = curr_start_idx - 1  # back up 1 period
+                new_start_idx = curr_start_idx - self.step_size  # back up 1 step
+                # dev note:  perhaps later allow back-stepping by increments of 1, which
+                #            would require by-period tracking of retirements, etc. to get capacity
+                #            correct.  Right now, Cap
                 if new_start_idx < 0:
                     logger.error('Failed myopic iteration.  Cannot back up any further.')
                     raise RuntimeError(
@@ -285,7 +289,6 @@ class MyopicSequencer:
 
             # add the new results...
             self.update_capacity_table(idx, model)
-            self.update_flow_out_table(idx, model)
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'report')
             pformat_results(model, results, self.config)
@@ -428,6 +431,9 @@ class MyopicSequencer:
                 )
         self.con.commit()
 
+    # below not currently used.  Preserved for not as an alternative example to output writing.
+    # if used, probably needs a shift to named outputs vice (?, ?, ?, ...)
+    @deprecated.deprecated('currently using p_format results to capture this')
     def update_flow_out_table(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
         """
         Update the MyopicFlowOut table with flows from the current period
@@ -492,7 +498,7 @@ class MyopicSequencer:
         # TODO:  We *might* be able to do something more efficient here and just keep adding
         #        but this should be most reliable way for now.
         self.cursor.execute(
-            'DELETE FROM MyopicEfficiency WHERE ' f'MyopicEfficiency.vintage >= {base}'
+            'DELETE FROM MyopicEfficiency WHERE MyopicEfficiency.vintage >= (?)', (base,)
         )
         self.con.commit()
 
@@ -608,9 +614,9 @@ class MyopicSequencer:
         self.cursor.executescript(sql_commands)
         self.con.commit()
 
-    def drop_old_results(self):
+    def clear_old_results(self):
         """
-        Drop old results tables
+        Clear old results from tables
         :return:
         """
         scenario_name = self.config.scenario
@@ -645,21 +651,27 @@ class MyopicSequencer:
         logger.debug('Clearing periods %s+ from output tables', period)
         for table in self.tables_with_period_reference:
             try:
-                self.cursor.execute(f'DELETE FROM {table} WHERE period >= {period}')
+                self.cursor.execute(
+                    f'DELETE FROM {table} WHERE period >= (?) and scenario = (?)',
+                    (period, self.config.scenario),
+                )
             except sqlite3.OperationalError:
                 SE.write(f'Failed trying to clear periods from table {table}\n')
                 raise sqlite3.OperationalError
         for table in self.legacy_tables_with_period_reference:
             try:
-                self.cursor.execute(f'DELETE FROM {table} WHERE t_periods >= {period}')
+                self.cursor.execute(
+                    f'DELETE FROM {table} WHERE t_periods >= (?) and scenario = (?)',
+                    (period, self.config.scenario),
+                )
             except sqlite3.OperationalError:
                 SE.write(f'Failed trying to clear periods from table {table}\n')
                 raise sqlite3.OperationalError
 
         # special case... new capacity has vintage only...
         self.cursor.execute(
-            'DELETE FROM main.Output_V_NewCapacity WHERE main.Output_V_NewCapacity.vintage >= (?)',
-            (period,),
+            'DELETE FROM main.Output_V_NewCapacity WHERE main.Output_V_NewCapacity.vintage >= (?) AND scenario = (?)',
+            (period, self.config.scenario),
         )
         self.con.commit()
 
