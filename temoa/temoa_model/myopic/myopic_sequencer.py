@@ -43,6 +43,7 @@ from temoa.temoa_model.myopic.hybrid_loader import HybridLoader
 from temoa.temoa_model.myopic.myopic_index import MyopicIndex
 from temoa.temoa_model.myopic.myopic_progress_mapper import MyopicProgressMapper
 from temoa.temoa_model.pformat_results import pformat_results
+from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.source_check import source_trace
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -189,11 +190,13 @@ class MyopicSequencer:
         # 1.  get feedback from previous instance execution (optimal/infeasible/...)
         # 2.  decide what to do about it
         # 3.  pull the next instance from the queue (if !empty & if needed)
-        # 4.  pull data for next run, adjust as necessary
-        # 5.  Add to the MyopicEfficiency table
-        # 6.  build instance, run, assess
-        # 7.  commit or back out any data as necessary
-        # 8.  report findings
+        # 4.  Add to the MyopicEfficiency table, needed before pulling the rest of the data
+        # 5.  pull data for next run, adjust as necessary
+        # 6.  build instance
+        # 7.  run checks (price check and source trace) on the model, if selected
+        # 8.  run the model and assess
+        # 9.  commit or back out any data as necessary
+        # 10.  report findings
 
         last_instance_status = None  # solve status
         last_base_year = None
@@ -208,10 +211,7 @@ class MyopicSequencer:
                 idx = self.instance_queue.pop()
             elif last_instance_status == 'roll_back':
                 curr_start_idx = self.optimization_periods.index(idx.base_year)
-                new_start_idx = curr_start_idx - self.step_size  # back up 1 step
-                # dev note:  perhaps later allow back-stepping by increments of 1, which
-                #            would require by-period tracking of retirements, etc. to get capacity
-                #            correct.  Right now, Cap
+                new_start_idx = curr_start_idx - 1  # back up 1 increment, expanding the window
                 if new_start_idx < 0:
                     logger.error('Failed myopic iteration.  Cannot back up any further.')
                     raise RuntimeError(
@@ -240,16 +240,18 @@ class MyopicSequencer:
                 myopic_index=idx
             )  # just make a new data portal...they are untrustworthy during re-use...
 
-            # 6. build/solve/assess
+            # 6. build
             instance = run_actions.build_instance(
                 loaded_portal=data_portal,
                 model_name=self.config.scenario,
                 silent=True,  # override this, we do our own reporting...
             )
 
-            # 6b.  check the commodity network
+            # 7.  Run checks... check the commodity network
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'check')
+            if self.config.price_check:
+                price_checker(instance)
             if self.config.source_check:
                 good_network = source_trace(instance, self.config)
                 if not good_network:
@@ -272,6 +274,8 @@ class MyopicSequencer:
                 silent=True,  # override this, we do our own reporting...
                 keep_LP_files=self.config.save_lp_file,
             )
+
+            # 8.  Run the model and assess solve status
             optimal, status = run_actions.check_solve_status(results)
             if not optimal:
                 logger.warning('FAILED myopic iteration on %s', idx)
@@ -283,10 +287,10 @@ class MyopicSequencer:
                 last_instance_status = 'optimal'
 
             logger.info('Completed myopic iteration on %s', idx)
-            # 7.  Update the output tables...
+
+            # 9, 10.  Update the output tables...
             # first, clear any results that overlap, we might have been backtracking...
             self.clear_results_after(idx.base_year)
-
             # add the new results...
             self.update_capacity_table(idx, model)
             if not self.config.silent:
@@ -474,7 +478,7 @@ class MyopicSequencer:
 
     def update_myopic_efficiency_table(self, myopic_index: MyopicIndex, prev_base: int):
         """
-        This function adds to (or creates) a MyopicEfficiency table in the db with data specific
+        This function adds to the MyopicEfficiency table in the db with data specific
         to the MyopicIndex timeframe.
         :return:
         """
@@ -530,6 +534,8 @@ class MyopicSequencer:
         self.con.commit()
 
         # 2.  Add the new stuff now visible
+        # dev note:  the `coalesce()` command is a nested if-else.  The first hit wins so it is priority:
+        #            process lifetime > tech lifetime > lifetime default
         lifetime = TemoaModel.default_lifetime_tech
         query = (
             'INSERT INTO MyopicEfficiency '
@@ -549,6 +555,7 @@ class MyopicSequencer:
             f'  AND Efficiency.vintage <= {last_demand_year}'
         )
         if self.debugging:
+            # note:  the debug query below omits the lifetime computation
             raw = self.cursor.execute(
                 f'SELECT {base}, regions, input_comm, tech, vintage, output_comm, efficiency '
                 'FROM Efficiency '
