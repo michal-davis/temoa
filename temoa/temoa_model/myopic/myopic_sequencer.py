@@ -34,6 +34,7 @@ from shutil import copyfile
 from sqlite3 import Connection
 from sys import stderr as SE
 
+import deprecated
 from pyomo.core import value
 
 import definitions
@@ -42,6 +43,7 @@ from temoa.temoa_model.myopic.hybrid_loader import HybridLoader
 from temoa.temoa_model.myopic.myopic_index import MyopicIndex
 from temoa.temoa_model.myopic.myopic_progress_mapper import MyopicProgressMapper
 from temoa.temoa_model.pformat_results import pformat_results
+from temoa.temoa_model.pricing_check import price_checker
 from temoa.temoa_model.source_check import source_trace
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -175,7 +177,7 @@ class MyopicSequencer:
         self.execute_script(table_script_file)
 
         # clear out the old riff-raff
-        self.drop_old_results()
+        self.clear_old_results()
 
         # start building the MyopicEfficiency table.  (need to do this prior to data build to get Existing
         # Capacity accounted for)
@@ -188,11 +190,13 @@ class MyopicSequencer:
         # 1.  get feedback from previous instance execution (optimal/infeasible/...)
         # 2.  decide what to do about it
         # 3.  pull the next instance from the queue (if !empty & if needed)
-        # 4.  pull data for next run, adjust as necessary
-        # 5.  Add to the MyopicEfficiency table
-        # 6.  build instance, run, assess
-        # 7.  commit or back out any data as necessary
-        # 8.  report findings
+        # 4.  Add to the MyopicEfficiency table, needed before pulling the rest of the data
+        # 5.  pull data for next run, adjust as necessary
+        # 6.  build instance
+        # 7.  run checks (price check and source trace) on the model, if selected
+        # 8.  run the model and assess
+        # 9.  commit or back out any data as necessary
+        # 10.  report findings
 
         last_instance_status = None  # solve status
         last_base_year = None
@@ -207,7 +211,7 @@ class MyopicSequencer:
                 idx = self.instance_queue.pop()
             elif last_instance_status == 'roll_back':
                 curr_start_idx = self.optimization_periods.index(idx.base_year)
-                new_start_idx = curr_start_idx - 1  # back up 1 period
+                new_start_idx = curr_start_idx - 1  # back up 1 increment, expanding the window
                 if new_start_idx < 0:
                     logger.error('Failed myopic iteration.  Cannot back up any further.')
                     raise RuntimeError(
@@ -236,16 +240,18 @@ class MyopicSequencer:
                 myopic_index=idx
             )  # just make a new data portal...they are untrustworthy during re-use...
 
-            # 6. build/solve/assess
+            # 6. build
             instance = run_actions.build_instance(
                 loaded_portal=data_portal,
                 model_name=self.config.scenario,
                 silent=True,  # override this, we do our own reporting...
             )
 
-            # 6b.  check the commodity network
+            # 7.  Run checks... check the commodity network
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'check')
+            if self.config.price_check:
+                price_checker(instance)
             if self.config.source_check:
                 good_network = source_trace(instance, self.config)
                 if not good_network:
@@ -268,6 +274,8 @@ class MyopicSequencer:
                 silent=True,  # override this, we do our own reporting...
                 keep_LP_files=self.config.save_lp_file,
             )
+
+            # 8.  Run the model and assess solve status
             optimal, status = run_actions.check_solve_status(results)
             if not optimal:
                 logger.warning('FAILED myopic iteration on %s', idx)
@@ -279,13 +287,12 @@ class MyopicSequencer:
                 last_instance_status = 'optimal'
 
             logger.info('Completed myopic iteration on %s', idx)
-            # 7.  Update the output tables...
+
+            # 9, 10.  Update the output tables...
             # first, clear any results that overlap, we might have been backtracking...
             self.clear_results_after(idx.base_year)
-
             # add the new results...
             self.update_capacity_table(idx, model)
-            self.update_flow_out_table(idx, model)
             if not self.config.silent:
                 self.progress_mapper.report(idx, 'report')
             pformat_results(model, results, self.config)
@@ -428,6 +435,9 @@ class MyopicSequencer:
                 )
         self.con.commit()
 
+    # below not currently used.  Preserved for not as an alternative example to output writing.
+    # if used, probably needs a shift to named outputs vice (?, ?, ?, ...)
+    @deprecated.deprecated('currently using p_format results to capture this')
     def update_flow_out_table(self, myopic_idx: MyopicIndex, model: TemoaModel) -> None:
         """
         Update the MyopicFlowOut table with flows from the current period
@@ -468,7 +478,7 @@ class MyopicSequencer:
 
     def update_myopic_efficiency_table(self, myopic_index: MyopicIndex, prev_base: int):
         """
-        This function adds to (or creates) a MyopicEfficiency table in the db with data specific
+        This function adds to the MyopicEfficiency table in the db with data specific
         to the MyopicIndex timeframe.
         :return:
         """
@@ -492,7 +502,7 @@ class MyopicSequencer:
         # TODO:  We *might* be able to do something more efficient here and just keep adding
         #        but this should be most reliable way for now.
         self.cursor.execute(
-            'DELETE FROM MyopicEfficiency WHERE ' f'MyopicEfficiency.vintage >= {base}'
+            'DELETE FROM MyopicEfficiency WHERE MyopicEfficiency.vintage >= (?)', (base,)
         )
         self.con.commit()
 
@@ -524,6 +534,8 @@ class MyopicSequencer:
         self.con.commit()
 
         # 2.  Add the new stuff now visible
+        # dev note:  the `coalesce()` command is a nested if-else.  The first hit wins so it is priority:
+        #            process lifetime > tech lifetime > lifetime default
         lifetime = TemoaModel.default_lifetime_tech
         query = (
             'INSERT INTO MyopicEfficiency '
@@ -543,6 +555,7 @@ class MyopicSequencer:
             f'  AND Efficiency.vintage <= {last_demand_year}'
         )
         if self.debugging:
+            # note:  the debug query below omits the lifetime computation
             raw = self.cursor.execute(
                 f'SELECT {base}, regions, input_comm, tech, vintage, output_comm, efficiency '
                 'FROM Efficiency '
@@ -608,9 +621,9 @@ class MyopicSequencer:
         self.cursor.executescript(sql_commands)
         self.con.commit()
 
-    def drop_old_results(self):
+    def clear_old_results(self):
         """
-        Drop old results tables
+        Clear old results from tables
         :return:
         """
         scenario_name = self.config.scenario
@@ -645,21 +658,27 @@ class MyopicSequencer:
         logger.debug('Clearing periods %s+ from output tables', period)
         for table in self.tables_with_period_reference:
             try:
-                self.cursor.execute(f'DELETE FROM {table} WHERE period >= {period}')
+                self.cursor.execute(
+                    f'DELETE FROM {table} WHERE period >= (?) and scenario = (?)',
+                    (period, self.config.scenario),
+                )
             except sqlite3.OperationalError:
                 SE.write(f'Failed trying to clear periods from table {table}\n')
                 raise sqlite3.OperationalError
         for table in self.legacy_tables_with_period_reference:
             try:
-                self.cursor.execute(f'DELETE FROM {table} WHERE t_periods >= {period}')
+                self.cursor.execute(
+                    f'DELETE FROM {table} WHERE t_periods >= (?) and scenario = (?)',
+                    (period, self.config.scenario),
+                )
             except sqlite3.OperationalError:
                 SE.write(f'Failed trying to clear periods from table {table}\n')
                 raise sqlite3.OperationalError
 
         # special case... new capacity has vintage only...
         self.cursor.execute(
-            'DELETE FROM main.Output_V_NewCapacity WHERE main.Output_V_NewCapacity.vintage >= (?)',
-            (period,),
+            'DELETE FROM main.Output_V_NewCapacity WHERE main.Output_V_NewCapacity.vintage >= (?) AND scenario = (?)',
+            (period, self.config.scenario),
         )
         self.con.commit()
 

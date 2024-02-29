@@ -166,7 +166,6 @@ class TemoaSequencer:
                 instance = build_instance(data_portal, silent=self.config.silent)
                 # disregard what the config says about price_check and source_check and just do it...
                 price_checker(instance)
-                # source check requires use of hybrid loader... not ready yet for non-myopic
                 source_trace(instance, temoa_config=self.config)
 
             case TemoaMode.PERFECT_FORESIGHT:

@@ -403,7 +403,7 @@ class HybridLoader:
                 case _:
                     raise ValueError(f'Component type unrecognized: {c}, {type(c)}')
 
-        M: TemoaModel = TemoaModel() # for typing purposes only
+        M: TemoaModel = TemoaModel()  # for typing purposes only
         cur = self.con.cursor()
 
         #   === TIME SETS ===
@@ -591,16 +591,24 @@ class HybridLoader:
 
         # ExistingCapacity
         if mi:
-            # on this pull, we need to exclude techs that are unrestricted capacity from the past
-            # to prevent them from getting in to the capacity variables.
+            # In order to get accurate capacity at start of this interval, we want to
+            # 1.  Only look at the previous period in the net capacity table (things that had some capacity)
+            # 2.  Omit any techs that are "unlimited capacity" to keep them out of capacity variables
+            # 3.  add in everything from the original ExistingCapacity table
+
+            # get previous period
+            raw = cur.execute(
+                'SELECT MAX(t_periods) FROM main.time_periods WHERE t_periods < ?', (mi.base_year,)
+            ).fetchone()
+            previous_period = raw[0]
             # noinspection SqlUnused
             raw = cur.execute(
                 'SELECT region, tech, vintage, capacity FROM main.MyopicNetCapacity '
-                ' WHERE vintage < ? '
+                ' WHERE period = (?) '
                 '  AND tech NOT IN (SELECT tech FROM main.technologies WHERE technologies.unlim_cap > 0)'
                 'UNION '
                 '  SELECT regions, tech, vintage, exist_cap FROM main.ExistingCapacity ',
-                (mi.base_year,),
+                (previous_period,),
             ).fetchall()
         else:
             raw = cur.execute(

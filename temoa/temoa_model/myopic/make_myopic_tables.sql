@@ -124,32 +124,32 @@ CREATE TABLE IF NOT EXISTS MyopicCost (
 --     PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm),
 --     check ( flow >= 0 )
 -- );
-CREATE TABLE IF NOT EXISTS MyopicFlowOut(
-    scenario    text,
-    region      text,
-    sector      text,
-    period      text,
-    season      text,
-    t_day       text,
-    input_comm  text,
-    tech        text,
-    vintage     integer,
-    output_comm text,
-    flow        real,
-
-    FOREIGN KEY (period) REFERENCES time_periods(t_periods),
-    FOREIGN KEY (sector) REFERENCES sector_labels(sector),
-    FOREIGN KEY (region) REFERENCES regions(regions),
-    FOREIGN KEY (tech) REFERENCES technologies(tech),
-    FOREIGN KEY (vintage) REFERENCES time_periods(t_periods),
-    FOREIGN KEY (input_comm) REFERENCES commodities(comm_name),
-    FOREIGN KEY (output_comm) REFERENCES commodities(comm_name),
-    FOREIGN KEY (season) REFERENCES time_season(t_season),
-    FOREIGN KEY (t_day) REFERENCES time_of_day(t_day),
-
-    PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm),
-    check ( flow >= 0 )
-);
+-- CREATE TABLE IF NOT EXISTS MyopicFlowOut(
+--     scenario    text,
+--     region      text,
+--     sector      text,
+--     period      text,
+--     season      text,
+--     t_day       text,
+--     input_comm  text,
+--     tech        text,
+--     vintage     integer,
+--     output_comm text,
+--     flow        real,
+--
+--     FOREIGN KEY (period) REFERENCES time_periods(t_periods),
+--     FOREIGN KEY (sector) REFERENCES sector_labels(sector),
+--     FOREIGN KEY (region) REFERENCES regions(regions),
+--     FOREIGN KEY (tech) REFERENCES technologies(tech),
+--     FOREIGN KEY (vintage) REFERENCES time_periods(t_periods),
+--     FOREIGN KEY (input_comm) REFERENCES commodities(comm_name),
+--     FOREIGN KEY (output_comm) REFERENCES commodities(comm_name),
+--     FOREIGN KEY (season) REFERENCES time_season(t_season),
+--     FOREIGN KEY (t_day) REFERENCES time_of_day(t_day),
+--
+--     PRIMARY KEY (region, scenario, period, season, t_day, input_comm, tech, vintage, output_comm),
+--     check ( flow >= 0 )
+-- );
 CREATE TABLE IF NOT EXISTS MyopicEfficiency(
     base_year   integer,
     region      text,

@@ -25,7 +25,7 @@ input_file = "testing_data/storageville.sqlite"
 # The output file must be an existing .sqlite file
 # the user may target the same input file or a separate /
 # copied sqlite file in a different location
-output_database = "testing_outputs/storageville_output_catcher.sqlite"
+output_database = "testing_outputs/storageville.sqlite"
 
 # ------------------------------------
 #             SOLVER
