@@ -32,14 +32,16 @@ import logging
 import os
 import pathlib
 import shutil
+from typing import Any
 
-import pyomo.opt
 import pytest
+from pyomo.opt import SolverResults
 
 from definitions import PROJECT_ROOT
-from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_sequencer import TemoaSequencer
+
+logger = logging.getLogger(__name__)
 
 # set the target folder for output from testing
 output_path = os.path.join(PROJECT_ROOT, 'tests', 'testing_log')
@@ -64,21 +66,37 @@ logging.getLogger('pyutilib').setLevel(logging.WARNING)
 # to catch data.  These are just sumps to absorb non-inspected output to keep the input sources "pristine"
 data_output_path = os.path.join(PROJECT_ROOT, 'tests', 'testing_outputs')
 data_source_path = os.path.join(PROJECT_ROOT, 'tests', 'testing_data')
-databases = 'temoa_utopia.sqlite', 'temoa_test_system.sqlite', 'storageville.sqlite', 'mediumville.sqlite'
+databases = (
+    'temoa_utopia.sqlite',
+    'temoa_test_system.sqlite',
+    'storageville.sqlite',
+    'mediumville.sqlite',
+)
 for db in databases:
     if not os.path.exists(os.path.join(data_output_path, db)):
         shutil.copy(os.path.join(data_source_path, db), os.path.join(data_output_path, db))
 
-logger = logging.getLogger(__name__)
+
+# make a fresh copy of utopia for myopic use, when called for
+def copy_utopia_for_myopic():
+    logger.debug('Making a copy of utopia for testing')
+    shutil.copy(
+        os.path.join(data_source_path, 'temoa_utopia.sqlite'),
+        os.path.join(data_output_path, 'myo_temoa_utopia.sqlite'),
+    )
 
 
 @pytest.fixture()
-def system_test_run(request, tmp_path) -> tuple[str, pyomo.opt.SolverResults, TemoaModel]:
+def system_test_run(
+    request, tmp_path
+) -> tuple[Any, SolverResults | None, TemoaModel | None, TemoaSequencer]:
     """
     spin up the model, solve it, and hand over the model and result for inspection
     """
     data_name = request.param['name']
     logger.info('Setting up and solving: %s', data_name)
+    if data_name == 'myopic utopia':
+        copy_utopia_for_myopic()
     filename = request.param['filename']
     options = {'silent': True, 'debug': True}
     config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', filename)
@@ -86,10 +104,9 @@ def system_test_run(request, tmp_path) -> tuple[str, pyomo.opt.SolverResults, Te
     sequencer = TemoaSequencer(
         config_file=config_file,
         output_path=tmp_path,
-        mode_override=TemoaMode.PERFECT_FORESIGHT,
         **options,
     )
     sequencer.start()
     res = sequencer.pf_results
     mdl = sequencer.pf_solved_instance
-    return data_name, res, mdl
+    return data_name, res, mdl, sequencer

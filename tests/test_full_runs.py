@@ -27,6 +27,7 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import logging
+import sqlite3
 
 import pyomo.environ as pyo
 import pytest
@@ -42,6 +43,8 @@ legacy_config_files = [
     {'name': 'test_system', 'filename': 'config_test_system.toml'},
 ]
 
+myopic_files = [{'name': 'myopic utopia', 'filename': 'config_utopia_myopic.toml'}]
+
 
 @pytest.mark.parametrize(
     'system_test_run',
@@ -53,7 +56,7 @@ def test_against_legacy_outputs(system_test_run):
     """
     This test compares tests of legacy models to captured test results
     """
-    data_name, res, mdl = system_test_run
+    data_name, res, mdl, _ = system_test_run
     logger.info('Starting output test on scenario: %s', data_name)
     expected_vals = test_vals.get(data_name)  # a dictionary of expected results
 
@@ -72,7 +75,7 @@ def test_against_legacy_outputs(system_test_run):
 
     # check the size of the domain.  NOTE:  The build of the domain here may be "expensive" for large models
     assert (
-        len((efficiency_param.index_set().domain)) == expected_vals[TestVals.EFF_DOMAIN_SIZE]
+        len(efficiency_param.index_set().domain) == expected_vals[TestVals.EFF_DOMAIN_SIZE]
     ), 'should match legacy numbers'
 
     # inspect the total variable and constraint counts
@@ -89,42 +92,23 @@ def test_against_legacy_outputs(system_test_run):
     assert v_count == expected_vals[TestVals.VAR_COUNT], 'should have this many variables'
 
 
-@pytest.mark.skip(reason='Myopic test on hold till myopic is running again')
-def test_myopic_utopia():
+@pytest.mark.parametrize(
+    'system_test_run', argvalues=myopic_files, indirect=True, ids=[d['name'] for d in myopic_files]
+)
+def test_myopic_utopia(system_test_run):
     """
-    test the myopic functionality on Utopia.  We need to copy the source db to make the output and then erase
-    it because re-runs with the same output db are not possible....get "UNIQUE" errors in db on 2nd run
-
-    We will use the output target in the config file for this test as a shortcut to make/remove the database
-
-    This test will change after conversion of temoa_myopic.py.  RN, it is a good placeholder
-
+    Some cursory tests to ensure Myopic is running...  This is a very weak/simple test
+    It mostly just ensures that the mode runs correctly and only checks 1 output.  Much
+    more can be done with some certified test values...
     """
-    # eps = 1e-3
-    # config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_sample')
-    # # config_file = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_configs', 'config_utopia_myopic')
-    # input_db = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_data', 'temoa_utopia.sqlite')
-    # output_db = pathlib.Path(PROJECT_ROOT, 'tests', 'testing_outputs', 'temoa_utopia_output_catcher.sqlite')
-    # if os.path.isfile(output_db):
-    #     os.remove(output_db)
-    # shutil.copy(input_db, output_db)  # put a new copy in place, ones that are used before fail.
-    # model = TemoaModel()
-    # temoa_solver = TemoaSolver(model, config_filename=config_file)
-    # for _ in temoa_solver.createAndSolve():
-    #     pass
-    # # inspect the output db for results
-    # con = sqlite3.connect(output_db)
-    # cur = con.cursor()
-    # query = "SELECT t_periods, emissions FROM Output_Emissions WHERE tech is 'IMPDSL1'"
-    # emission = cur.execute(query).fetchall()
-    #
-    # # The emissions for diesel are present in each year and should be a good proxy for comparing
-    # # results
-    # diesel_emissions_by_year = {y: e for (y, e) in emission}
-    # assert abs(diesel_emissions_by_year[1990] - 2.8948) < eps
-    # assert abs(diesel_emissions_by_year[2000] - 2.4549) < eps
-    # assert abs(diesel_emissions_by_year[2010] - 5.4539) < eps
-    # os.remove(output_db)
+    # the model itself is fairly useless here, because several were run
+    # we just want a hook to the output database...
+    _, _, _, sequencer = system_test_run
+    con = sqlite3.connect(sequencer.config.output_database)
+    cur = con.cursor()
+    res = cur.execute('SELECT SUM(d_invest) FROM main.Output_Costs_2').fetchone()
+    invest_sum = res[0]
+    assert invest_sum == pytest.approx(12641.77), 'sum of investment costs did not match expected'
+    con.close()
 
-
-# TODO:  add additional tests for myopic that have retirement eligible things in them
+    # TODO:  add additional tests for myopic that have retirement eligible things in them

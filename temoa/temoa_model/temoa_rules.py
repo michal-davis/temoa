@@ -18,8 +18,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
-
-
+from logging import getLogger
 from sys import stderr as SE
 from typing import TYPE_CHECKING
 
@@ -35,7 +34,7 @@ from temoa.temoa_model.temoa_initialize import (
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
 
-
+logger = getLogger(__name__)
 # ---------------------------------------------------------------
 # Define the derived variables used in the objective function
 # and constraints below.
@@ -377,6 +376,10 @@ def loan_cost(
     :param vintage: the base year of the loan
     :return: fixed number or pyomo expression based on input types
     """
+    if GDR == 0:  # return the non-discounted result
+        regular_payment = capacity * invest_cost * loan_annualize
+        payments_made = min(lifetime_loan_process, P_e - vintage)
+        return regular_payment * payments_made
     x = 1 + GDR  # a convenience
     res = (
         capacity
@@ -495,8 +498,15 @@ def PeriodCost_rule(M: 'TemoaModel', p):
         for S_i in M.processInputs[r, S_p, S_t, S_v]
         for S_o in M.ProcessOutputsByInput[r, S_p, S_t, S_v, S_i]
     )
+    sponge_cost = 0
+    if M.troubleshooting:
+        sponge_cost = 10000 * sum(
+            M.sponge_abs[r, p, c] for r in M.regions for c in M.commodity_demand
+        )
+        # and add in the excess flows...
+        sponge_cost += 10000 * sum(M.sump_abs[rpsdc] for rpsdc in M.sump if rpsdc[1] == p)
 
-    period_costs = loan_costs + fixed_costs + variable_costs + variable_costs_annual
+    period_costs = loan_costs + fixed_costs + variable_costs + variable_costs_annual + sponge_cost
     return period_costs
 
 
@@ -547,10 +557,12 @@ def Demand_Constraint(M: 'TemoaModel', r, p, s, d, dem):
 
     DemandConstraintErrorCheck(supply + supply_annual, r, p, s, d, dem)
 
-    # TODO:  Could this become a GTE constraint?  It would make the model more elastic...?  Probably not...
-    #        Would lead to possible blow-through of ramping constraints, for example
+    sponge = 0
+    if M.troubleshooting:
+        sponge = M.sponge[r, p, dem]
     expr = (
-        supply + supply_annual == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
+        supply + supply_annual + sponge
+        == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
     )
 
     return expr
@@ -762,6 +774,10 @@ reduces computational burden.
         c,
     )
 
+    sump = 0
+    if M.troubleshooting:
+        sump = M.sump[r, p, s, d, c]
+
     expr = (
         vflow_out + interregional_imports
         == vflow_in_ToStorage
@@ -769,6 +785,7 @@ reduces computational burden.
         + vflow_in_ToNonStorageAnnual
         + interregional_exports
         + v_out_excess
+        + sump
     )
 
     return expr
@@ -891,6 +908,13 @@ def ResourceExtraction_Constraint(M: 'TemoaModel', reg, p, r):
        \sum_{I, t \in T^r \& t \in T^{a}, V} \textbf{FOA}_{r, p, i, t, v, c} \le RSC_{r, p, c}
 
        \forall \{r, p, c\} \in \Theta_{\text{ResourceExtraction}}"""
+    logger.warning(
+        'The ResourceBound parameter / ResourceExtraction constraint is not currently supported.  '
+        'Recommend removing data from supporting table'
+    )
+    # dev note:  This constraint does not have a table in the current schema
+    #            Additionally, the below (incorrect) construct assumes that a resource cannot be used
+    #            by BOTH a non-annual and annual tech.  It should be re-written to add these
     try:
         collected = sum(
             M.V_FlowOut[reg, p, S_s, S_d, S_i, S_t, S_v, r]
@@ -2230,6 +2254,12 @@ def MaxResource_Constraint(M: 'TemoaModel', r, t):
        \sum_{P} \textbf{CAPAVL}_{r, p, t} \le MAR_{r, t}
 
        \forall \{r, t\} \in \Theta_{\text{MaxCapacity}}"""
+    logger.warning(
+        'The MaxResource constraint is not currently supported in the model, pending review.  Recommend '
+        'removing data from the MaxResource Table'
+    )
+    # dev note:  this constraint is a misnomer.  It is actually a "global activity constraint on a tech"
+    #            regardless of whatever "resources" are consumed.
     max_resource = value(M.MaxResource[r, t])
     try:
         activity_rt = sum(
