@@ -25,12 +25,14 @@ https://westernspark.us
 Created on:  3/1/24
 
 """
+
 import pytest
 
 from temoa.temoa_model import table_writer
 
 params = [
     {
+        'ID': 'near-zero GDR',
         'capacity': 100_000,  # units
         'invest_cost': 1,  # $/unit of capacity
         'loan_life': 40,
@@ -43,9 +45,24 @@ params = [
         'model_cost': 409037.69,
         'undiscounted_cost': 409037.69,
     },
+    {
+        'ID': 'shortened term',
+        'capacity': 100_000,
+        'invest_cost': 1,
+        'loan_life': 40,
+        'loan_rate': 0.08,
+        'global_discount_rate': 0.05,
+        'process_life': 50,
+        'p_0': 2020,
+        'vintage': 2030,
+        'p_e': 2035,
+        'model_cost': 23403.85,
+        'undiscounted_cost': 41930.08,
+    },
 ]
 params_with_zero_GDR = [
     {
+        'ID': 'actual zero GDR',
         'capacity': 100_000,  # units
         'invest_cost': 1,  # $/unit of capacity
         'loan_life': 40,
@@ -61,7 +78,7 @@ params_with_zero_GDR = [
 ]
 
 
-@pytest.mark.parametrize('param', params)
+@pytest.mark.parametrize('param', params, ids=(param['ID'] for param in params))
 def test_loan_costs(param):
     """
     Test the loan cost calculations
@@ -72,10 +89,13 @@ def test_loan_costs(param):
     assert undiscounted_cost == pytest.approx(param['undiscounted_cost'], rel=0.01)
 
 
-@pytest.mark.parametrize('param', params_with_zero_GDR)
+@pytest.mark.parametrize(
+    'param', params_with_zero_GDR, ids=(param['ID'] for param in params_with_zero_GDR)
+)
 def test_loan_costs_with_zero_GDR(param):
     """
-    Test the formula with zero for GDR to make sure it is handled correctly
+    Test the formula with zero for GDR to make sure it is handled correctly.  The formula
+    risks division by zero if this is not correct.
     """
     model_cost, undiscounted_cost = table_writer.TableWriter.loan_costs(**param)
     assert model_cost == pytest.approx(param['model_cost'], abs=0.01)

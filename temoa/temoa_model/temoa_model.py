@@ -20,6 +20,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+import logging
 from itertools import product
 
 from pyomo.core import BuildCheck
@@ -35,15 +36,21 @@ from pyomo.environ import (
     Reals,
 )
 
-from temoa.temoa_model.temoa_initialize import *
-from temoa.temoa_model.temoa_rules import *
-from temoa.temoa_model.validators import (
+from temoa.temoa_model.model_checking.validators import (
     validate_linked_tech,
     region_check,
     validate_CapacityFactorProcess,
     region_group_check,
     validate_Efficiency,
+    check_flex_curtail,
 )
+from temoa.temoa_model.temoa_initialize import *
+from temoa.temoa_model.temoa_rules import *
+
+logger = logging.getLogger(__name__)
+
+# disable linter rule that complains about star imports for this file
+# ruff: noqa: F405
 
 
 class TemoaModel(AbstractModel):
@@ -54,8 +61,8 @@ class TemoaModel(AbstractModel):
     # this is used in several places outside this class, and this provides no-build access to it
     default_lifetime_tech = 40
 
-    def __init__(M, *args, **kwds):
-        AbstractModel.__init__(M, *args, **kwds)
+    def __init__(M, *args, **kwargs):
+        AbstractModel.__init__(M, *args, **kwargs)
 
         ################################################
         #       Internally used Data Containers        #
@@ -135,27 +142,22 @@ class TemoaModel(AbstractModel):
         M.tech_production = Set()
         M.tech_all = Set(initialize=M.tech_resource | M.tech_production)
         M.tech_baseload = Set(within=M.tech_all)
-        M.tech_storage = Set(within=M.tech_all)
+        M.tech_annual = Set(within=M.tech_all)
+        # annual storage not supported in Storage constraint or TableWriter, so exclude from domain
+        M.tech_storage = Set(within=M.tech_all - M.tech_annual)
         M.tech_reserve = Set(within=M.tech_all)
         M.tech_ramping = Set(within=M.tech_all)
-        # TODO:  both of these below are outdated and can be removed / tests updated
-        M.tech_capacity_min = Set(within=M.tech_all)
-        M.tech_capacity_max = Set(within=M.tech_all)
         M.tech_curtailment = Set(within=M.tech_all)
-        M.tech_rps = Set(
-            within=M.regions * M.tech_all, doc='Regional Portfolio Standard Technologies'
-        )
         M.tech_flex = Set(within=M.tech_all)
+        # ensure there is no overlap flex <=> curtailable technologies
+        M.check_flex_and_curtailment = BuildAction(rule=check_flex_curtail)
         M.tech_exchange = Set(within=M.tech_all)
         # Define groups for technologies
-        M.groups = Set(dimen=1)
-        M.tech_groups = Set(within=M.RegionalGlobalIndices * M.groups * M.tech_all)
-        # Define techs with constant output
-        M.tech_annual = Set(within=M.tech_all)
-        # TODO:  come back and figure out why I thought annual techs were ineligible!
-        M.tech_uncap = Set(
-            within=M.tech_all - M.tech_reserve - M.tech_capacity_min - M.tech_capacity_max
-        )  # - M.tech_annual)
+
+        M.tech_group_names = Set()
+        M.tech_group_members = Set(M.tech_group_names, within=M.tech_all)
+
+        M.tech_uncap = Set(within=M.tech_all - M.tech_reserve)
         """techs with unlimited capacity, ALWAYS available within lifespan"""
         # the below is a convenience for domain checking in params below that should not accept uncap techs...
         M.tech_with_capacity = Set(initialize=M.tech_all - M.tech_uncap)
@@ -216,6 +218,8 @@ class TemoaModel(AbstractModel):
         M.validate_SegFrac = BuildAction(rule=validate_SegFrac)
 
         # Define demand- and resource-related parameters
+        # Dev Note:  There does not appear to be a DB table supporting DemandDefaultDistro.  This does not
+        #            cause any problems, so let it be for now.
         M.DemandDefaultDistribution = Param(M.time_season, M.time_of_day, mutable=True)
         M.DemandSpecificDistribution = Param(
             M.regions, M.time_season, M.time_of_day, M.commodity_demand, mutable=True, default=0
@@ -256,7 +260,7 @@ class TemoaModel(AbstractModel):
         M.CapacityFactor_rsdt = Set(dimen=4, initialize=CapacityFactorTechIndices)
         M.CapacityFactorTech = Param(M.CapacityFactor_rsdt, default=1)
 
-        # Devnote:  using a default function below alleviates need to make this set.
+        # Dev note:  using a default function below alleviates need to make this set.
         # M.CapacityFactor_rsdtv = Set(dimen=5, initialize=CapacityFactorProcessIndices)
         M.CapacityFactorProcess = Param(
             M.regions,
@@ -277,11 +281,16 @@ class TemoaModel(AbstractModel):
         M.LifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeProcessIndices)
         M.LifetimeProcess = Param(M.LifetimeProcess_rtv, default=get_default_process_lifetime)
 
-        M.LifetimeLoanTech = Param(M.RegionalIndices, M.tech_all, default=10)
-        M.LifetimeLoanProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
-        # TODO:  Remove LifetimeLoanProcess....table no longer exists
-        M.LifetimeLoanProcess = Param(M.LifetimeLoanProcess_rtv, mutable=True)
-        M.initialize_Lifetimes = BuildAction(rule=CreateLifetimes)
+        M.LoanLifetimeTech = Param(M.RegionalIndices, M.tech_all, default=10)
+        M.LoanLifetimeProcess_rtv = Set(dimen=3, initialize=LifetimeLoanProcessIndices)
+
+        # Dev Note:  The LoanLifetimeProcess table *could* be removed.  There is no longer a supporting
+        #            table in the database.  It is just a "passthrough" now to the default LoanLifetimeTech.
+        #            It is already stitched in to the model, so will leave it for now.  Table may be revived.
+        def get_loan_life(M, r, t, _):
+            return M.LoanLifetimeTech[r, t]
+
+        M.LoanLifetimeProcess = Param(M.LoanLifetimeProcess_rtv, default=get_loan_life)
 
         M.TechInputSplit = Param(M.regions, M.time_optimize, M.commodity_physical, M.tech_all)
         M.TechInputSplitAverage = Param(
@@ -289,7 +298,7 @@ class TemoaModel(AbstractModel):
         )
         M.TechOutputSplit = Param(M.regions, M.time_optimize, M.tech_all, M.commodity_carrier)
 
-        M.RenewablePortfolioStandard = Param(M.regions, M.time_optimize)
+        M.RenewablePortfolioStandard = Param(M.regions, M.time_optimize, M.tech_group_names)
 
         # The method below creates a series of helper functions that are used to
         # perform the sparse matrix of indexing for the parameters, variables, and
@@ -306,8 +315,14 @@ class TemoaModel(AbstractModel):
         M.CostVariable_rptv = Set(dimen=4, initialize=CostVariableIndices)
         M.CostVariable = Param(M.CostVariable_rptv)
 
-        M.DiscountRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
-        M.DiscountRate = Param(M.DiscountRate_rtv, default=0.05)
+        M.CostEmission_rpe = Set(
+            dimen=3, domain=M.regions * M.time_optimize * M.commodity_emissions
+        )  # read from data
+        M.CostEmission = Param(M.CostEmission_rpe, domain=NonNegativeReals)
+
+        M.LoanRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
+        M.DefaultLoanRate = Param(domain=NonNegativeReals)
+        M.LoanRate = Param(M.LoanRate_rtv, domain=NonNegativeReals, default=get_default_loan_rate)
 
         M.Loan_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
         M.LoanAnnualize = Param(M.Loan_rtv, initialize=ParamLoanAnnualize_rule)
@@ -339,12 +354,12 @@ class TemoaModel(AbstractModel):
         M.EmissionLimit = Param(M.RegionalGlobalIndices, M.time_optimize, M.commodity_emissions)
         M.EmissionActivity_reitvo = Set(dimen=6, initialize=EmissionActivityIndices)
         M.EmissionActivity = Param(M.EmissionActivity_reitvo)
-        M.MinActivityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.groups)
-        M.MaxActivityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.groups)
-        M.MinCapacityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.groups)
-        M.MaxCapacityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.groups)
-        M.MinNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
-        M.MaxNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.groups)
+        M.MinActivityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
+        M.MaxActivityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
+        M.MinCapacityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
+        M.MaxCapacityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
+        M.MinNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.tech_group_names)
+        M.MaxNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.tech_group_names)
         M.MinCapShare_rptg = Set(dimen=4, initialize=MinCapShareIndices)
         M.MinCapacityShare = Param(M.MinCapShare_rptg)
         M.MaxCapacityShare = Param(M.MinCapShare_rptg)
@@ -850,11 +865,11 @@ class TemoaModel(AbstractModel):
             M.TechOutputSplitAnnualConstraint_rptvo, rule=TechOutputSplitAnnual_Constraint
         )
 
-        M.RenewablePortfolioStandardConstraint_rpt = Set(
-            dimen=2, initialize=lambda M: M.RenewablePortfolioStandard.sparse_iterkeys()
+        M.RenewablePortfolioStandardConstraint_rpg = Set(
+            dimen=3, initialize=lambda M: M.RenewablePortfolioStandard.sparse_iterkeys()
         )
         M.RenewablePortfolioStandardConstraint = Constraint(
-            M.RenewablePortfolioStandardConstraint_rpt, rule=RenewablePortfolioStandard_Constraint
+            M.RenewablePortfolioStandardConstraint_rpg, rule=RenewablePortfolioStandard_Constraint
         )
 
         M.LinkedEmissionsTechConstraint_rpsdtve = Set(

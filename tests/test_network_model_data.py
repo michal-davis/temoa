@@ -25,6 +25,7 @@ https://westernspark.us
 Created on:  3/11/24
 
 """
+
 from itertools import chain
 from unittest.mock import MagicMock
 
@@ -36,7 +37,6 @@ from temoa.temoa_model.model_checking.commodity_network import CommodityNetwork
 # a couple of test cases with diagrams in the flow...
 params = [
     # let's model this basic faulty network as a trial:
-
     #     - t4(2) -> p3
     #   /
     # s1 -> t1 -> p1 -> t2 -> d1
@@ -44,7 +44,6 @@ params = [
     #             p2 -> t3  -
     #
     #             p2 -> t5 -> d2
-
     # the above should produce:
     # 2 valid techs, t1, t2
     # 2 supply-side orphans (both instances of t4 of differing vintage)
@@ -110,9 +109,41 @@ params = [
             'demands': 2,
             'techs': 3,
             'valid_techs': 1,
-            'demand_orphans': 1,  # the linked tech, which will be orphaned after t4 is removed
-            'other_orphans': 1,  # t4
+            'demand_orphans': 0,
+            'other_orphans': 2,  # driven and t4 will both be culled as "other orphans" because t4 is a supply-orphan
             'unsupported_demands': {'d2'},
+        },
+    },
+    {
+        # iteration with a "good linked tech"
+        # system should give a synthetic link from t4's input to driven
+        #  s2 -> driven -> d2
+        #        |
+        #     - t4 -> d2
+        #   /
+        # s1 -> t1 -> d1
+        #
+        #
+        'name': 'good linked tech',
+        'data': [
+            [(t,) for t in ['s1', 'd1', 'd2', 's2']],  # all commodities
+            [(t,) for t in ['s1', 's2']],  # sources
+            [('R1', 2020, 'd1'), ('R1', 2020, 'd2')],  # demands
+            [
+                ('R1', 's1', 't4', 2000, 'd2', 100),
+                ('R1', 's2', 'driven', 1990, 'd2', 100),
+                ('R1', 's1', 't1', 2000, 'd1', 100),
+            ],  # techs
+            [(2020,)],  # periods
+            [('R1', 't4', 'nox', 'driven')],  # t4 drives 'driven' with 'nox' emission
+        ],
+        'res': {
+            'demands': 2,
+            'techs': 3,
+            'valid_techs': 3,
+            'demand_orphans': 0,
+            'other_orphans': 0,
+            'unsupported_demands': set(),
         },
     },
 ]
@@ -133,11 +164,13 @@ def mock_db_connection(request):
 @pytest.mark.parametrize(
     'mock_db_connection', params, indirect=True, ids=[d['name'] for d in params]
 )
-def test__build_from_db(mock_db_connection):
+def test_build_from_db(mock_db_connection):
     """test a couple values in the load"""
     conn, expected = mock_db_connection
     network_data = network_model_data._build_from_db(conn)
-    assert len(tuple(chain(*network_data.demand_commodities.values()))) == expected['demands'], 'demand count failed'
+    assert (
+        len(tuple(chain(*network_data.demand_commodities.values()))) == expected['demands']
+    ), 'demand count failed'
     assert (
         len(network_data.available_techs['R1', 2020]) == expected['techs']
     ), '6 techs are available'
@@ -155,6 +188,24 @@ def test_source_trace(mock_db_connection):
 
     # test the outputs
     assert len(cn.get_valid_tech()) == expected['valid_techs'], 'should have this many valid techs'
-    assert len(cn.get_demand_side_orphans()) == expected['other_orphans'], 'demand orphans'
+    assert len(cn.get_demand_side_orphans()) == expected['demand_orphans'], 'demand orphans'
     assert len(cn.get_other_orphans()) == expected['other_orphans'], 'other orphans'
     assert cn.unsupported_demands() == expected['unsupported_demands'], 'unsupported demands'
+
+
+@pytest.mark.parametrize(
+    'mock_db_connection',
+    [
+        params[0],
+    ],
+    indirect=True,
+)
+def test_clone(mock_db_connection):
+    """quick test to ensure cloning is working OK"""
+    conn, expected = mock_db_connection
+    network_data = network_model_data._build_from_db(conn)
+    clone = network_data.clone()
+    assert clone is not network_data, 'should be different objects'
+    assert network_data.available_techs == clone.available_techs, 'should be a direct copy'
+    clone.available_techs.pop(('R1', 2020))  # remove a known region-period
+    assert network_data.available_techs != clone.available_techs, 'should be different now'

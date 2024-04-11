@@ -28,6 +28,7 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+
 import sqlite3
 import sys
 from logging import getLogger
@@ -37,20 +38,24 @@ import pyomo.opt
 
 from temoa.extensions.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.hybrid_loader import HybridLoader
-from temoa.temoa_model.model_checking import source_check
 from temoa.temoa_model.model_checking.pricing_check import price_checker
-from temoa.temoa_model.model_checking.source_check import source_trace
 from temoa.temoa_model.run_actions import (
     build_instance,
     solve_instance,
     handle_results,
     check_solve_status,
+    check_python_version,
+    check_database_version,
 )
-from temoa.temoa_model.table_writer import TableWriter
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
-from temoa.temoa_model.temoa_run import temoa_checks
+from temoa.version_information import (
+    DB_MAJOR_VERSION,
+    MIN_DB_MINOR_VERSION,
+    MIN_PYTHON_MAJOR,
+    MIN_PYTHON_MINOR,
+)
 
 logger = getLogger(__name__)
 
@@ -97,34 +102,42 @@ class TemoaSequencer:
         # for feedback to user
         self.silent = silent
 
-        # for results catching for perfect_foresight / testing
+        # for results catching for perfect_foresight, other modes / testing
         self.pf_results: pyomo.opt.SolverResults | None = None
         self.pf_solved_instance: TemoaModel | None = None
 
     def start(self) -> TemoaModel | None:
         """Start the processing of the scenario"""
 
-        # Run the preliminaries...
+        # ----- Run the "preliminaries"
         # Build a TemoaConfig
         self.config = TemoaConfig.build_config(
             config_file=self.config_file, output_path=self.output_path, silent=self.silent
         )
 
-        # TODO:  Screen this vs. what is already done at this point
-        temoa_checks(self.config)
+        # Run some checks...
+        good = True
+        good &= check_python_version(MIN_PYTHON_MAJOR, MIN_PYTHON_MINOR)
+        good &= check_database_version(
+            self.config, db_major_reqd=DB_MAJOR_VERSION, min_db_minor=MIN_DB_MINOR_VERSION
+        )
+        if not good:
+            logger.error('Failed pre-run checks...  See log file for details')
+            sys.exit(-1)
 
         # Distill the TemoaMode
-        # self.temoa_mode = self.mode_override if self.mode_override else self.config.scenario_mode
         if self.mode_override and self.mode_override != self.config.scenario_mode:
             # capture and log the override...
             self.temoa_mode = self.mode_override
+            if self.config:  # register the override in the config
+                self.config.scenario_mode = self.mode_override
             logger.info('Temoa Mode overridden to be:  %s', self.temoa_mode)
         else:
             self.temoa_mode = self.config.scenario_mode
         # check it...
         if not isinstance(self.temoa_mode, TemoaMode):
             logger.error(
-                'Temoa Mode not set properly.  Override: %d, Config File: %d',
+                'Temoa Mode not set properly.  Override: %s, Config File: %s',
                 self.mode_override,
                 self.config.scenario_mode,
             )
@@ -141,44 +154,44 @@ class TemoaSequencer:
                 print('\n\nUser requested quit.  Exiting Temoa ...\n')
                 sys.exit()
 
-        # Select execution path based on mode
+        # ---- Select execution path based on mode ----
         match self.temoa_mode:
             case TemoaMode.BUILD_ONLY:
-                # convert the input file from .sqlite -> .dat if needed
-                # if self.config.input_file.suffix == '.sqlite':
-                #     dat_file = self.config.input_file.with_suffix('.dat')
-                #     db_2_dat(self.config.input_file, dat_file, self.config)
-                #     # update the config to point to the .dat file newly created
-                #     self.config.dat_file = dat_file
-                # data_portal: DataPortal = load_portal_from_dat(self.config.dat_file, silent=self.config.silent)
-                # TODO:  This connection should probably be made in the loader?
-                con = sqlite3.connect(self.config.input_file)
-                hybrid_loader = HybridLoader(db_connection=con, config=None)
+                # override the "extras"
+                if self.config.source_trace:
+                    self.config.source_trace = False
+                    logger.info('Source trace disabled for BUILD_ONLY')
+                if self.config.plot_commodity_network:
+                    self.config.plot_commodity_network = False
+                    logger.info('Plot commodity network disabled for BUILD_ONLY')
+                if self.config.price_check:
+                    logger.info('Price check disabled for BUILD_ONLY')
+                con = sqlite3.connect(self.config.input_database)
+                hybrid_loader = HybridLoader(db_connection=con, config=self.config)
                 data_portal = hybrid_loader.load_data_portal(myopic_index=None)
                 instance = build_instance(data_portal, silent=self.config.silent)
                 con.close()
                 return instance
 
             case TemoaMode.CHECK:
-                # TODO:  This connection should probably be made in the loader?
-                con = sqlite3.connect(self.config.input_file)
-                hybrid_loader = HybridLoader(db_connection=con, config=None)
+                con = sqlite3.connect(self.config.input_database)
+                hybrid_loader = HybridLoader(db_connection=con, config=self.config)
                 data_portal = hybrid_loader.load_data_portal(myopic_index=None)
-
                 instance = build_instance(
                     data_portal,
                     silent=self.config.silent,
                     keep_lp_file=self.config.save_lp_file,
                     lp_path=self.config.output_path,
                 )
-                # disregard what the config says about price_check and source_check and just do it...
+                # disregard what the config says about price_check and source_trace and just do it...
+                if self.config.price_check is False:
+                    logger.info('Price check of model is automatic with CHECK')
                 price_checker(instance)
-                source_trace(instance, temoa_config=self.config)
                 con.close()
 
             case TemoaMode.PERFECT_FORESIGHT:
-                con = sqlite3.connect(self.config.input_file)
-                hybrid_loader = HybridLoader(db_connection=con, config=None)
+                con = sqlite3.connect(self.config.input_database)
+                hybrid_loader = HybridLoader(db_connection=con, config=self.config)
                 data_portal = hybrid_loader.load_data_portal(myopic_index=None)
                 instance = build_instance(
                     data_portal,
@@ -188,12 +201,8 @@ class TemoaSequencer:
                 )
                 if self.config.price_check:
                     price_checker(instance)
-                if self.config.source_check:
-                    source_check.source_trace(instance, temoa_config=self.config)
                 self.pf_solved_instance, self.pf_results = solve_instance(
-                    instance,
-                    self.config.solver_name,
-                    silent=self.config.silent,
+                    instance, self.config.solver_name, silent=self.config.silent
                 )
                 good_solve, msg = check_solve_status(self.pf_results)
                 if not good_solve:
@@ -205,15 +214,7 @@ class TemoaSequencer:
                     )
                     sys.exit(-1)
                 handle_results(self.pf_solved_instance, self.pf_results, self.config)
-                # these require that the new cost table be built, which is not guaranteed at this time...
-                # temporary patch while we work through new cost table...
-                exists = con.execute(
-                    "SELECT * FROM sqlite_master WHERE name LIKE 'Output_Cost_2'"
-                ).fetchone()
-                if exists:
-                    table_writer = TableWriter(self.config, con)
-                    table_writer.clear_scenario()
-                    table_writer.write_costs(instance)
+
                 con.close()
 
             case TemoaMode.MYOPIC:

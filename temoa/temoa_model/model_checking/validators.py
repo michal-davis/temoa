@@ -25,16 +25,17 @@ A complete copy of the GNU General Public License v2 (GPLv2) is available
 in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
+
 import re
 from collections import defaultdict
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+import deprecated
 from pyomo.environ import NonNegativeReals
 
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
-
 
 logger = getLogger(__name__)
 
@@ -47,7 +48,9 @@ def validate_linked_tech(M: 'TemoaModel') -> bool:
     """
     logger.debug('Starting to validate linked techs.')
     # gather the tech-linked_tech pairs
-    tech_pairs = {(k[0], k[1], v) for (k, v) in M.LinkedTechs.items() if v in M.time_optimize}  # (r, t,
+    tech_pairs = {
+        (k[0], k[1], v) for (k, v) in M.LinkedTechs.items() if v in M.time_optimize
+    }  # (r, t,
     # linked_tech) tuples
 
     # get the lifetimes by (r, t) and v for comparison
@@ -160,6 +163,7 @@ def region_group_check(M: 'TemoaModel', rg) -> bool:
     return False
 
 
+@deprecated.deprecated('needs to be updated if re-instated to accommodate group restructuring')
 def tech_groups_set_check(M: 'TemoaModel', rg, g, t) -> bool:
     """
     Validate this entry to the tech_groups set
@@ -169,7 +173,7 @@ def tech_groups_set_check(M: 'TemoaModel', rg, g, t) -> bool:
     :param t: tech
     :return: True if valid entry, else False
     """
-    return all((region_group_check(M, rg), g in M.groups, t in M.tech_all))
+    return all((region_group_check(M, rg), g in M.tech_group_names, t in M.tech_all))
 
 
 # TODO:  Several of these param checkers below are not in use because the params cannot
@@ -231,7 +235,12 @@ def activity_group_param_check(M: 'TemoaModel', val, rg, p, g) -> bool:
     :return: True if all OK
     """
     return all(
-        (val in NonNegativeReals, region_group_check(M, rg), p in M.time_optimize, g in M.groups)
+        (
+            val in NonNegativeReals,
+            region_group_check(M, rg),
+            p in M.time_optimize,
+            g in M.tech_group_names,
+        )
     )
 
 
@@ -271,6 +280,7 @@ def validate_CapacityFactorProcess(M: 'TemoaModel', val, r, s, d, t, v) -> bool:
         )
     )
 
+
 def validate_Efficiency(M: 'TemoaModel', val, r, si, t, v, so) -> bool:
     """Handy for troubleshooting problematic entries"""
 
@@ -286,9 +296,38 @@ def validate_Efficiency(M: 'TemoaModel', val, r, si, t, v, so) -> bool:
         )
     ):
         return True
-    print ('r', r in M.RegionalIndices)
-    print( 'si', si in M.commodity_physical )
-    print( 't', t in M.tech_all)
-    print( 'v', v in M.vintage_all)
-    print( 'so', so in M.commodity_carrier )
+    print('r', r in M.RegionalIndices)
+    print('si', si in M.commodity_physical)
+    print('t', t in M.tech_all)
+    print('v', v in M.vintage_all)
+    print('so', so in M.commodity_carrier)
+    return False
+
+
+def check_flex_curtail(M: 'TemoaModel'):
+    violations = M.tech_flex & M.tech_curtailment
+    if violations:
+        logger.error(
+            'The following technologies are in both flex and curtail, which is not permitted:',
+            violations,
+        )
+        return False
+    return True
+
+
+# M.TechInputSplit = Param(M.regions, M.time_optimize, M.commodity_physical, M.tech_all)
+def validate_tech_input_split(M: 'TemoaModel', val, r, p, c, t):
+    if all(
+        (
+            r in M.regions,
+            p in M.time_optimize,
+            c in M.commodity_physical,
+            t in M.tech_all,
+        )
+    ):
+        return True
+    print('r', r in M.regions)
+    print('p', p in M.time_optimize)
+    print('c', c in M.commodity_physical)
+    print('t', t in M.tech_all)
     return False

@@ -4,6 +4,7 @@
 Preface
 =======
 
+
 This manual, in both `PDF`_ and `HTML`_ form, is the official documentation of
 Tools for Energy Model Optimization and Analysis (Temoa).  It describes all 
 functionality of the Temoa model, and provides a mathematical description of 
@@ -328,7 +329,7 @@ recommend that you populate input tables in the following order:
   * CostInvest
   * CostVariable
   * EmissionsActivity
-  * LifetimeLoanTech
+  * LoanLifetimeTech
   * LifetimeProcess
   * LifetimeTech
 
@@ -645,21 +646,20 @@ Sets
    ":math:`\text{S}`",":code:`time_season`","string","seasonal divisions (e.g. winter, summer)"
    ":math:`\text{D}`",":code:`time_of_day`","string","time-of-day divisions (e.g. morning)"
    ":math:`{}^*\text{T}`",":code:`tech_all`","string","all technologies to be modeled; (:math:`{T}^r \cup {T}^p`)"
-   ":math:`\text{T}^a`",":code:`tech_annual`","string","technologies that produce constant annual output; (:math:`{T}^a \subset T`)" 
+   ":math:`\text{T}^u`",":code:`tech_unlim_cap`","string","technologies that have no bound on capacity, and can have variable costs only (imports, taxes, etc.); (:math:`{T}^a \subset (T - T^{res}`)"
+   ":math:`\text{T}^a`",":code:`tech_annual`","string","technologies that produce constant annual output; (:math:`{T}^a \subset T`)"
    ":math:`\text{T}^b`",":code:`tech_baseload`","string","baseload electric generators; (:math:`{T}^b \subset T`)"
-   ":math:`\text{T}^c`",":code:`tech_curtailment`","string","technologies with curtailable output and no upstream cost; (:math:`{T}^c \subset T`)"
+   ":math:`\text{T}^c`",":code:`tech_curtailment`","string","technologies with curtailable output and no upstream cost; (:math:`{T}^c \subset (T - T^{res})`)"
    ":math:`\text{T}^e`",":code:`tech_exchange`","string","technologies used for interregional commodity flow; (:math:`{T}^e \subset T`)"   
    ":math:`\text{T}^f`",":code:`tech_flex`","string","technologies producing excess commodity flows; (:math:`{T}^f \subset T`)"
-   "",":code:`groups`","string","defined groups of technologies"
-   ":math:`\text{T}^f`",":code:`tech_groups`","string","technologies belonging to each group defined above"
+   "",":code:`TechGroupName`","string","named groups for use in group parameters or RegionalPortfolioStandard"
+   "",":code:`TechGroupMember`","(TechGroupName, tech)","technologies belonging to each group defined above"
    ":math:`\text{T}^p`",":code:`tech_production`","string","techs producing intermediate commodities"
    ":math:`\text{T}^r`",":code:`tech_resource`","string","resource extraction technologies"
    ":math:`\text{T}^m`",":code:`tech_ramping`","string","electric generators with a ramp rate limit; (:math:`{T}^m \subset T`)"
    ":math:`\text{T}^{res}`",":code:`tech_reserve`","string","electric generators contributing to the reserve margin requirement; (:math:`{T}^e \subset T`)"
    ":math:`\text{T}^s`",":code:`tech_storage`","string","storage technologies; (:math:`{T}^s \subset T`)"
    ":math:`\text{T}^v`",":code:`tech_variable`","string","technologies used in TechInputSplitAverage constraint; (:math:`{T}^v \subset T`)"
-   ":math:`\text{T}^{cmax}`",":code:`tech_capacity_max`","string","subset of technologies used in MaxCapacitySet constraint; (:math:`{T}^{cmax} \subset T`)"
-   ":math:`\text{T}^{cmin}`",":code:`tech_capacity_min`","string","subset of technologies used in MinCapacitySet constraint; (:math:`{T}^{cmin} \subset T`)"
 
 Temoa uses two different set notation styles, one for code representation and
 one that utilizes standard algebraic notation.  For brevity, the mathematical
@@ -844,9 +844,8 @@ Parameters
    ":math:`\text{CI}_{r,t,v}`","CostInvest",":math:`\mathbb{R}`","Tech-specific investment cost"
    ":math:`\text{CV}_{r,p,t,v}`","CostVariable",":math:`\mathbb{R}`","Variable operations \& maintenance cost"
    ":math:`\text{DEM}_{r,p,c}`","Demand",":math:`\mathbb{R}^+_0`","End-use demands, by period"
-   ":math:`\text{DDD}_{p,s,d}`","DemandDefaultDistribution",":math:`\mathbb{I}`","Default demand distribution"
+   ":math:`\text{DDD}_{p,s,d}`","DemandDefaultDistribution",":math:`\mathbb{I}`","Default demand distribution (currently not supported)"
    ":math:`\text{DSD}_{r,p,s,d,c}`","DemandSpecificDistribution",":math:`\mathbb{I}`","Demand-specific distribution"
-   ":math:`\text{DR}_{r,t,v}`","DiscountRate",":math:`\mathbb{R}`","Tech-specific interest rate on investment"
    ":math:`\text{EFF}_{r,i,t,v,o}`","Efficiency",":math:`\mathbb{R}^+_0`","Tech- and commodity-specific efficiency"
    ":math:`\text{EAC}_{r,i,t,v,o,e}`","EmissionActivity",":math:`\mathbb{R}`","Tech-specific emissions rate"
    ":math:`\text{ELM}_{r,p,e}`","EmissionLimit",":math:`\mathbb{R}^+_0`","Emissions limit by region and period"
@@ -854,15 +853,15 @@ Parameters
    ":math:`\text{GDR}`","GlobalDiscountRate",":math:`\mathbb{R}`","Global rate used to calculate present cost"
    ":math:`\text{GRM}_{r,t}`","GrowthRateMax",":math:`\mathbb{R}`","Global rate used to calculate present cost"
    ":math:`\text{GRS}_{r,t}`","GrowthRateSeed",":math:`\mathbb{R}`","Global rate used to calculate present cost"
-   ":math:`\text{LLP}_{r,t,v}`","LifetimeLoanProcess",":math:`\mathbb{N}`","Tech- and vintage-specific loan term"
-   ":math:`\text{LLT}_{r,t}`","LifetimeLoanTech",":math:`\mathbb{N}`","Tech-specific loan term"
-   ":math:`\text{LTP}_{r,t,v}`","LifetimeProcess",":math:`\mathbb{N}`","Tech- and vintage-specific lifetime"
-   ":math:`\text{LTT}_{r,t}`","LifetimeTech",":math:`\mathbb{N}`","Tech-specific lifetime"
+   ":math:`\text{LTP}_{r,t,v}`","LifetimeProcess",":math:`\mathbb{N}`","Tech- and vintage-specific lifetime (default=LifetimeTech)"
+   ":math:`\text{LTT}_{r,t}`","LifetimeTech",":math:`\mathbb{N}`","Tech-specific lifetime (default=40 periods)"
    ":math:`\text{LIT}_{r,t,e,t}`","LinkedTechs","text","Dummy techs used to convert CO2 emissions to physical commodity"
+   ":math:`\text{LLT}_{r,t}`","LoanLifetimeTech",":math:`\mathbb{N}`","Tech-specific loan term (default=10 periods)"
+   ":math:`\text{LR}_{r,t,v}`","LoanRate",":math:`\mathbb{R}`","Tech-specific interest rate on investment cost"
    ":math:`\text{MAA}_{r,p,t}`","MaxActivity",":math:`\mathbb{R}^+_0`","Maximum tech-specific activity by region and period"
    ":math:`\text{MAC}_{r,p,t}`","MaxCapacity",":math:`\mathbb{R}^+_0`","Maximum tech-specific capacity by period"
    ":math:`\text{MCS}_{t}`","MaxCapacitySum",":math:`\mathbb{R}^+_0`","Maximum capacity for a technology group"
-   ":math:`\text{MAR}_{r,t}`","MaxResource",":math:`\mathbb{R}^+_0`","Maximum resource production by tech across time periods"
+   ":math:`\text{MAR}_{r,t}`","MaxResource",":math:`\mathbb{R}^+_0`","Maximum resource production by tech across time periods (currently not supported)"
    ":math:`\text{MIA}_{r,p,t}`","MinActivity",":math:`\mathbb{R}^+_0`","Minimum tech-specific activity by region and period"
    ":math:`\text{MIC}_{r,p,t}`","MinCapacity",":math:`\mathbb{R}^+_0`","Minimum tech-specific capacity by period"
    ":math:`\text{MCS}_{t}`","MinCapacitySum",":math:`\mathbb{R}^+_0`","Minimum capacity for a technology group"
@@ -872,7 +871,7 @@ Parameters
    ":math:`\text{PRM}_{r}`","PlanningReserveMargin",":math:`\mathbb{I}`","Margin used to ensure sufficient generating capacity"   
    ":math:`\text{RMD}_{r,t}`","RampDown",":math:`\mathbb{R}`","Rate at which generation techs can ramp output down"
    ":math:`\text{RMU}_{r,t}`","RampUp",":math:`\mathbb{R}`","Rate at which generation techs can ramp output up"
-   ":math:`\text{RSC}_{r.p,c}`","ResourceBound",":math:`\mathbb{R}^+_0`","Maximum resource production by tech and period"
+   ":math:`\text{RSC}_{r.p,c}`","ResourceBound",":math:`\mathbb{R}^+_0`","Maximum resource production by tech and period (currently not supported)"
    ":math:`\text{SD}_{r,t}`","StorageDuration",":math:`\mathbb{N}`","Storage duration per technology, specified in hours"
    ":math:`\text{SEG}_{s,d}`","SegFrac",":math:`\mathbb{I}`","Fraction of year represented by each (s, d) tuple"
    ":math:`\text{SIF}_{t}`","StorageInitFrac",":math:`\mathbb{I}`","Initial storage charge level expressed as fraction of full charge"
@@ -1037,6 +1036,10 @@ DemandDefaultDistribution
 
 :math:`{DDD}_{s \in S, d \in D}`
 
+**Note**:  The Demand Specific Distribution is currently not supported in
+the project.  Modelers should use the DSD or rely on a "flat" distribution default
+from the TimeSegmentFraction.
+
 By default, Temoa assumes that end-use demands (:ref:`Demand`) are evenly
 distributed throughout a year.  In other words, the Demand will be apportioned
 by the :code:`SegFrac` parameter via:
@@ -1067,15 +1070,6 @@ It is this parameter that is actually multiplied by the :code:`Demand` parameter
 in the Demand constraint.
 
 
-DiscountRate
-^^^^^^^^^^^^
-
-:math:`{DR}_{r \in r, t \in T, v \in V}`
-
-In addition to the :code:`GlobalDiscountRate`, a modeler may also specify a
-technology-specific discount rate.  If not specified, this rate defaults to 0.05.
-
-
 EmissionActivity
 ^^^^^^^^^^^^^^^^
 
@@ -1087,7 +1081,7 @@ the :code:`Efficiency` parameter defines the amount of output energy a process
 produces per unit of input, the :code:`EmissionActivity` parameter allows for
 secondary outputs.  As the name suggests, this parameter was originally intended
 to account for emissions per unit activity, but it more accurately describes
-*parallel* activity.  It is restricted to emissions accounting (by the 
+*parallel* activity.  It is restricted to emissions accounting (by the
 :math:`e \in C^e` set restriction).
 
 
@@ -1127,8 +1121,16 @@ formula:
 
    \text{FV} = \text{NPV} \cdot {(1 + GDR)^n}
 
-where :math:`n` is in years.  This parameter is only used in Temoa's objective
-function.
+where :math:`n` is in years.  This parameter is used to calculate all discounted
+costs, which are the basis of the objective function.  Costs are discounted to the
+first future time period in the model by default.  If running a Myopic run, the
+discount base year can be set in the MetaData table.  This is the :code:`MyopicBaseYear`.
+
+The output in the :code:`OutputCost` table shows both discounted and non-discounted (raw)
+values for all model costs.  Of note, all loan costs are displayed as an annuity cost in
+the vintage year, not as a string of payments.
+
+The Global Discount Rate is entered in the MetaDataReal table in the database.
 
 GrowthRateMax
 ^^^^^^^^^^^^^
@@ -1150,10 +1152,13 @@ first installed in a given time period. The growth rate is applied to this initi
 capacity seed in subsequent time periods.
 
 
-LifetimeLoanProcess
+LoanLifetimeProcess
 ^^^^^^^^^^^^^^^^^^^
 
 :math:`{LLP}_{r \in R, t \in T, v \in P}`
+
+**Note**:  :code:`LifetimeLoanProcess` is currently not supported in the database.
+Modelers should use the :code:`LoanLifetimeTech` below.
 
 Temoa gives the modeler the ability to separate the loan lifetime from the
 useful life of a process.  This parameter specifies the loan term associated
@@ -1161,14 +1166,14 @@ with capital investment in a process, in years.  If not specified, the model
 assigns the technology lifetime to the loan period in :code:`temoa_initialize.py`.
 
 
-LifetimeLoanTech
+LoanLifetimeTech
 ^^^^^^^^^^^^^^^^
 
 :math:`{LLT}_{r \in R, t \in T}`
 
-Same as the :code:`LifetimeLoanProcess` but without the vintage index. If all
+Same as the :code:`LoanLifetimeProcess` but without the vintage index. If all
 vintages of a given technology are assumed to have the same loan term, then
-:code:`LifetimeLoanTech` can be defined instead of :code:`LifetimeLoanProcess`.
+:code:`LoanLifetimeTech` can be defined instead of :code:`LoanLifetimeProcess`.
 
 
 LifetimeProcess
@@ -1202,6 +1207,16 @@ physical commodity that can be included in the :code:`Efficiency` table. The
 emissions commodity to a physical commodity. Note that the first :code:`t`
 represents the primary upstream technology linked to the dummy linked technology,
 which is represented by the second :code:`t` index.
+
+
+LoanRate
+^^^^^^^^
+
+:math:`{LR}_{r \in r, t \in T, v \in V}`
+
+The interest rate used for loans supporting investment costs.  The default
+loan rate is accessible in the MetaDataReals table in the database.
+
 
 .. _ParamMaxCapacity:
 
@@ -1244,6 +1259,8 @@ MaxResource
 ^^^^^^^^^^^
 
 :math:`{MAR}_{r \in R, t \in T}`
+
+**Note**:  The MaxResource parameter/constraint is currently not supported in the model.
 
 The :code:`MaxResource` parameter represents an upper bound on the cumulative
 amount of commodity that can be produced by region and technology over the model time
@@ -1315,7 +1332,8 @@ Temoa is typically run in "perfect foresight" mode, where all decision variables
 in all time periods are solved simultaneously. However, it is also possible to
 solve the model myopically, whereby the model solves a subset of time periods
 in sequence. The :code:`MyopicBaseYear` parameter specifies the base year to which
-all future costs are discounted.
+all future costs are discounted.  This parameter is located in the :code:`MetaData`
+table in the database.
 
 
 PlanningReserveMargin
@@ -1400,12 +1418,12 @@ storage can discharge if it starts at full charge and produces maximum output
 until empty. The parameter value defaults to 4 hours if not specified by the user.
 
 
-StorageInitFrac
-^^^^^^^^^^^^^^^
+StorageInit
+^^^^^^^^^^^
 
 :math:`{SI}_{r \in R, t \in T^{S}, v \in P}`
 
-The :code:`StorageInitFrac` parameter determines the initial charge level associated
+The :code:`StorageInit` parameter determines the initial charge level associated
 with each storage technology. The value should be expressed as a fraction between
 0 and 1. Note that this is an optional parameter and should only be used if the
 user wishes to set the initial charge rather than allowing the model to optimize it.
@@ -1631,15 +1649,19 @@ V_Curtailment
 
 :math:`CUR_{r,p,s,d,i,t,v,o}`
 
-The :code:`V_Curtailment` variable allows for the overproduction and
-curtailment of technologies belonging to the :code:`tech_curtailment` set.
+The :code:`V_Curtailment` variable is an accounting tool to help calculate
+the unused production capacity of technologies annotated in the Technology
+database table as curtailable technologies belonging to the
+:code:`tech_curtailment` set.
 Renewables such as wind and solar are often placed in this set. While we
 used to simply formulate the :code:`Capacity` and :code:`CommodityBalance`
 constraints as inequalities that implicitly allowed for curtailment, this
-simpler approch does not work with renewable targets because the curtailed
+simpler approach does not work with renewable targets because the curtailed
 portion of the electricity production counts towards the target, and there is
 no way to distinguish it from the useful production. Including an explicit
-curtailment term addresses the issue.
+curtailment term addresses the issue.  Curtailment in the model is simply
+the production activity that is not used in the model and is reported as
+such in the OutputCurtailment table.
 
 
 V_FlowInStorage
@@ -1741,6 +1763,8 @@ capacity and allowable commodity flow.
 
 .. autofunction:: temoa_rules.Capacity_Constraint
 
+.. autofunction:: temoa_rules.AdjustedCapacity_Constraint
+
 .. autofunction:: temoa_rules.CapacityAnnual_Constraint
 
 .. autofunction:: temoa_rules.CapacityAvailableByPeriodAndTech_Constraint
@@ -1808,7 +1832,8 @@ User-Specific Constraints
 The constraints provided in this section are not required for proper system
 operation, but allow the modeler some further degree of system specification.
 
-.. autofunction:: temoa_rules.ExistingCapacity_Constraint
+..  commented out... not used?
+    .. autofunction:: temoa_rules.ExistingCapacity_Constraint
 
 .. autofunction:: temoa_rules.EmissionLimit_Constraint
 
@@ -1824,11 +1849,13 @@ operation, but allow the modeler some further degree of system specification.
 
 .. autofunction:: temoa_rules.MaxCapacity_Constraint
 
-.. autofunction:: temoa_rules.MaxCapacitySet_Constraint
+..  commented out... not used?
+    .. autofunction:: temoa_rules.MaxCapacitySet_Constraint
 
 .. autofunction:: temoa_rules.MinCapacity_Constraint
 
-.. autofunction:: temoa_rules.MinCapacitySet_Constraint
+..  commented out... not used?
+    .. autofunction:: temoa_rules.MinCapacitySet_Constraint
 
 .. autofunction:: temoa_rules.ResourceExtraction_Constraint
 
@@ -2377,19 +2404,22 @@ code base.  To this end, the Python project has a well-written treatise in `PEP
         historic reasons) -- although this is also an opportunity to clean up
         someone else's mess (in true XP style).
 
+Ruff Formatting
+---------------
+
+The project has shifted to using Ruff (`ruff`_) as a formatter / linter.  Commits to
+the project should use Ruff to format any changed code.  Ruff relies on
+settings in the :code:`pyproject.toml` file.  Contributors should be able
+to apply ruff to any changed files with the command :code:`ruff format <file>`.
+If there is *specific* need to disable Ruff for a particular table or equation,
+contributors can sparingly turn off Ruff formatting for sections of code using
+comments.  (See the Ruff documentation.)
 
 Indentation: Tabs and Spaces
 ----------------------------
 
-The indentation of a section of code should always reflect the logical structure
-of the code.  Python enforces this at a consistency level, but we make the
-provision here that **real tabs** (specifically **not spaces**) should be used
-at the beginning of lines.  This allows the most flexibility across text editors
-and preferences for indentation width.
-
-Spaces (and *not* tabs) should be used for mid-line spacing and alignment.
-
-Many editors have functionality to highlight various whitespace characters.
+The project is standardized to using spaces for indentation in accordance with
+PEP-8 standards.  Ruff will convert tabs to spaces.
 
 
 End of Line Whitespace
@@ -2402,16 +2432,16 @@ care of this automatically when the file is saved.
 Maximum Line Length
 -------------------
 
-(Similar to `PEP 8`_\ ) Limit all lines to a maximum of 80 characters.
+(Similar to `PEP 8`_\ ) Limit all lines to a maximum of 100 characters.
 
 Historically, 80 characters was the width (in monospace characters) that a
 terminal had to display output.  With the advent of graphical user interfaces
-with variable font-sizes, this technological limit no longer exists.  However,
-80 characters remains an excellent metric of what constitutes a "long line."   A
+with variable font-sizes, this technological limit no longer exists.  While
+80 characters remains an excellent metric of what constitutes a "long line" most
+modern wide-screen displays can comfortably show side-by-side difference files with
+100 characters per side, and 100 characters better accommodates some long equations. A
 long line in this sense is one that is not as transparent as to its intent as it
-could be.  The 80-character width of code also represents a good "squint-test"
-metric.  If a code-base has many lines longer than 80 characters, it may benefit
-from a refactoring.
+could be.  Ruff will enforce 100 character line length.
 
 Slightly adapted from `PEP 8`_\ :
 
@@ -2454,77 +2484,77 @@ Encodings
 
 Following `PEP 3120`, all code files should use UTF-8 encoding.
 
+.. commented out
+    Punctuation and Spacing
+    -----------------------
 
-Punctuation and Spacing
------------------------
+    Always put spaces after code punctuation, like equivalence tests, assignments,
+    and index lookups.
 
-Always put spaces after code punctuation, like equivalence tests, assignments,
-and index lookups.
+    .. code-block:: python
 
-.. code-block:: python
+       a=b            # bad
+       a = b          # good
 
-   a=b            # bad
-   a = b          # good
+       a==b           # bad
+       a == b         # good
 
-   a==b           # bad
-   a == b         # good
+       a[b] = c       # bad
+       a[ b ] = c     # good
 
-   a[b] = c       # bad
-   a[ b ] = c     # good
+          # exception: if there is more than one index
+       a[ b, c ] = d  # acceptable, but not preferred
+       a[b, c] = d    # good, preferred
 
-      # exception: if there is more than one index
-   a[ b, c ] = d  # acceptable, but not preferred
-   a[b, c] = d    # good, preferred
+          # exception: if using a string literal, don't include a space:
+       a[ 'x' ] == d  # bad
+       a['x'] == d    # good
 
-      # exception: if using a string literal, don't include a space:
-   a[ 'x' ] == d  # bad
-   a['x'] == d    # good
+    When defining a function or method, put a single space on either side of each
+    parenthesis:
 
-When defining a function or method, put a single space on either side of each
-parenthesis:
+    .. code-block:: python
 
-.. code-block:: python
+       def someFunction(a, b, c):      # bad
+          pass
 
-   def someFunction(a, b, c):      # bad
-      pass
-
-   def someFunction ( a, b, c ):   # good
-      pass
-
-
-Vertical Alignment
-------------------
-
-*Where appropriate*, vertically align sections of the code.
-
-.. code-block:: python
-
-      # bad
-   M.someVariable = Var( M.someIndex, domain=NonNegativeIntegers )
-   M.otherVariable = Var( M.otherIndex, domain=NonNegativeReals )
-
-      # good
-   M.someVariable  = Var( M.someIndex,  domain=NonNegativeIntegers )
-   M.otherVariable = Var( M.otherIndex, domain=NonNegativeReals )
+       def someFunction ( a, b, c ):   # good
+          pass
 
 
-Single, Double, and Triple Quotes
----------------------------------
+    Vertical Alignment
+    ------------------
 
-Python has four delimiters to mark a string literal in the code: ``"``, ``'``,
-``"""``, and |'''|.  Use each as appropriate.  One should rarely need to escape
-a quote within a string literal, because one can merely alternate use of the
-single, double or triple quotes:
+    *Where appropriate*, vertically align sections of the code.
 
-.. code-block:: python
+    .. code-block:: python
 
-   a = "She said, \"Do not do that!\""  # bad
-   a = 'She said, "Do not do that!"'    # good
+          # bad
+       M.someVariable = Var( M.someIndex, domain=NonNegativeIntegers )
+       M.otherVariable = Var( M.otherIndex, domain=NonNegativeReals )
 
-   b = "She said, \"Don't do that!\""    # bad
-   b = 'She said, "Don\'t do that!"'     # bad
-   b = """She said, "Don't do that!\"""" # bad
-   b = '''She said, "Don't do that!"'''  # good
+          # good
+       M.someVariable  = Var( M.someIndex,  domain=NonNegativeIntegers )
+       M.otherVariable = Var( M.otherIndex, domain=NonNegativeReals )
+
+
+    Single, Double, and Triple Quotes
+    ---------------------------------
+
+    Python has four delimiters to mark a string literal in the code: ``"``, ``'``,
+    ``"""``, and |'''|.  Use each as appropriate.  One should rarely need to escape
+    a quote within a string literal, because one can merely alternate use of the
+    single, double or triple quotes:
+
+    .. code-block:: python
+
+       a = "She said, \"Do not do that!\""  # bad
+       a = 'She said, "Do not do that!"'    # good
+
+       b = "She said, \"Don't do that!\""    # bad
+       b = 'She said, "Don\'t do that!"'     # bad
+       b = """She said, "Don't do that!\"""" # bad
+       b = '''She said, "Don't do that!"'''  # good
 
 
 .. _naming_conventions:
@@ -2831,5 +2861,6 @@ should meet a basic standard of quality:
 .. _quick start guide: http://rogerdudler.github.io/git-guide/
 .. _sqlite: https://www.sqlite.org/
 .. _Graphviz: http://www.graphviz.org/
+.. _ruff: https://docs.astral.sh/ruff/
 
 .. bibliography:: References.bib

@@ -1,23 +1,18 @@
 # -*- coding: utf-8 -*-
 #
-import sys, os
+import os
+import sys
 import time
-
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute
-
-# TODO:  There's gotta be a better way to do this.  Seems quite fragile.
 
 # this first import is to provide path the temoa package, which is referenced throughout
 # and must be included separately from path the source files so that it is properly recognized
 sys.path.insert(0, os.path.abspath('../../'))
 # this addition provided direct abbreviated link to the modules in the model
 sys.path.insert(1, os.path.abspath('../../temoa/temoa_model'))
-
-
-
 
 
 # -- Project information -----------------------------------------------------
@@ -29,7 +24,7 @@ author = 'Joe DeCarolis, Kevin Hunter'
 # The short X.Y version
 version = '3.0'
 # The full version, including alpha/beta/rc tags
-release = time.strftime( "%F", time.gmtime() )
+release = time.strftime('%F', time.gmtime())
 
 
 # -- General configuration ---------------------------------------------------
@@ -98,6 +93,8 @@ pygments_style = 'sphinx'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['default/static']
+
+
 # this stylesheet eliminates fixed width and is located in the _static directory
 def setup(app):
     app.add_css_file('my_theme.css')
@@ -112,12 +109,12 @@ def setup(app):
 # 'searchbox.html']``.
 #
 # html_sidebars = {}
-#import sphinx_rtd_theme
+# import sphinx_rtd_theme
 
-#extensions = [
+# extensions = [
 #    "sphinx_rtd_theme"
-#]
+# ]
 
-html_theme = "sphinx_rtd_theme"
-html_logo = "images/Temoa_logo_color_small.png"
+html_theme = 'sphinx_rtd_theme'
+html_logo = 'images/Temoa_logo_color_small.png'
 latex_logo = 'images/TemoaLogo_grayscale.png'
