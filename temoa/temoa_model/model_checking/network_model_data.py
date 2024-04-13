@@ -30,7 +30,7 @@ import logging
 import sqlite3
 from collections import defaultdict, namedtuple
 from itertools import chain
-from typing import Self
+from typing import Self, Any
 
 from pyomo.core import ConcreteModel
 
@@ -56,6 +56,11 @@ class NetworkModelData:
             'available_techs'
         )
         self.available_linked_techs: set[LinkedTech] = kwargs.get('available_linked_techs', set())
+        # a catch-all for indicators for techs...growth potential
+        # dev note:  this is indexed by tech name, and is blind to vintage.  The intended use is in the
+        #            network graph, which is also blind to vintage.  So it is interpreted as "at least one"
+        #            tech (and likely all) have/has this characteristic if multi-vintage
+        self.tech_data: dict[str, dict[str, Any]] = defaultdict(dict)
 
     def clone(self) -> Self:
         """create a copy of the current"""
@@ -81,6 +86,16 @@ class NetworkModelData:
                         f'Improperly constructed set of techs for region {r}, tech: {tech}'
                     )
         self._available_techs = available_techs
+
+    def update_tech_data(self, tech: str, element: str, value: Any) -> None:
+        """
+        Update a data element for a tech
+        :param tech: the tech
+        :param element: the string name of the data element
+        :param value: the new value
+        :return:
+        """
+        self.tech_data[tech][element] = value
 
     def get_driven_techs(self, region, period) -> set[Tech]:
         """identifies all linked techs by name from the linked tech names"""
@@ -222,5 +237,11 @@ def _build_from_db(
         for (r, driver, emiss, driven) in raw
         if driver in living_techs and driven in living_techs
     }
+
+    # pick up negative costs...
+    raw = cur.execute('SELECT DISTINCT tech FROM CostVariable where cost < 0').fetchall()
+    for row in raw:
+        tech = row[0]
+        res.update_tech_data(tech=tech, element='neg_cost', value=True)
     logger.debug('built network data: %s', res.__str__())
     return res

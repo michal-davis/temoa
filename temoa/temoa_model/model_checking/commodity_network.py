@@ -37,7 +37,10 @@ logger = getLogger(__name__)
 
 class CommodityNetwork:
     """
-    class to hold the network for a particular region/period
+    class to hold the network for a particular region/period.  Note that the commodity network here is blind
+    to vintage.  Determining whether a connection is valid/invalid is independent of vintage or how many
+    vintages are represented.  It is the responsibility of the commodity network manager to use these
+    determinations correctly across available vintages
     """
 
     def __init__(self, region, period: int, model_data: NetworkModelData):

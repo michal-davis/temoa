@@ -68,6 +68,16 @@ class CommodityNetworkManager:
                 cn = CommodityNetwork(region=region, period=period, model_data=data)
                 cn.analyze_network()
 
+                # check for unsupported demands..
+                unsupported_demands = cn.unsupported_demands()
+                for commodity in unsupported_demands:
+                    logger.error(
+                        'Demand %s is not supported back to source commodities in region %s period %d',
+                        commodity,
+                        cn.region,
+                        cn.period,
+                    )
+
                 # gather orphans...
                 new_demand_orphans = cn.get_demand_side_orphans()
                 new_other_orphans = cn.get_other_orphans()
