@@ -98,7 +98,7 @@ direct_transfer_tables = [
     ('',                    'LifetimeTech'),
     ('LinkedTechs',         'LinkedTech'),
     ('LifetimeLoanTech',    'LoanLifetimeTech'),
-    ('LoanRate',            'LoanRate'),
+    ('DiscountRate',        'LoanRate'),
     ('',                    'MaxActivity'),
     ('',                    'MaxActivityShare'),
     ('',                    'MaxAnnualCapacityFactor'),
@@ -153,11 +153,11 @@ for name_pair in direct_transfer_tables:
     try:
         data = con_old.execute(f'SELECT * FROM {old_name}').fetchall()
     except sqlite3.OperationalError:
-        print('table not found: ' + old_name)
+        print('TABLE NOT FOUND: ' + old_name)
         continue
 
     if not data:
-        print('no data for: ' + old_name)
+        print('No data for: ' + old_name)
         continue
 
     # construct the query with correct number of placeholders
@@ -432,7 +432,7 @@ con_new.commit()
 con_new.execute('VACUUM;')
 con_new.execute('PRAGMA FOREIGN_KEYS=1;')
 try:
-    data = con_new.execute('PRAGMA FOREIGN_KEY_CHECK;')
+    data = con_new.execute('PRAGMA FOREIGN_KEY_CHECK;').fetchall()
     print('FK check fails (MUST BE FIXED):')
     if not data:
         print('No Foreign Key Failures.  (Good news!)')
