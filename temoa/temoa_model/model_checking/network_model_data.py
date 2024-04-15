@@ -32,6 +32,7 @@ from collections import defaultdict, namedtuple
 from itertools import chain
 from typing import Self, Any
 
+import deprecated
 from pyomo.core import ConcreteModel
 
 from temoa.extensions.myopic.myopic_index import MyopicIndex
@@ -52,6 +53,7 @@ class NetworkModelData:
         )
         self.source_commodities: set[str] = kwargs.get('source_commodities')
         self.all_commodities: set[str] = kwargs.get('all_commodities')
+        # dict of (region, period): {Tech}
         self._available_techs: dict[tuple[str, int | str], set[Tech]] = kwargs.get(
             'available_techs'
         )
@@ -131,6 +133,7 @@ def _get_builder(data):
         raise NotImplementedError('cannot build from that type of data')
 
 
+@deprecated.deprecated('no longer supported... build from db connection instead')
 def _build_from_model(M: TemoaModel, myopic_index=None) -> NetworkModelData:
     """Build a NetworkModelData from a TemoaModel"""
     if myopic_index is not None:
