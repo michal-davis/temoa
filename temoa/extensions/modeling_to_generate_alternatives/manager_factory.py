@@ -25,27 +25,21 @@ https://westernspark.us
 Created on:  4/16/24
 
 """
-import pytest
+import sqlite3
 
+from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaAxis, MgaWeighting
 from temoa.extensions.modeling_to_generate_alternatives.tech_activity_vectors import (
     TechActivityVectors,
 )
+from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
+from temoa.temoa_model.temoa_model import TemoaModel
 
 
-def test__vector_engine():
-    cat_map = {
-        'A': ['dog', 'pig'],
-        'B': [
-            'cat',
-        ],
-    }
-    var_map = {'dog': ['red', 'blue'], 'pig': ['yellow', 'green'], 'cat': ['blue', 'gold']}
-    res = [
-        {'red': 0.25, 'blue': 0.25, 'yellow': 0.25, 'green': 0.25},
-        {'red': -0.25, 'blue': -0.25, 'yellow': -0.25, 'green': -0.25},
-        {'blue': 0.5, 'gold': 0.5},
-        {'blue': -0.5, 'gold': -0.5},
-    ]
-    matrix = TechActivityVectors._generate_basis(category_mapping=cat_map, variable_mapping=var_map)
-    for idx, row in enumerate(matrix):
-        assert row == pytest.approx(res[idx], abs=1e-2)
+def get_manager(
+    axis: MgaAxis, weighting: MgaWeighting, model: TemoaModel, con: sqlite3.Connection | None
+) -> VectorManager:
+    match axis:
+        case MgaAxis.TECH_CATEGORY_ACTIVITY:
+            return TechActivityVectors(model, con)
+        case _:
+            raise NotImplementedError('This axis is not yet supported')
