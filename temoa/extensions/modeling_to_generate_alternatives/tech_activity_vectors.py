@@ -26,12 +26,12 @@ Created on:  4/16/24
 
 """
 import sqlite3
-import uuid
 from collections import defaultdict
+from itertools import chain
 from logging import getLogger
-from typing import Sequence
+from typing import Iterable
 
-from pyomo.core import Expression
+from pyomo.core import Expression, Var
 
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -39,88 +39,109 @@ from temoa.temoa_model.temoa_model import TemoaModel
 logger = getLogger(__name__)
 
 
-class TechActivityVectors(VectorManager):
-    default_cat = uuid.uuid4()
+class DefaultItem:
+    def __init__(self, name: str):
+        self.name = name
 
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
+
+
+default_cat = DefaultItem('DEFAULT')
+
+
+class TechActivityVectors(VectorManager):
     def __init__(self, M: TemoaModel, con: sqlite3.Connection) -> None:
         self.M = M
         self.con = con
-        self.basis_coefficient_matrix: list[list]
-        self.variable_vector: list | None = None
+        self.basis_coefficients: list[dict[tuple, float]] | None = None
+
+        # {category : [technology, ...]}
         self.category_mapping: dict | None = None
 
-    @property
-    def groups(self) -> Sequence[str]:
-        return self.category_mapping.keys()
+        # {technology: [flow variables, ...]}
+        self.variable_mapping: dict[str, list[Var]] | None = None
+        self.initialize()
 
-    def group_members(self, group) -> list[str]:
-        pass
-
-    def basis_vectors(self) -> Expression:
-        if not self.basis_coefficient_matrix:
-            self._generate_vectors()
-        for row in self.basis_coefficient_matrix:
-            expr = sum(c * v for c, v in zip(row, self.variable_vector) if c != 0)
-            yield expr
-
-    @classmethod
-    def _vector_engine(cls, category_mapping: dict) -> list[list]:
+    def initialize(self) -> None:
         """
-        Vector engine to construct a cases x variables coefficient matrix
-        :param techs:
-        :param cat_tech_tuples:
+        Fill the internal data stores from db and model
         :return:
         """
-        res = []
-        for cat in category_mapping:
-            if cat == cls.default_cat:
-                pass
-            high = cls._row_maker(category_mapping, selected_cat=cat, high=True)
-            low = cls._row_maker(category_mapping, selected_cat=cat, high=False)
-            res.append(high)
-            res.append(low)
-        return res
-
-    @staticmethod
-    def _row_maker(category_mapping: dict, selected_cat: str, high=True) -> list[float]:
-        """
-        Make a unit vector based on category and selected technology
-        :param cat_sequence: the categories in fixed sequence
-        :param selected_cat: the "hot" category
-        :return: row vector
-        """
-        res = []
-        for cat in category_mapping:
-            if cat == selected_cat:
-                res.extend(
-                    [(1.0 if high else -1.0) / len(category_mapping[cat])]
-                    * len(category_mapping[cat])
-                )
-            else:
-                res.extend([0.0] * len(category_mapping[cat]))
-        return res
-
-    def _generate_vectors(self) -> list[list]:
-        """Generate the basis vectors based on category from the data and techs included in the model"""
-
-        self.variable_vector = []
-        self.basis_coefficient_matrix = []
-        techs_implemented = {
-            t.name: t for t in self.M.Techs
-        }  # some may have been culled by source tracing
-        logger.debug('Generating basis vectors')
-        raw = self.con.execute('SELECT category, tech from Technology').fetchall()
+        self.basis_coefficients = []
+        techs_implemented = self.M.tech_all  # some may have been culled by source tracing
+        logger.debug('Initializing Technology Vectors data elements')
+        raw = self.con.execute('SELECT category, tech FROM Technology').fetchall()
         self.category_mapping = defaultdict(list)
         for row in raw:
             cat, tech = row
-            if cat is None:
-                cat = self.default_cat
+            if cat in {None, ''}:
+                cat = default_cat
             if tech in techs_implemented:
                 self.category_mapping[cat].append(tech)
-                self.variable_vector.append(techs_implemented[tech])
 
         for cat in self.category_mapping:
             logger.debug('Category %s members: %d', cat, len(self.category_mapping[cat]))
 
-        self.basis_coefficient_matrix = self._vector_engine(self.category_mapping)
-        return self.basis_coefficient_matrix  # for testing purposes
+        # now pull the flow variables and map them
+        self.variable_mapping = defaultdict(list)
+        for idx in self.M.activeFlow_rpsditvo:
+            tech = idx[5]
+            self.variable_mapping[tech].append(self.M.V_FlowOut[idx])
+        for idx in self.M.activeFlow_rpitvo:
+            tech = idx[3]
+            self.variable_mapping[tech].append(self.M.V_FlowOutAnnual[idx])
+        logger.debug(
+            'Catalogued %d Technology Variables', len(list(chain(*self.variable_mapping.values())))
+        )
+
+    def tech_variables(self, tech) -> list[Var]:
+        return self.variable_mapping.get(tech, [])
+
+    @property
+    def groups(self) -> Iterable[str]:
+        return self.category_mapping.keys()
+
+    def group_members(self, group) -> list[str]:
+        return self.category_mapping.get(group, [])
+
+    # noinspection PyTypeChecker
+    def basis_vectors(self) -> Expression:
+        if not self.basis_coefficients:
+            self.basis_coefficients = self._generate_basis(
+                category_mapping=self.category_mapping, variable_mapping=self.variable_mapping
+            )
+        for row in self.basis_coefficients:
+            row_sum = sum(c for _, c in row)
+            # verify a unit vector
+            assert abs(abs(row_sum) - 1) < 1e-5
+            expr = sum(c * v for v, c in row)
+            yield expr
+
+    @classmethod
+    def _generate_basis(
+        cls, category_mapping: dict, variable_mapping: dict
+    ) -> list[list[tuple[Var, float]]]:
+        """
+        Vector engine to construct a cases x variables coefficient matrix
+        :return:
+        """
+        res = []
+        for cat in category_mapping:
+            if cat == default_cat:
+                pass
+            techs = category_mapping[cat]
+            associated_indices = []
+            for tech in techs:
+                associated_indices.extend(variable_mapping[tech])
+            tot_entries = len(associated_indices)
+            # high
+            entry = [(v, 1.0 / tot_entries) for v in associated_indices]
+            res.append(entry)
+            # low
+            entry = [(v, -1.0 / tot_entries) for v in associated_indices]
+            res.append(entry)
+        return res

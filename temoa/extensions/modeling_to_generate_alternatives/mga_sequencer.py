@@ -32,8 +32,9 @@ from logging import getLogger
 from pyomo.dataportal import DataPortal
 from scipy.spatial import ConvexHull
 
+from temoa.extensions.modeling_to_generate_alternatives.manager_factory import get_manager
 from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaAxis, MgaWeighting
-from temoa.extensions.modeling_to_generate_alternatives.vector_manager import get_manager
+from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.hybrid_loader import HybridLoader
 from temoa.temoa_model.run_actions import build_instance
 from temoa.temoa_model.temoa_config import TemoaConfig
@@ -48,20 +49,7 @@ class MgaSequencer:
         if not config.input_database == config.output_database:
             raise NotImplementedError('MGA assumes input and output databases are same')
         self.con = sqlite3.connect(config.input_database)
-        try:
-            self.axis = MgaAxis(config.mga_inputs['axis'])
-        except KeyError:
-            raise ValueError(
-                f'Unrecognized value for MGA Axis: {config.mga_inputs.get("axis")}'
-                f'\nAvailable Axes: {MgaAxis}'
-            )
-        try:
-            self.weighting = MgaWeighting(config.mga_inputs['weighting'])
-        except KeyError:
-            raise ValueError(
-                f'Unrecognized value for MGA Weighting: {config.mga_inputs.get("weighting")}'
-                f'\nAvailable Weightings: {MgaWeighting}'
-            )
+
         if not config.source_trace:
             logger.warning(
                 'Performing MGA runs without source trace.  '
@@ -94,8 +82,8 @@ class MgaSequencer:
 
         logger.info(
             'Initialized MGA sequencer with MGA Axis %s and weighting %s',
-            self.axis.name,
-            self.weighting.name,
+            self.mga_axis.name,
+            self.mga_weighting.name,
         )
 
     def start(self):
@@ -115,10 +103,12 @@ class MgaSequencer:
             loaded_portal=data_portal, model_name=self.config.scenario, silent=self.config.silent
         )
 
-        vector_manager = get_manager(
-            self.axis, model=instance, weighting=self.weighting, con=self.con
+        vector_manager: VectorManager = get_manager(
+            axis=self.mga_axis, model=instance, weighting=self.mga_weighting, con=self.con
         )
-        basis_vectors = vector_manager.basis_vectors()
+        for v in vector_manager.basis_vectors():
+            pass
+            # print(v)
 
     def __del__(self):
         self.con.close()

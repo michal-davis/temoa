@@ -25,34 +25,27 @@ https://westernspark.us
 Created on:  4/15/24
 
 """
-import sqlite3
 from abc import ABC
-from typing import Sequence
+from typing import Iterable
 
 from pyomo.core import Expression
-
-from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaAxis, MgaWeighting
-from temoa.temoa_model.temoa_model import TemoaModel
+from pyomo.environ import Var
 
 
 class VectorManager(ABC):
     @property
-    def groups(self) -> Sequence[str]:
+    def groups(self) -> Iterable[str]:
+        """The main groups of the axis"""
         raise NotImplementedError
 
     def group_members(self, group) -> list[str]:
+        """The members in the group"""
+        raise NotImplementedError
+
+    def tech_variables(self, tech) -> list[Var]:
+        """The variables associated with the individual group members"""
         raise NotImplementedError
 
     def basis_vectors(self) -> Expression:
         """the basis vectors"""
         raise NotImplementedError
-
-
-def get_manager(
-    axis: MgaAxis, weighting: MgaWeighting, model: TemoaModel, con: sqlite3.Connection | None
-) -> VectorManager:
-    match MgaAxis:
-        case MgaAxis.TECH_CATEGORY_ACTIVITY:
-            pass
-        case _:
-            raise NotImplementedError('This axis is not yet supported')
