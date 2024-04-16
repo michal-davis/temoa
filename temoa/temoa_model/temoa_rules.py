@@ -2349,29 +2349,30 @@ def MaxResource_Constraint(M: 'TemoaModel', r, t):
     # dev note:  this constraint is a misnomer.  It is actually a "global activity constraint on a tech"
     #            regardless of whatever "resources" are consumed.
     max_resource = value(M.MaxResource[r, t])
-    try:
-        activity_rt = sum(
-            M.V_FlowOut[r, p, s, d, S_i, t, S_v, S_o]
-            for p in M.time_optimize
-            if (r, p, t) in M.processVintages.keys()
-            for S_v in M.processVintages[r, p, t]
-            for S_i in M.processInputs[r, p, t, S_v]
-            for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
-            for s in M.time_season
-            for d in M.time_of_day
-        )
-    except KeyError:
-        activity_rt = sum(
-            M.V_FlowOutAnnual[r, p, S_i, t, S_v, S_o]
-            for p in M.time_optimize
-            if (r, p, t) in M.processVintages.keys()
-            for S_v in M.processVintages[r, p, t]
-            for S_i in M.processInputs[r, p, t, S_v]
-            for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
-        )
-
-    expr = activity_rt <= max_resource
-    return expr
+    return Constraint.Skip
+    # try:
+    #     activity_rt = sum(
+    #         M.V_FlowOut[r, p, s, d, S_i, t, S_v, S_o]
+    #         for p in M.time_optimize
+    #         if (r, p, t) in M.processVintages.keys()
+    #         for S_v in M.processVintages[r, p, t]
+    #         for S_i in M.processInputs[r, p, t, S_v]
+    #         for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+    #         for s in M.time_season
+    #         for d in M.time_of_day
+    #     )
+    # except KeyError:
+    #     activity_rt = sum(
+    #         M.V_FlowOutAnnual[r, p, S_i, t, S_v, S_o]
+    #         for p in M.time_optimize
+    #         if (r, p, t) in M.processVintages.keys()
+    #         for S_v in M.processVintages[r, p, t]
+    #         for S_i in M.processInputs[r, p, t, S_v]
+    #         for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+    #     )
+    #
+    # expr = activity_rt <= max_resource
+    # return expr
 
 
 def MaxCapacityGroup_Constraint(M: 'TemoaModel', r, p, g):

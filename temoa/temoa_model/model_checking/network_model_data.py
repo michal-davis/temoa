@@ -30,8 +30,9 @@ import logging
 import sqlite3
 from collections import defaultdict, namedtuple
 from itertools import chain
-from typing import Self
+from typing import Self, Any
 
+import deprecated
 from pyomo.core import ConcreteModel
 
 from temoa.extensions.myopic.myopic_index import MyopicIndex
@@ -52,10 +53,16 @@ class NetworkModelData:
         )
         self.source_commodities: set[str] = kwargs.get('source_commodities')
         self.all_commodities: set[str] = kwargs.get('all_commodities')
+        # dict of (region, period): {Tech}
         self._available_techs: dict[tuple[str, int | str], set[Tech]] = kwargs.get(
             'available_techs'
         )
         self.available_linked_techs: set[LinkedTech] = kwargs.get('available_linked_techs', set())
+        # a catch-all for indicators for techs...growth potential
+        # dev note:  this is indexed by tech name, and is blind to vintage.  The intended use is in the
+        #            network graph, which is also blind to vintage.  So it is interpreted as "at least one"
+        #            tech (and likely all) have/has this characteristic if multi-vintage
+        self.tech_data: dict[str, dict[str, Any]] = defaultdict(dict)
 
     def clone(self) -> Self:
         """create a copy of the current"""
@@ -81,6 +88,16 @@ class NetworkModelData:
                         f'Improperly constructed set of techs for region {r}, tech: {tech}'
                     )
         self._available_techs = available_techs
+
+    def update_tech_data(self, tech: str, element: str, value: Any) -> None:
+        """
+        Update a data element for a tech
+        :param tech: the tech
+        :param element: the string name of the data element
+        :param value: the new value
+        :return:
+        """
+        self.tech_data[tech][element] = value
 
     def get_driven_techs(self, region, period) -> set[Tech]:
         """identifies all linked techs by name from the linked tech names"""
@@ -116,6 +133,7 @@ def _get_builder(data):
         raise NotImplementedError('cannot build from that type of data')
 
 
+@deprecated.deprecated('no longer supported... build from db connection instead')
 def _build_from_model(M: TemoaModel, myopic_index=None) -> NetworkModelData:
     """Build a NetworkModelData from a TemoaModel"""
     if myopic_index is not None:
@@ -222,5 +240,11 @@ def _build_from_db(
         for (r, driver, emiss, driven) in raw
         if driver in living_techs and driven in living_techs
     }
+
+    # pick up negative costs...
+    raw = cur.execute('SELECT DISTINCT tech FROM CostVariable where cost < 0').fetchall()
+    for row in raw:
+        tech = row[0]
+        res.update_tech_data(tech=tech, element='neg_cost', value=True)
     logger.debug('built network data: %s', res.__str__())
     return res

@@ -69,6 +69,7 @@ params = [
             ],  # techs
             [(2020,)],  # periods
             [],  # no linked techs
+            [],  # no negative cost techs
         ],
         'res': {
             'demands': 2,
@@ -104,6 +105,7 @@ params = [
             ],  # techs
             [(2020,)],  # periods
             [('R1', 't4', 'nox', 'driven')],  # t4 drives 'driven' with 'nox' emission
+            [],  # no negative cost techs
         ],
         'res': {
             'demands': 2,
@@ -136,6 +138,7 @@ params = [
             ],  # techs
             [(2020,)],  # periods
             [('R1', 't4', 'nox', 'driven')],  # t4 drives 'driven' with 'nox' emission
+            [],  # no negative cost techs
         ],
         'res': {
             'demands': 2,

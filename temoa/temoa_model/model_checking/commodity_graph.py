@@ -68,32 +68,38 @@ def generate_graph(
         layers[c] = 1
     for c in network_data.demand_commodities[region, period]:
         layers[c] = 3
-    all_edges = set()
+
     edge_colors = {}
     edge_weights = {}
     # dev note:  the generators below do 2 things:  put the data in the format expected by the
     #            graphing code and reduce redundant vintages to 1 representation
-    # we can ID all the possible driven techs and label them.  Note that if some of these are
-    # orphans they will be overridden by those segments that follow
+    # Note that there is a heirarchy here and the latter loops may overwrite earlier color/weight
+    # decisions, so primary stuff goes last!
+    all_edges = {
+        (tech.ic, tech.name, tech.oc) for tech in network_data.available_techs[region, period]
+    }
+    # troll through the tech_data and label things of low importance
+    for edge in all_edges:
+        tech = edge[1]
+        characteristics = network_data.tech_data.get(tech, None)
+        if characteristics and characteristics.get('neg_cost', False):
+            edge_weights[edge] = 3
+            edge_colors[edge] = 'green'
 
     for edge in ((tech.ic, tech.name, tech.oc) for tech in driven_techs):
         edge_colors[edge] = 'blue'
         edge_weights[edge] = 2
         all_edges.add(edge)
-    for edge in ((tech.ic, tech.name, tech.oc) for tech in demand_orphans):
-        edge_colors[edge] = 'red'
-        edge_weights[edge] = 5
-        all_edges.add(edge)
     for edge in ((tech.ic, tech.name, tech.oc) for tech in other_orphans):
         edge_colors[edge] = 'yellow'
         edge_weights[edge] = 3
         all_edges.add(edge)
+    for edge in ((tech.ic, tech.name, tech.oc) for tech in demand_orphans):
+        edge_colors[edge] = 'red'
+        edge_weights[edge] = 5
+        all_edges.add(edge)
 
     filename_label = f'{region}_{period}'
-    # we pass in "all" of the techs for this region/period
-    all_edges |= {
-        (tech.ic, tech.name, tech.oc) for tech in network_data.available_techs[region, period]
-    }
     _graph_connections(
         all_edges,
         layers,
