@@ -27,8 +27,14 @@ Created on:  4/15/24
 The purpose of this module is to perform top-level control over an MGA model run
 """
 import sqlite3
+import sys
+from datetime import datetime
 from logging import getLogger
 
+import numpy as np
+import pyomo.contrib.appsi as pyomo_appsi
+import pyomo.environ as pyo
+from pyomo.contrib.appsi.base import Results
 from pyomo.dataportal import DataPortal
 from scipy.spatial import ConvexHull
 
@@ -38,6 +44,7 @@ from temoa.extensions.modeling_to_generate_alternatives.vector_manager import Ve
 from temoa.temoa_model.hybrid_loader import HybridLoader
 from temoa.temoa_model.run_actions import build_instance
 from temoa.temoa_model.temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_rules import TotalCost_rule
 
 logger = getLogger(__name__)
 
@@ -65,6 +72,11 @@ class MgaSequencer:
             logger.info('Saving excel is disabled during MGA runs.')
             config.save_excel = False
         self.config = config
+        # TODO:  Check that solver is a persistent solver
+        if self.config.solver_name == 'appsi_highs':
+            self.solver = pyomo_appsi.solvers.highs.Highs()
+        else:
+            pass
 
         # some defaults, etc.
         self.mga_axis = config.mga_inputs.get('axis')
@@ -77,8 +89,9 @@ class MgaSequencer:
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
         self.iteration_limit = config.mga_inputs.get('iteration_limit', 100)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
+        self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.01)
 
-        self.hull: ConvexHull
+        self.hull: ConvexHull = None
 
         logger.info(
             'Initialized MGA sequencer with MGA Axis %s and weighting %s',
@@ -90,9 +103,8 @@ class MgaSequencer:
         """Run the sequencer"""
         # ==== basic sequence ====
         # 1. Load the model data, which may involve filtering it down if source tracing
-        # 2. Load the extra data needed by the MGA Axis (categories, etc.)
-        # 3a. Coalesce these to get the MGA Vector established
-        # 3b. Solve the base model using persistent solver
+        # 2. Let the Vector Manager pull in extra data to build out data for axis
+        # 3. Solve the base model using persistent solver
         # 4. Adjust the model
         # 5. Solve and record outcomes for all basis vectors
 
@@ -103,12 +115,102 @@ class MgaSequencer:
             loaded_portal=data_portal, model_name=self.config.scenario, silent=self.config.silent
         )
 
+        # 2.  Instantiate the vector manager
         vector_manager: VectorManager = get_manager(
             axis=self.mga_axis, model=instance, weighting=self.mga_weighting, con=self.con
         )
-        for v in vector_manager.basis_vectors():
-            pass
-            # print(v)
+
+        # 3. Persistent solver setup
+        opt = self.solver
+        print('persistent: ', opt.is_persistent())
+        # opt.set_instance(instance)
+        tic = datetime.now()
+        res: Results = opt.solve(instance)
+        # TODO:  Experiment with this...  Not clear if it is needed to enable warm starts/persistent behavior
+        # load variables after firsts solve
+        opt.load_vars()
+        toc = datetime.now()
+        elapsed = toc - tic
+        logger.info(f'Solve time: {elapsed.total_seconds()}')
+        pts = np.array(
+            [pyo.value(instance.V_FlowOut[idx]) for idx in instance.V_FlowOut.index_set()]
+        ).reshape((-1, 1))
+
+        status = res.termination_condition
+        logger.error('Termination condition: %s', status.name)
+        if status != pyomo_appsi.base.TerminationCondition.optimal:
+            logger.error('Abnormal termination condition')
+            sys.exit(-1)
+
+        # 4. Capture cost and make it a constraint
+        tot_cost = pyo.value(instance.TotalCost)
+        logger.info('Completed initial solve with total cost %0.2f', tot_cost)
+        # get hook on the expression generator for total cost...
+        cost_expression = TotalCost_rule(instance)
+        instance.cost_cap = pyo.Constraint(
+            expr=cost_expression <= (1 + self.cost_epsilon) * tot_cost
+        )
+        opt.add_constraints(
+            [
+                instance.cost_cap,
+            ]
+        )
+
+        # 5. replace the objective
+        instance.del_component(instance.TotalCost)
+
+        # 6. re-solve
+        opt.set_instance(instance)
+        opt.config.load_solution = False
+        pts_mat = []
+        for vector in vector_manager.basis_vectors():
+            print('.')
+            instance.obj = pyo.Objective(expr=vector)
+            opt.set_objective(instance.obj)
+            # instance.obj.display()
+            tic = datetime.now()
+            res = opt.solve(instance)
+            toc = datetime.now()
+            elapsed = toc - tic
+            logger.info(f'Solve time: {elapsed.total_seconds()}')
+            # need to load vars here or we see repeated stale value of objective
+            opt.load_vars()
+            status = res.termination_condition
+            print(status)
+            print(pyo.value(instance.obj))
+            print(vector_manager.groups)
+            pts = vector_manager.output_vector()
+            pts_mat.append(pts)
+            instance.del_component(instance.obj)
+
+        pts_mat = np.array(pts_mat)
+        print(pts_mat)
+        print(pts_mat.shape)
+
+        self.hull = ConvexHull(pts_mat, incremental=True, qhull_options='Q12')
+        print('huge at: ', self.hull.volume)
+
+        new_norms = self.hull.equations[:, 0:-1]
+        vector_manager.load_normals(new_norms)
+
+        # lets try to loop over 10 new vectors
+        for i in range(1000):
+            vector = vector_manager.random_vector()  # vector_manager.new_vector()
+            instance.obj = pyo.Objective(expr=vector)
+            opt.set_objective(instance.obj)
+            res = opt.solve(instance)
+            opt.load_vars()
+            status = res.termination_condition
+            if status != pyomo_appsi.base.TerminationCondition.optimal:
+                print('Abnormal termination condition')
+            pts = [
+                vector_manager.output_vector(),
+            ]
+            pts_mat = np.vstack((pts_mat, pts))
+            self.hull = ConvexHull(pts_mat, qhull_options='Q12')
+            # self.hull.add_points(points=pts)
+            print('huge at: ', self.hull.volume)
+            instance.del_component(instance.obj)
 
     def __del__(self):
         self.con.close()
