@@ -29,9 +29,11 @@ import sqlite3
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
+from queue import Queue
 from typing import Iterable
 
-from pyomo.core import Expression, Var
+import numpy as np
+from pyomo.core import Expression, Var, value
 
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -64,6 +66,7 @@ class TechActivityVectors(VectorManager):
 
         # {technology: [flow variables, ...]}
         self.variable_mapping: dict[str, list[Var]] | None = None
+        self.vector_queue: Queue[np.ndarray] = Queue()
         self.initialize()
 
     def initialize(self) -> None:
@@ -97,6 +100,9 @@ class TechActivityVectors(VectorManager):
         logger.debug(
             'Catalogued %d Technology Variables', len(list(chain(*self.variable_mapping.values())))
         )
+
+    def variable_vector(self) -> list[Var]:
+        return list(chain(*self.variable_mapping.values()))
 
     def tech_variables(self, tech) -> list[Var]:
         return self.variable_mapping.get(tech, [])
@@ -145,3 +151,41 @@ class TechActivityVectors(VectorManager):
             entry = [(v, -1.0 / tot_entries) for v in associated_indices]
             res.append(entry)
         return res
+
+    def notify(self) -> list[float]:
+        """
+        Generate the output vector from the solved model
+        :return: vector of output values for the groups (ndim= number of categories)
+        """
+        res = []
+        for cat in self.category_mapping:
+            element = 0
+            for tech in self.category_mapping[cat]:
+                element += sum(value(variable) for variable in self.variable_mapping[tech])
+            res.append(element)
+        return res
+
+    def load_normals(self, normals: np.array):
+        for vector in normals:
+            self.vector_queue.put(vector)
+
+    def input_vectors_available(self) -> int:
+        return self.vector_queue.qsize()
+
+    def next_input_vector(self) -> Expression | None:
+        if not self.vector_queue or self.input_vectors_available() == 0:
+            return None
+        vector = self.vector_queue.get()
+        # print(vector)
+        # translate the norm vector into coefficients
+        coeffs = []
+        for idx, cat in enumerate(self.category_mapping):
+            for tech in self.category_mapping[cat]:
+                for _ in range(len(self.variable_mapping[tech])):
+                    coeffs.append(vector[idx])
+        coeffs = np.array(coeffs)
+        coeffs /= np.sum(coeffs)  # normalize
+
+        all_variables = list(chain(*self.variable_mapping.values()))
+        assert len(all_variables) == len(coeffs)
+        return sum(c * v for v, c in zip(all_variables, coeffs))

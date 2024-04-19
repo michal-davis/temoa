@@ -38,12 +38,14 @@ from pyomo.contrib.appsi.base import Results
 from pyomo.dataportal import DataPortal
 from scipy.spatial import ConvexHull
 
+from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 from temoa.extensions.modeling_to_generate_alternatives.manager_factory import get_manager
 from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaAxis, MgaWeighting
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.hybrid_loader import HybridLoader
 from temoa.temoa_model.run_actions import build_instance
 from temoa.temoa_model.temoa_config import TemoaConfig
+from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_rules import TotalCost_rule
 
 logger = getLogger(__name__)
@@ -103,15 +105,15 @@ class MgaSequencer:
         """Run the sequencer"""
         # ==== basic sequence ====
         # 1. Load the model data, which may involve filtering it down if source tracing
-        # 2. Let the Vector Manager pull in extra data to build out data for axis
+        # 2. Instantiate a Vector Manager pull in extra data to build out data for axis
         # 3. Solve the base model using persistent solver
         # 4. Adjust the model
-        # 5. Solve and record outcomes for all basis vectors
+        # 5. Start the re-solve loop
 
         # 1. Load data
         hybrid_loader = HybridLoader(db_connection=self.con, config=self.config)
         data_portal: DataPortal = hybrid_loader.load_data_portal(myopic_index=None)
-        instance = build_instance(
+        instance: TemoaModel = build_instance(
             loaded_portal=data_portal, model_name=self.config.scenario, silent=self.config.silent
         )
 
@@ -122,39 +124,35 @@ class MgaSequencer:
 
         # 3. Persistent solver setup
         opt = self.solver
-        print('persistent: ', opt.is_persistent())
         # opt.set_instance(instance)
         tic = datetime.now()
         res: Results = opt.solve(instance)
         # TODO:  Experiment with this...  Not clear if it is needed to enable warm starts/persistent behavior
-        # load variables after firsts solve
-        opt.load_vars()
         toc = datetime.now()
+        # load variables after first solve
+        opt.load_vars()
         elapsed = toc - tic
-        logger.info(f'Solve time: {elapsed.total_seconds()}')
-        pts = np.array(
-            [pyo.value(instance.V_FlowOut[idx]) for idx in instance.V_FlowOut.index_set()]
-        ).reshape((-1, 1))
+        logger.info(f'Initial solve time: {elapsed.total_seconds():.4f}')
+        # pts = np.array(
+        #     [pyo.value(instance.V_FlowOut[idx]) for idx in instance.V_FlowOut.index_set()]
+        # ).reshape((-1, 1))
 
         status = res.termination_condition
-        logger.error('Termination condition: %s', status.name)
+        logger.debug('Termination condition: %s', status.name)
         if status != pyomo_appsi.base.TerminationCondition.optimal:
             logger.error('Abnormal termination condition')
             sys.exit(-1)
 
         # 4. Capture cost and make it a constraint
         tot_cost = pyo.value(instance.TotalCost)
-        logger.info('Completed initial solve with total cost %0.2f', tot_cost)
+        logger.info('Completed initial solve with total cost:  %0.2f', tot_cost)
+        logger.info('Relaxing cost by fraction:  %0.3f', self.cost_epsilon)
         # get hook on the expression generator for total cost...
         cost_expression = TotalCost_rule(instance)
         instance.cost_cap = pyo.Constraint(
             expr=cost_expression <= (1 + self.cost_epsilon) * tot_cost
         )
-        opt.add_constraints(
-            [
-                instance.cost_cap,
-            ]
-        )
+        opt.add_constraints([instance.cost_cap])
 
         # 5. replace the objective
         instance.del_component(instance.TotalCost)
@@ -164,7 +162,6 @@ class MgaSequencer:
         opt.config.load_solution = False
         pts_mat = []
         for vector in vector_manager.basis_vectors():
-            print('.')
             instance.obj = pyo.Objective(expr=vector)
             opt.set_objective(instance.obj)
             # instance.obj.display()
@@ -179,23 +176,33 @@ class MgaSequencer:
             print(status)
             print(pyo.value(instance.obj))
             print(vector_manager.groups)
-            pts = vector_manager.output_vector()
+            pts = vector_manager.notify()
             pts_mat.append(pts)
             instance.del_component(instance.obj)
 
+        # TODO:
+        # make pts_mat an instance variable
+        # make separate "new points" obj
+        # extract resolve() function
         pts_mat = np.array(pts_mat)
         print(pts_mat)
         print(pts_mat.shape)
 
-        self.hull = ConvexHull(pts_mat, incremental=True, qhull_options='Q12')
-        print('huge at: ', self.hull.volume)
+        self.hull = Hull(pts_mat)
+        print('huge at: ', self.hull.cv_hull.volume)
+        print(f'norms avail: {self.hull.norms_available}')
+        #
+        # new_norms = self.hull.equations[:, 0:-1]
+        pts_mat = None
+        vector_manager.load_normals(self.hull.get_all_norms())
 
-        new_norms = self.hull.equations[:, 0:-1]
-        vector_manager.load_normals(new_norms)
-
-        # lets try to loop over 10 new vectors
-        for i in range(1000):
-            vector = vector_manager.random_vector()  # vector_manager.new_vector()
+        # let's loop for a while and rebuild hull when needed
+        for i in range(20):
+            print(f'iter {i}:', f'vecs_avail: {vector_manager.input_vectors_available()}')
+            vector = vector_manager.next_input_vector()
+            if vector is None:
+                vector = vector_manager.random_input_vector()
+                print('  ******* hitting the gas with a random vector')
             instance.obj = pyo.Objective(expr=vector)
             opt.set_objective(instance.obj)
             res = opt.solve(instance)
@@ -204,12 +211,24 @@ class MgaSequencer:
             if status != pyomo_appsi.base.TerminationCondition.optimal:
                 print('Abnormal termination condition')
             pts = [
-                vector_manager.output_vector(),
+                vector_manager.notify(),
             ]
-            pts_mat = np.vstack((pts_mat, pts))
-            self.hull = ConvexHull(pts_mat, qhull_options='Q12')
-            # self.hull.add_points(points=pts)
-            print('huge at: ', self.hull.volume)
+            if pts_mat is None:
+                pts_mat = np.array(pts)
+            else:
+                pts_mat = np.vstack((pts_mat, pts))
+
+            if vector_manager.input_vectors_available() < 1000000:
+                print(f'  Refreshing hull with {len(pts_mat)} points')
+                for pt in pts_mat:
+                    self.hull.add_point(pt)
+                pts_mat = None
+                self.hull.update()
+                fresh_vecs = self.hull.get_all_norms()
+                print(f'   made {len(fresh_vecs)} fresh vectors')
+                print('   huge at: ', self.hull.cv_hull.volume)
+                print(f'   rejection frac: {self.hull.norm_rejection_proportion}')
+                vector_manager.load_normals(fresh_vecs)
             instance.del_component(instance.obj)
 
     def __del__(self):

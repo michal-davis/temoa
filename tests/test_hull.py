@@ -47,7 +47,10 @@ def test_hull():
     assert hull.cv_hull
     with pytest.raises(ValueError):
         # transposed, the points(2) are insufficient for the dimensionality (3)
-        hull = Hull(pts.T)
+        hull2 = Hull(pts.T)
+        print(
+            hull2.all_points
+        )  # should never get here... just to prevent warning on unused var 'hull'
 
 
 def test_add_point():
@@ -57,35 +60,44 @@ def test_add_point():
     hull.update()
     # we should have 5 directions to pull from now, the 4 square sides + the orig triangle face
     count = 0
-    v = hull.get_vector()
+    v = hull.get_norm()
     while v is not None:
         count += 1
         # print(v)
-        v = hull.get_vector()
+        v = hull.get_norm()
     assert count == 5, '5 faces were available and should have been added to the available vecs'
 
 
 def test_get_vector():
     hull = Hull(pts)
-    normals = []
     for _ in range(3):
-        v = hull.get_vector()
+        v = hull.get_norm()
         assert np.linalg.norm(v) == pytest.approx(1.0)
     # should be no more...
-    assert hull.get_vector() is None
+    assert hull.get_norm() is None
 
 
 def test_is_new_direction():
     hull = Hull(pts)
     # make a new highly similar direction to the [-1, 0] normal
-    sim_vec = np.array([-0.999999, 0.0])
+    sim_vec = np.array([-0.99999999999999, 0.0])
     assert not hull.is_new_direction(sim_vec), 'this should be rejected as a new direction'
 
 
 def test_valid_directions_avialable():
     hull = Hull(pts)
-    assert hull.valid_directions_avialable == 3, '3 basic normals are available'
+    assert hull.norms_available == 3, '3 basic normals are available'
     hull.add_point(np.array([4, 4]))
-    assert hull.valid_directions_avialable == 3, 'no changes until update'
+    assert hull.norms_available == 3, 'no changes until update'
     hull.update()
-    assert hull.valid_directions_avialable == 5, '5 should be available'
+    assert hull.norms_available == 5, '5 should be available'
+
+
+def test_get_vectors():
+    hull = Hull(pts)
+    vecs = hull.get_all_norms()
+    assert len(vecs) == 3
+    hull.add_point(np.array([4, 4]))
+    hull.update()
+    assert hull.norms_available == 2, '2 new ones were created after 3 were drawn'
+    assert len(hull.get_all_norms()) == 2
