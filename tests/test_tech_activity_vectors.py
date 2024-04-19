@@ -33,6 +33,12 @@ from temoa.extensions.modeling_to_generate_alternatives.tech_activity_vectors im
 
 
 def test__vector_engine():
+    """
+    Make sure the basis generation algorithm is accurate.  In this test case, there are unequal
+    number of members per category and differing variables per member.  We should come up with
+    4 orthogonal vectors
+    :return:
+    """
     cat_map = {
         'A': ['dog', 'pig'],
         'B': [
@@ -48,4 +54,5 @@ def test__vector_engine():
     ]
     matrix = TechActivityVectors._generate_basis(category_mapping=cat_map, variable_mapping=var_map)
     for idx, row in enumerate(matrix):
+        row = dict(row)
         assert row == pytest.approx(res[idx], abs=1e-2)

@@ -25,27 +25,62 @@ https://westernspark.us
 Created on:  4/15/24
 
 """
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Iterable
 
+import numpy as np
 from pyomo.core import Expression
 from pyomo.environ import Var
 
 
 class VectorManager(ABC):
     @property
+    @abstractmethod
     def groups(self) -> Iterable[str]:
         """The main groups of the axis"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def group_members(self, group) -> list[str]:
         """The members in the group"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
-    def tech_variables(self, tech) -> list[Var]:
+    def group_variables(self, tech) -> list[Var]:
         """The variables associated with the individual group members"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
-    def basis_vectors(self) -> Expression:
-        """the basis vectors"""
-        raise NotImplementedError
+    @abstractmethod
+    def variable_vector(self) -> list[Var]:
+        """All variables in a fixed order sequence by group, member, internal var index order"""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def basis_vectors(self) -> list[Expression] | None:
+        """The Initial Basis Vectors, likely to establish a hull, or None if n/a"""
+        return None
+
+    @abstractmethod
+    def input_vectors_available(self) -> int | bool:
+        """
+        Indicator whether manager can provide more input vectors.
+        Either an integer count, if available or True if an uncountable/arbitrary number are available
+        :return: an integer count if known or True if an uncountable/arbitrary number are available, else False/0
+        """
+
+    @abstractmethod
+    def next_input_vector(self) -> Expression:
+        """The next input vector"""
+        raise NotImplementedError()
+
+    def random_input_vector(self) -> Expression:
+        """Random vector with proper dimensionality"""
+        vars = self.variable_vector()
+        coeffs = np.random.random(len(vars))
+        coeffs /= sum(coeffs)
+        return sum(c * v for c, v in zip(coeffs, vars))
+
+    def load_normals(self, normals: np.array):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def notify(self):
+        """Notify the manager that a solve has occurred.  It likely has access to the model..."""
