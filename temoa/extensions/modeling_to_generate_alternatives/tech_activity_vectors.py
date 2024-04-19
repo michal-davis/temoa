@@ -35,6 +35,7 @@ from typing import Iterable
 import numpy as np
 from pyomo.core import Expression, Var, value
 
+from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.temoa_model import TemoaModel
 
@@ -67,6 +68,10 @@ class TechActivityVectors(VectorManager):
         # {technology: [flow variables, ...]}
         self.variable_mapping: dict[str, list[Var]] | None = None
         self.vector_queue: Queue[np.ndarray] = Queue()
+
+        self.hull_points: np.ndarray | None = None
+        self.hull: Hull | None = None
+
         self.initialize()
 
     def initialize(self) -> None:
@@ -101,11 +106,11 @@ class TechActivityVectors(VectorManager):
             'Catalogued %d Technology Variables', len(list(chain(*self.variable_mapping.values())))
         )
 
+    def stop_resolving(self) -> bool:
+        pass
+
     def variable_vector(self) -> list[Var]:
         return list(chain(*self.variable_mapping.values()))
-
-    def tech_variables(self, tech) -> list[Var]:
-        return self.variable_mapping.get(tech, [])
 
     @property
     def groups(self) -> Iterable[str]:
@@ -126,6 +131,59 @@ class TechActivityVectors(VectorManager):
             assert abs(abs(row_sum) - 1) < 1e-5
             expr = sum(c * v for v, c in row)
             yield expr
+
+    def basis_runs_complete(self):
+        """make the hull..."""
+        logger.debug('Generating the cvx hull from %d points', len(self.hull_points))
+        self.hull = Hull(self.hull_points)
+        fresh_vecs = self.hull.get_all_norms()
+        print(f'   made {len(fresh_vecs)} fresh vectors')
+        print('   huge at: ', self.hull.cv_hull.volume)
+        print(f'   rejection frac: {self.hull.norm_rejection_proportion}')
+        self.load_normals(fresh_vecs)
+
+    def notify(self) -> list[float]:
+        # when notify is received, use the stored values in the variables to generate the point
+        res = []
+        for cat in self.category_mapping:
+            element = 0
+            for tech in self.category_mapping[cat]:
+                element += sum(value(variable) for variable in self.variable_mapping[tech])
+            res.append(element)
+        hull_point = np.array(res)
+        if self.hull_points is None:
+            self.hull_points = np.atleast_2d(hull_point)
+        else:
+            self.hull_points = np.vstack((self.hull_points, hull_point))
+        return res
+
+    def load_normals(self, normals: np.array):
+        for vector in normals:
+            self.vector_queue.put(vector)
+
+    def input_vectors_available(self) -> int:
+        return self.vector_queue.qsize()
+
+    def next_input_vector(self) -> Expression | None:
+        if self.vector_queue.qsize() <= 3:
+            print('running low...refreshing the vectors')
+            self.basis_runs_complete()
+        if not self.vector_queue or self.input_vectors_available() == 0:
+            return None
+        vector = self.vector_queue.get()
+        # print(vector)
+        # translate the norm vector into coefficients
+        coeffs = []
+        for idx, cat in enumerate(self.category_mapping):
+            for tech in self.category_mapping[cat]:
+                for _ in range(len(self.variable_mapping[tech])):
+                    coeffs.append(vector[idx])
+        coeffs = np.array(coeffs)
+        coeffs /= np.sum(coeffs)  # normalize
+
+        all_variables = list(chain(*self.variable_mapping.values()))
+        assert len(all_variables) == len(coeffs)
+        return sum(c * v for v, c in zip(all_variables, coeffs))
 
     @classmethod
     def _generate_basis(
@@ -152,40 +210,5 @@ class TechActivityVectors(VectorManager):
             res.append(entry)
         return res
 
-    def notify(self) -> list[float]:
-        """
-        Generate the output vector from the solved model
-        :return: vector of output values for the groups (ndim= number of categories)
-        """
-        res = []
-        for cat in self.category_mapping:
-            element = 0
-            for tech in self.category_mapping[cat]:
-                element += sum(value(variable) for variable in self.variable_mapping[tech])
-            res.append(element)
-        return res
-
-    def load_normals(self, normals: np.array):
-        for vector in normals:
-            self.vector_queue.put(vector)
-
-    def input_vectors_available(self) -> int:
-        return self.vector_queue.qsize()
-
-    def next_input_vector(self) -> Expression | None:
-        if not self.vector_queue or self.input_vectors_available() == 0:
-            return None
-        vector = self.vector_queue.get()
-        # print(vector)
-        # translate the norm vector into coefficients
-        coeffs = []
-        for idx, cat in enumerate(self.category_mapping):
-            for tech in self.category_mapping[cat]:
-                for _ in range(len(self.variable_mapping[tech])):
-                    coeffs.append(vector[idx])
-        coeffs = np.array(coeffs)
-        coeffs /= np.sum(coeffs)  # normalize
-
-        all_variables = list(chain(*self.variable_mapping.values()))
-        assert len(all_variables) == len(coeffs)
-        return sum(c * v for v, c in zip(all_variables, coeffs))
+    def tech_variables(self, tech) -> list[Var]:
+        return self.variable_mapping.get(tech, [])
