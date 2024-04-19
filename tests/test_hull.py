@@ -32,17 +32,19 @@ from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 
 pts = np.array([[2, 2], [2, 4], [4, 2]])
 """
-      |\
-      | \
-      |  \
-      |___\
-
+       |\
+   <-- | \  --> (to be viewed at a slightly upward angle. :/ )
+       |  \
+       |___\
+         |
+         v
 A simple right triangle to start with 
 - should have 3 norms from 3 equations as a starter
 """
 
 
 def test_hull():
+    """Basic build test, just see if it can be built and it rejects bad dimension inputs"""
     hull = Hull(pts)
     assert hull.cv_hull
     with pytest.raises(ValueError):
@@ -54,6 +56,10 @@ def test_hull():
 
 
 def test_add_point():
+    """
+    test adding point to the triangle to make a square and that by doing so
+    we get 2 new normals
+    """
     hull = Hull(pts)
     # complete the square...
     hull.add_point(np.array([4, 4]))
@@ -69,6 +75,7 @@ def test_add_point():
 
 
 def test_get_vector():
+    """Test iteration through the 3 vectors available"""
     hull = Hull(pts)
     for _ in range(3):
         v = hull.get_norm()
@@ -78,13 +85,15 @@ def test_get_vector():
 
 
 def test_is_new_direction():
+    """Test the linear algebra used to see if a new vector is different from an existing vector"""
     hull = Hull(pts)
     # make a new highly similar direction to the [-1, 0] normal
-    sim_vec = np.array([-0.99999999999999, 0.0])
+    sim_vec = np.array([-0.99999999999, 0.0])
+    sim_vec /= np.linalg.norm(sim_vec)  # normalize
     assert not hull.is_new_direction(sim_vec), 'this should be rejected as a new direction'
 
 
-def test_valid_directions_avialable():
+def test_valid_directions_available():
     hull = Hull(pts)
     assert hull.norms_available == 3, '3 basic normals are available'
     hull.add_point(np.array([4, 4]))

@@ -26,11 +26,11 @@ Created on:  4/15/24
 
 """
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Iterable
 
 import numpy as np
-from pyomo.core import Expression
-from pyomo.environ import Var
+from pyomo.environ import Expression, Var, quicksum
 
 
 class VectorManager(ABC):
@@ -59,6 +59,11 @@ class VectorManager(ABC):
         return None
 
     @abstractmethod
+    def basis_runs_complete(self):
+        """Simple notification that the requested basis runs are complete"""
+        pass
+
+    @abstractmethod
     def input_vectors_available(self) -> int | bool:
         """
         Indicator whether manager can provide more input vectors.
@@ -73,14 +78,22 @@ class VectorManager(ABC):
 
     def random_input_vector(self) -> Expression:
         """Random vector with proper dimensionality"""
-        vars = self.variable_vector()
-        coeffs = np.random.random(len(vars))
+        var_vec = self.variable_vector()
+        coeffs = np.random.random(len(var_vec))
         coeffs /= sum(coeffs)
-        return sum(c * v for c, v in zip(coeffs, vars))
+        return quicksum(c * v for c, v in zip(coeffs, var_vec))
 
     def load_normals(self, normals: np.array):
         raise NotImplementedError()
 
     @abstractmethod
-    def notify(self):
-        """Notify the manager that a solve has occurred.  It likely has access to the model..."""
+    def notify(self) -> Sequence[float]:
+        """
+        Notify the manager that a solve has occurred.  It likely has access to the model...
+        :return: The solution Point in axis space
+        """
+
+    @abstractmethod
+    def stop_resolving(self) -> bool:
+        """Query to stop re-solve loop.  True => stop re-solving."""
+        raise NotImplementedError('the manager subclass must implement stop_resolving')

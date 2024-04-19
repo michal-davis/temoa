@@ -28,17 +28,16 @@ The purpose of this module is to perform top-level control over an MGA model run
 """
 import sqlite3
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from logging import getLogger
 
-import numpy as np
 import pyomo.contrib.appsi as pyomo_appsi
 import pyomo.environ as pyo
 from pyomo.contrib.appsi.base import Results
+from pyomo.core import Expression
 from pyomo.dataportal import DataPortal
-from scipy.spatial import ConvexHull
 
-from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 from temoa.extensions.modeling_to_generate_alternatives.manager_factory import get_manager
 from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaAxis, MgaWeighting
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
@@ -76,11 +75,12 @@ class MgaSequencer:
         self.config = config
         # TODO:  Check that solver is a persistent solver
         if self.config.solver_name == 'appsi_highs':
-            self.solver = pyomo_appsi.solvers.highs.Highs()
+            self.opt = pyomo_appsi.solvers.highs.Highs()
         else:
             pass
 
         # some defaults, etc.
+        self.internal_stop = False
         self.mga_axis = config.mga_inputs.get('axis')
         if not self.mga_axis:
             logger.warning('No MGA Axis specified.  Using default:  Activity by Tech Category')
@@ -89,11 +89,14 @@ class MgaSequencer:
         if not self.mga_weighting:
             logger.warning('No MGA Weighting specified.  Using default: Hull Expansion')
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
-        self.iteration_limit = config.mga_inputs.get('iteration_limit', 100)
+        self.iteration_limit = config.mga_inputs.get('iteration_limit', 1000)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
         self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.01)
 
-        self.hull: ConvexHull = None
+        # internal records
+        self.solve_records: list[tuple[Expression, Sequence[float]]] = []
+        """(solve vector, resulting axis vector)"""
+        self.solve_count = 0
 
         logger.info(
             'Initialized MGA sequencer with MGA Axis %s and weighting %s',
@@ -123,15 +126,16 @@ class MgaSequencer:
         )
 
         # 3. Persistent solver setup
-        opt = self.solver
-        # opt.set_instance(instance)
+
+        # self.opt.set_instance(instance)
         tic = datetime.now()
-        res: Results = opt.solve(instance)
+        res: Results = self.opt.solve(instance)
         # TODO:  Experiment with this...  Not clear if it is needed to enable warm starts/persistent behavior
         toc = datetime.now()
         # load variables after first solve
-        opt.load_vars()
+        self.opt.load_vars()
         elapsed = toc - tic
+        self.solve_count += 1
         logger.info(f'Initial solve time: {elapsed.total_seconds():.4f}')
         # pts = np.array(
         #     [pyo.value(instance.V_FlowOut[idx]) for idx in instance.V_FlowOut.index_set()]
@@ -152,84 +156,77 @@ class MgaSequencer:
         instance.cost_cap = pyo.Constraint(
             expr=cost_expression <= (1 + self.cost_epsilon) * tot_cost
         )
-        opt.add_constraints([instance.cost_cap])
+        self.opt.add_constraints([instance.cost_cap])
 
-        # 5. replace the objective
+        # 5. replace the objective and prep for iterative solving
         instance.del_component(instance.TotalCost)
+        self.opt.set_instance(instance)
+        self.opt.config.load_solution = False
 
-        # 6. re-solve
-        opt.set_instance(instance)
-        opt.config.load_solution = False
-        pts_mat = []
-        for vector in vector_manager.basis_vectors():
-            instance.obj = pyo.Objective(expr=vector)
-            opt.set_objective(instance.obj)
-            # instance.obj.display()
-            tic = datetime.now()
-            res = opt.solve(instance)
-            toc = datetime.now()
-            elapsed = toc - tic
-            logger.info(f'Solve time: {elapsed.total_seconds()}')
-            # need to load vars here or we see repeated stale value of objective
-            opt.load_vars()
-            status = res.termination_condition
-            print(status)
-            print(pyo.value(instance.obj))
-            print(vector_manager.groups)
-            pts = vector_manager.notify()
-            pts_mat.append(pts)
-            instance.del_component(instance.obj)
+        # 6. solve the basis vectors, if provided by manager
+        basis_vectors = vector_manager.basis_vectors()
+        if basis_vectors:
+            for vector in basis_vectors:
+                success = self.solve_instance(instance, vector)
+                if success:
+                    pts = vector_manager.notify()
+                    self.solve_records.append((vector, pts))
+                self.process_solve_results(instance, vector)
+            vector_manager.basis_runs_complete()  # notification...
 
-        # TODO:
-        # make pts_mat an instance variable
-        # make separate "new points" obj
-        # extract resolve() function
-        pts_mat = np.array(pts_mat)
-        print(pts_mat)
-        print(pts_mat.shape)
-
-        self.hull = Hull(pts_mat)
-        print('huge at: ', self.hull.cv_hull.volume)
-        print(f'norms avail: {self.hull.norms_available}')
-        #
-        # new_norms = self.hull.equations[:, 0:-1]
-        pts_mat = None
-        vector_manager.load_normals(self.hull.get_all_norms())
-
-        # let's loop for a while and rebuild hull when needed
-        for i in range(20):
-            print(f'iter {i}:', f'vecs_avail: {vector_manager.input_vectors_available()}')
+        # 7. Execute re-solve loop until stopping conditions are met
+        while not vector_manager.stop_resolving() and not self.internal_stop:
+            print(
+                f'iter {self.solve_count}:',
+                f'vecs_avail: {vector_manager.input_vectors_available()}',
+            )
             vector = vector_manager.next_input_vector()
             if vector is None:
-                vector = vector_manager.random_input_vector()
-                print('  ******* hitting the gas with a random vector')
-            instance.obj = pyo.Objective(expr=vector)
-            opt.set_objective(instance.obj)
-            res = opt.solve(instance)
-            opt.load_vars()
-            status = res.termination_condition
-            if status != pyomo_appsi.base.TerminationCondition.optimal:
-                print('Abnormal termination condition')
-            pts = [
-                vector_manager.notify(),
-            ]
-            if pts_mat is None:
-                pts_mat = np.array(pts)
-            else:
-                pts_mat = np.vstack((pts_mat, pts))
+                logger.warning(
+                    'During re-solve loop, a None vector was received.  Process terminated early.'
+                )
+                break
+            success = self.solve_instance(instance, vector)
+            if success:
+                pts = vector_manager.notify()
+                self.solve_records.append((vector, pts))
+            self.process_solve_results(instance, vector)
 
-            if vector_manager.input_vectors_available() < 1000000:
-                print(f'  Refreshing hull with {len(pts_mat)} points')
-                for pt in pts_mat:
-                    self.hull.add_point(pt)
-                pts_mat = None
-                self.hull.update()
-                fresh_vecs = self.hull.get_all_norms()
-                print(f'   made {len(fresh_vecs)} fresh vectors')
-                print('   huge at: ', self.hull.cv_hull.volume)
-                print(f'   rejection frac: {self.hull.norm_rejection_proportion}')
-                vector_manager.load_normals(fresh_vecs)
-            instance.del_component(instance.obj)
+            self.solve_count += 1
+            if self.solve_count >= self.iteration_limit:
+                self.internal_stop = True
+
+        # 8. Wrap it up
+        pass
+
+    def solve_instance(self, instance, vector) -> bool:
+        """
+        Solve the MGA instance
+        :param instance: the model instance
+        :param vector: the objective vector to use
+        :return: True if solve was successful, False otherwise
+        """
+        instance.obj = pyo.Objective(expr=vector)
+        self.opt.set_objective(instance.obj)
+        # instance.obj.display()
+        tic = datetime.now()
+        res = self.opt.solve(instance)
+        toc = datetime.now()
+        elapsed = toc - tic
+        status = res.termination_condition
+        logger.info(
+            'Solve #%d time: %0.4f.  Status: %s',
+            self.solve_count,
+            elapsed.total_seconds(),
+            status.name,
+        )
+        # need to load vars here else we see repeated stale value of objective
+        self.opt.load_vars()
+        instance.del_component(instance.obj)
+        return res.termination_condition == pyomo_appsi.base.TerminationCondition.optimal
+
+    def process_solve_results(self, instance, vector):
+        pass
 
     def __del__(self):
         self.con.close()

@@ -54,7 +54,7 @@ class Hull:
         self.seen_norms = None
         self._valid_norms = None
 
-        self.tolerance = 5e-14  # minimum cosine dissimilarity
+        self.tolerance = 5e-4  # minimum cosine dissimilarity
 
         # for tracking
         self.norms_checked = 0
