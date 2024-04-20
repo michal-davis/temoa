@@ -89,7 +89,7 @@ class MgaSequencer:
         if not self.mga_weighting:
             logger.warning('No MGA Weighting specified.  Using default: Hull Expansion')
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
-        self.iteration_limit = config.mga_inputs.get('iteration_limit', 1000)
+        self.iteration_limit = config.mga_inputs.get('iteration_limit', 500)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
         self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.01)
 
@@ -181,6 +181,7 @@ class MgaSequencer:
                 f'vecs_avail: {vector_manager.input_vectors_available()}',
             )
             vector = vector_manager.next_input_vector()
+            # vector = vector_manager.random_input_vector()
             if vector is None:
                 logger.warning(
                     'During re-solve loop, a None vector was received.  Process terminated early.'
@@ -197,6 +198,7 @@ class MgaSequencer:
                 self.internal_stop = True
 
         # 8. Wrap it up
+        vector_manager.finalize_tracker()
         pass
 
     def solve_instance(self, instance, vector) -> bool:
