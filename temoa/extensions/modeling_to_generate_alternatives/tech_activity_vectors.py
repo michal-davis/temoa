@@ -29,12 +29,15 @@ import sqlite3
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
+from pathlib import Path
 from queue import Queue
 from typing import Iterable
 
 import numpy as np
+from matplotlib import pyplot as plt
 from pyomo.core import Expression, Var, value
 
+from definitions import PROJECT_ROOT
 from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -73,6 +76,9 @@ class TechActivityVectors(VectorManager):
         self.hull: Hull | None = None
 
         self.initialize()
+        self.monitor = True
+        self.perf_data = {}
+
 
     def initialize(self) -> None:
         """
@@ -137,6 +143,7 @@ class TechActivityVectors(VectorManager):
         logger.debug('Generating the cvx hull from %d points', len(self.hull_points))
         self.hull = Hull(self.hull_points)
         fresh_vecs = self.hull.get_all_norms()
+        np.random.shuffle(fresh_vecs)
         print(f'   made {len(fresh_vecs)} fresh vectors')
         print('   huge at: ', self.hull.cv_hull.volume)
         print(f'   rejection frac: {self.hull.norm_rejection_proportion}')
@@ -155,7 +162,23 @@ class TechActivityVectors(VectorManager):
             self.hull_points = np.atleast_2d(hull_point)
         else:
             self.hull_points = np.vstack((self.hull_points, hull_point))
+        if self.monitor:
+            self.tracker()
         return res
+
+    def tracker(self):
+        if len(self.hull_points) > 10:
+            hull = Hull(self.hull_points)
+            volume = hull.volume
+            self.perf_data.update({len(self.hull_points): volume})
+
+    def finalize_tracker(self):
+        fout = Path(PROJECT_ROOT, 'output_files', 'hull_perf.png')
+        pts = sorted(self.perf_data.keys())
+        y = [self.perf_data[pt] for pt in pts]
+        plt.plot(pts, y)
+        plt.savefig(str(fout))
+
 
     def load_normals(self, normals: np.array):
         for vector in normals:

@@ -26,7 +26,6 @@ Created on:  4/17/24
 
 A thin wrapper on Scipy's ConvexHull to make it more manageable
 """
-from collections.abc import Collection
 from logging import getLogger
 
 import numpy as np
@@ -54,7 +53,7 @@ class Hull:
         self.seen_norms = None
         self._valid_norms = None
 
-        self.tolerance = 5e-4  # minimum cosine dissimilarity
+        self.tolerance = 5e-3  # minimum cosine dissimilarity
 
         # for tracking
         self.norms_checked = 0
@@ -84,9 +83,10 @@ class Hull:
         if self.all_points is None:
             return
         try:
-            self.cv_hull = ConvexHull(self.all_points, qhull_options='Q12')
+            self.cv_hull = ConvexHull(self.all_points, qhull_options='Q12 QJ')
             # Q12:  Allow "wide" facets, which seems to happen with large disparity in scale in model
-            # QJ:  option to "joggle" inputs if errors arise from singularities, etc.
+            # QJ:  option to "joggle" inputs if errors arise from singularities, etc.  This seems to slow things down
+            #      a moderate amount.
             # Dev Note:  After significant experiments with building new each time or allowing "incremental"
             #            additions to the hull, it appears more ROBUST to just rebuild.  More frequent
             #            abnormal exits when trying to use incremental, and time difference is negligible
@@ -139,13 +139,13 @@ class Hull:
             return res
         return None
 
-    def get_all_norms(self) -> Collection[np.ndarray]:
+    def get_all_norms(self) -> np.ndarray:
         """Get a matrix of all unused new vectors"""
         if self.norms_available > 0:
             res = np.atleast_2d(self._valid_norms)[self.norm_index :, :]
             self.norm_index = len(self._valid_norms)
             return res
-        return []
+        return np.array([])
 
     def is_new_direction(self, vec: np.ndarray) -> bool:
         """
