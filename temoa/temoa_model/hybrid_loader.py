@@ -97,10 +97,10 @@ class HybridLoader:
     def source_trace_only(self, make_plots: bool = False, myopic_index: MyopicIndex | None = None):
         if myopic_index and not isinstance(myopic_index, MyopicIndex):
             raise ValueError('myopic_index must be an instance of MyopicIndex')
-        self._source_trace(make_plots, myopic_index)
+        self._source_trace(myopic_index)
         self.manager = None  # to prevent possible out-of-synch build from stale data
 
-    def _source_trace(self, make_plots: bool, myopic_index: MyopicIndex = None):
+    def _source_trace(self, myopic_index: MyopicIndex = None):
         network_data = network_model_data.build(self.con, myopic_index=myopic_index)
         cur = self.con.cursor()
         # need periods to execute the source check by [r, p].  At this point, we can only pull from DB
@@ -116,8 +116,7 @@ class HybridLoader:
             }
         self.manager = CommodityNetworkManager(periods=periods, network_data=network_data)
         self.manager.analyze_network()
-        if make_plots:
-            self.manager.make_commodity_plots(self.config)
+        self.manager.analyze_graphs(self.config)
 
     def _build_efficiency_dataset(
         self, use_raw_data=False, myopic_index: MyopicIndex | None = None
@@ -387,9 +386,7 @@ class HybridLoader:
 
         if self.config.source_trace or self.config.scenario_mode == TemoaMode.MYOPIC:
             use_raw_data = False
-            self._source_trace(
-                make_plots=self.config.plot_commodity_network, myopic_index=myopic_index
-            )
+            self._source_trace(myopic_index=myopic_index)
         else:
             use_raw_data = True
 

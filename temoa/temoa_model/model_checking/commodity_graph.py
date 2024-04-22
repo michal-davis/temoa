@@ -2,7 +2,7 @@
 A quick & dirty graph of the commodity network for troubleshooting purposes.  Future
 development may enhance this quite a bit.... lots of opportunity!
 """
-
+import logging
 from pathlib import Path
 from typing import Iterable
 
@@ -39,6 +39,8 @@ https://westernspark.us
 Created on:  2/14/24
 
 """
+
+logger = logging.getLogger(__name__)
 
 
 def generate_graph(
@@ -85,7 +87,8 @@ def generate_graph(
         if characteristics and characteristics.get('neg_cost', False):
             edge_weights[edge] = 3
             edge_colors[edge] = 'green'
-
+        # other growth here...
+    # label other things of higher importance (these will override)
     for edge in ((tech.ic, tech.name, tech.oc) for tech in driven_techs):
         edge_colors[edge] = 'blue'
         edge_weights[edge] = 2
@@ -99,36 +102,79 @@ def generate_graph(
         edge_weights[edge] = 5
         all_edges.add(edge)
 
-    filename_label = f'{region}_{period}'
-    _graph_connections(
-        all_edges,
-        layers,
-        edge_colors,
-        edge_weights,
-        file_label=filename_label,
-        output_path=config.output_path,
-    )
+    dg = make_nx_graph(all_edges, edge_colors, edge_weights, layers)
+
+    # loop finder...
+    # TODO:  This segment of code might fit better in the network manager?
+    try:
+        cycles = nx.simple_cycles(G=dg)
+        for cycle in cycles:
+            cycle = list(cycle)
+            if len(cycle) < 2:  # a storage item--not reportable
+                continue
+            logger.warning(
+                'Found cycle in region %s, period %d.  No action needed if this is correct:',
+                region,
+                period,
+            )
+            res = '  '
+            first = cycle[0]
+            for node in cycle:
+                res += f'{node} --> '
+            res += first
+            logger.info(res)
+    except nx.NetworkXError as e:
+        logger.warning('NetworkX exception encountered: %s.  Loop evaluation NOT performed.', e)
+    if config.plot_commodity_network:
+        filename_label = f'{region}_{period}'
+        _graph_connections(
+            directed_graph=dg,
+            file_label=filename_label,
+            output_path=config.output_path,
+        )
 
 
 def _graph_connections(
-    connections: Iterable[tuple],
-    layer_map,
-    edge_colors,
-    edge_weights,
+    directed_graph: nx.MultiDiGraph | nx.DiGraph,
     file_label: str,
     output_path: Path,
 ):
     """
     Make an HTML file containing the network graph
-    :param connections: an iterable container of connections of format (input_comm, tech, output_comm)
-    :param layer_map: An map of the layers.  1: source commodity, 2: physical commodity, 3: demand commodity
-    :param edge_colors: color map of edges (technologies).  Non-entries default to black
-    :param edge_weights: weight map of edges (technologies).  Non-entries default to 1.0
     :param file_label: the name of the output file
     :param output_path: the output directory
     :return:
     """
-    dg = nx.DiGraph()  # networkx directed graph
+
+    fig = gv.d3(
+        directed_graph,
+        show_menu=True,
+        show_node_label=True,
+        node_label_data_source='label',
+        show_edge_label=True,
+        edge_label_data_source='label',
+        edge_curvature=0.4,
+        graph_height=1000,
+        zoom_factor=1.0,
+        node_drag_fix=True,
+        node_label_size_factor=0.5,
+        layout_algorithm_active=True,
+    )
+    filename = f'Commodity_Graph_{file_label}.html'
+    output_path = output_path / filename
+    fig.export_html(output_path, overwrite=True)
+
+
+def make_nx_graph(connections, edge_colors, edge_weights, layer_map) -> nx.MultiDiGraph:
+    """
+    Make a nx graph of the commodity network.  Additional info passed in to embed it within the nx data
+    :param connections: an iterable container of connections of format (input_comm, tech, output_comm)
+    :param edge_colors: An map of the layers.  1: source commodity, 2: physical commodity, 3: demand commodity
+    :param edge_weights: color map of edges (technologies).  Non-entries default to black
+    :param layer_map: weight map of edges (technologies).  Non-entries default to 1.0
+    :return: a nx MultiDiGraph
+    """
+    dg = nx.MultiDiGraph()  # networkx multi(edge) directed graph
     layer_colors = {1: 'limegreen', 2: 'violet', 3: 'darkorange'}
     node_size = {1: 50, 2: 15, 3: 30}
     for ic, tech, oc in connections:
@@ -155,24 +201,7 @@ def _graph_connections(
             color=edge_colors.get((ic, tech, oc), 'black'),
             size=edge_weights.get((ic, tech, oc), 1),
         )
-
-    fig = gv.d3(
-        dg,
-        show_menu=True,
-        show_node_label=True,
-        node_label_data_source='label',
-        show_edge_label=True,
-        edge_label_data_source='label',
-        edge_curvature=0.4,
-        graph_height=1000,
-        zoom_factor=1.0,
-        node_drag_fix=True,
-        node_label_size_factor=0.5,
-        layout_algorithm_active=True,
-    )
-    filename = f'Commodity_Graph_{file_label}.html'
-    output_path = output_path / filename
-    fig.export_html(output_path, overwrite=True)
+    return dg
 
 
 # quick test...  Not straight-forward on how to include this in unit tests...

@@ -158,9 +158,11 @@ class CommodityNetworkManager:
         }
         return filts
 
-    def make_commodity_plots(self, config: TemoaConfig):
+    def analyze_graphs(self, config: TemoaConfig):
         if not self.analyzed:
-            raise RuntimeError('Trying to build graphs before network analysis.  Code error')
+            raise RuntimeError(
+                'Trying to build/analyze graphs before network analysis.  Code error'
+            )
         for region in self.regions:
             for period in self.periods:
                 generate_graph(
