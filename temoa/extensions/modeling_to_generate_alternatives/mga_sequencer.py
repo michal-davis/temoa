@@ -27,7 +27,6 @@ Created on:  4/15/24
 The purpose of this module is to perform top-level control over an MGA model run
 """
 import sqlite3
-import sys
 from collections.abc import Sequence
 from datetime import datetime
 from logging import getLogger
@@ -73,11 +72,17 @@ class MgaSequencer:
             logger.info('Saving excel is disabled during MGA runs.')
             config.save_excel = False
         self.config = config
+
+        # get handle on solver instance
         # TODO:  Check that solver is a persistent solver
         if self.config.solver_name == 'appsi_highs':
             self.opt = pyomo_appsi.solvers.highs.Highs()
-        else:
-            pass
+            self.std_opt = pyo.SolverFactory('appsi_highs')
+        elif self.config.solver_name == 'gurobi':
+            self.opt = pyomo_appsi.solvers.Gurobi()
+            self.std_opt = pyo.SolverFactory('gurobi')
+        elif self.config.solver_name == 'cbc':
+            self.std_opt = pyo.SolverFactory('cbc')
 
         # some defaults, etc.
         self.internal_stop = False
@@ -129,23 +134,23 @@ class MgaSequencer:
 
         # self.opt.set_instance(instance)
         tic = datetime.now()
-        res: Results = self.opt.solve(instance)
+        res: Results = self.std_opt.solve(instance)
         # TODO:  Experiment with this...  Not clear if it is needed to enable warm starts/persistent behavior
         toc = datetime.now()
         # load variables after first solve
-        self.opt.load_vars()
+        # self.std_opt.load_vars()
         elapsed = toc - tic
         self.solve_count += 1
         logger.info(f'Initial solve time: {elapsed.total_seconds():.4f}')
         # pts = np.array(
         #     [pyo.value(instance.V_FlowOut[idx]) for idx in instance.V_FlowOut.index_set()]
         # ).reshape((-1, 1))
-
-        status = res.termination_condition
+        status = res['Solver'].termination_condition
+        # status = res.termination_condition
         logger.debug('Termination condition: %s', status.name)
-        if status != pyomo_appsi.base.TerminationCondition.optimal:
-            logger.error('Abnormal termination condition')
-            sys.exit(-1)
+        # if status != pyomo_appsi.base.TerminationCondition.optimal:
+        #     logger.error('Abnormal termination condition')
+        #     sys.exit(-1)
 
         # 4. Capture cost and make it a constraint
         tot_cost = pyo.value(instance.TotalCost)
@@ -156,18 +161,18 @@ class MgaSequencer:
         instance.cost_cap = pyo.Constraint(
             expr=cost_expression <= (1 + self.cost_epsilon) * tot_cost
         )
-        self.opt.add_constraints([instance.cost_cap])
+        # self.opt.add_constraints([instance.cost_cap])
 
         # 5. replace the objective and prep for iterative solving
         instance.del_component(instance.TotalCost)
-        self.opt.set_instance(instance)
-        self.opt.config.load_solution = False
+        # self.opt.set_instance(instance)
+        # self.opt.config.load_solution = False
 
         # 6. solve the basis vectors, if provided by manager
         basis_vectors = vector_manager.basis_vectors()
         if basis_vectors:
             for vector in basis_vectors:
-                success = self.solve_instance(instance, vector)
+                success = self.solve_instance_warmstart(instance, vector)
                 if success:
                     pts = vector_manager.notify()
                     self.solve_records.append((vector, pts))
@@ -187,7 +192,7 @@ class MgaSequencer:
                     'During re-solve loop, a None vector was received.  Process terminated early.'
                 )
                 break
-            success = self.solve_instance(instance, vector)
+            success = self.solve_instance_warmstart(instance, vector)
             if success:
                 pts = vector_manager.notify()
                 self.solve_records.append((vector, pts))
@@ -201,7 +206,28 @@ class MgaSequencer:
         vector_manager.finalize_tracker()
         pass
 
-    def solve_instance(self, instance, vector) -> bool:
+    def solve_instance_warmstart(self, instance: TemoaModel, vector) -> bool:
+        instance.obj = pyo.Objective(expr=vector)
+        # self.opt.set_objective(instance.obj)
+        # instance.obj.display()
+        tic = datetime.now()
+        res = self.std_opt.solve(instance, warmstart=True)
+        toc = datetime.now()
+        elapsed = toc - tic
+        # status = res.termination_condition
+        status = res['Solver'].termination_condition
+        logger.info(
+            'Solve #%d time: %0.4f.  Status: %s',
+            self.solve_count,
+            elapsed.total_seconds(),
+            status.name,
+        )
+        # need to load vars here else we see repeated stale value of objective
+        # self.std_opt.load_vars()
+        instance.del_component(instance.obj)
+        return status == pyo.TerminationCondition.optimal
+
+    def solve_instance_appsi(self, instance, vector) -> bool:
         """
         Solve the MGA instance
         :param instance: the model instance
