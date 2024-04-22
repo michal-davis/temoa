@@ -36,7 +36,7 @@ from pathlib import Path
 
 import pyomo.opt
 
-from temoa.extensions.modeling_to_generate_alternatives.mga_sequencer import MgaSequencer
+from temoa.extensions.modeling_to_generate_alternatives.warm_starter import WarmStarter
 from temoa.extensions.myopic.myopic_sequencer import MyopicSequencer
 from temoa.temoa_model.hybrid_loader import HybridLoader
 from temoa.temoa_model.model_checking.pricing_check import price_checker
@@ -224,7 +224,7 @@ class TemoaSequencer:
                 myopic_sequencer.start()
 
             case TemoaMode.MGA:
-                mga_sequencer = MgaSequencer(config=self.config)
+                mga_sequencer = WarmStarter(config=self.config)
                 mga_sequencer.start()
             case _:
                 raise NotImplementedError('not yet built')
