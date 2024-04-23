@@ -80,7 +80,7 @@ class WarmStarter:
             self.std_opt = pyo.SolverFactory('appsi_highs')
         elif self.config.solver_name == 'gurobi':
             self.opt = pyomo_appsi.solvers.Gurobi()
-            self.std_opt = pyo.SolverFactory('gurobi')
+            self.std_opt = pyo.SolverFactory('gurobi_direct')
             self.options = {'LogFile': './my_gurobi_log.log'}
         elif self.config.solver_name == 'cbc':
             self.std_opt = pyo.SolverFactory('cbc')
@@ -95,7 +95,7 @@ class WarmStarter:
         if not self.mga_weighting:
             logger.warning('No MGA Weighting specified.  Using default: Hull Expansion')
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
-        self.iteration_limit = config.mga_inputs.get('iteration_limit', 500)
+        self.iteration_limit = config.mga_inputs.get('iteration_limit', 2)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
         self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.01)
 
@@ -135,7 +135,7 @@ class WarmStarter:
 
         # self.opt.set_instance(instance)
         tic = datetime.now()
-        res: Results = self.std_opt.solve(instance, options = self.options)
+        res: Results = self.std_opt.solve(instance, options=self.options)
         # TODO:  Experiment with this...  Not clear if it is needed to enable warm starts/persistent behavior
         toc = datetime.now()
         # load variables after first solve
@@ -212,7 +212,7 @@ class WarmStarter:
         # self.opt.set_objective(instance.obj)
         # instance.obj.display()
         tic = datetime.now()
-        res = self.std_opt.solve(instance, warmstart=True, tee=True, options = self.options)
+        res = self.std_opt.solve(instance, warmstart=True, tee=True, options=self.options)
         toc = datetime.now()
         elapsed = toc - tic
         # status = res.termination_condition
