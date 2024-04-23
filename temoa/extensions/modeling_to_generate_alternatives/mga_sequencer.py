@@ -27,6 +27,7 @@ Created on:  4/15/24
 The purpose of this module is to perform top-level control over an MGA model run
 """
 import sqlite3
+import sys
 from collections.abc import Sequence
 from datetime import datetime
 from logging import getLogger
@@ -94,7 +95,7 @@ class MgaSequencer:
         if not self.mga_weighting:
             logger.warning('No MGA Weighting specified.  Using default: Hull Expansion')
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
-        self.iteration_limit = config.mga_inputs.get('iteration_limit', 500)
+        self.iteration_limit = config.mga_inputs.get('iteration_limit', 50)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
         self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.01)
 
@@ -134,23 +135,23 @@ class MgaSequencer:
 
         # self.opt.set_instance(instance)
         tic = datetime.now()
-        res: Results = self.std_opt.solve(instance)
+        res: Results = self.opt.solve(instance)
         # TODO:  Experiment with this...  Not clear if it is needed to enable warm starts/persistent behavior
         toc = datetime.now()
         # load variables after first solve
-        # self.std_opt.load_vars()
+        self.opt.load_vars()
         elapsed = toc - tic
         self.solve_count += 1
         logger.info(f'Initial solve time: {elapsed.total_seconds():.4f}')
         # pts = np.array(
         #     [pyo.value(instance.V_FlowOut[idx]) for idx in instance.V_FlowOut.index_set()]
         # ).reshape((-1, 1))
-        status = res['Solver'].termination_condition
-        # status = res.termination_condition
+        # status = res['Solver'].termination_condition
+        status = res.termination_condition
         logger.debug('Termination condition: %s', status.name)
-        # if status != pyomo_appsi.base.TerminationCondition.optimal:
-        #     logger.error('Abnormal termination condition')
-        #     sys.exit(-1)
+        if status != pyomo_appsi.base.TerminationCondition.optimal:
+            logger.error('Abnormal termination condition')
+            sys.exit(-1)
 
         # 4. Capture cost and make it a constraint
         tot_cost = pyo.value(instance.TotalCost)
@@ -161,18 +162,18 @@ class MgaSequencer:
         instance.cost_cap = pyo.Constraint(
             expr=cost_expression <= (1 + self.cost_epsilon) * tot_cost
         )
-        # self.opt.add_constraints([instance.cost_cap])
+        self.opt.add_constraints([instance.cost_cap])
 
         # 5. replace the objective and prep for iterative solving
         instance.del_component(instance.TotalCost)
-        # self.opt.set_instance(instance)
-        # self.opt.config.load_solution = False
+        self.opt.set_instance(instance)
+        self.opt.config.load_solution = False
 
         # 6. solve the basis vectors, if provided by manager
         basis_vectors = vector_manager.basis_vectors()
         if basis_vectors:
             for vector in basis_vectors:
-                success = self.solve_instance_warmstart(instance, vector)
+                success = self.solve_instance_appsi(instance, vector)
                 if success:
                     pts = vector_manager.notify()
                     self.solve_records.append((vector, pts))
@@ -192,7 +193,7 @@ class MgaSequencer:
                     'During re-solve loop, a None vector was received.  Process terminated early.'
                 )
                 break
-            success = self.solve_instance_warmstart(instance, vector)
+            success = self.solve_instance_appsi(instance, vector)
             if success:
                 pts = vector_manager.notify()
                 self.solve_records.append((vector, pts))

@@ -79,7 +79,6 @@ class TechActivityVectors(VectorManager):
         self.monitor = True
         self.perf_data = {}
 
-
     def initialize(self) -> None:
         """
         Fill the internal data stores from db and model
@@ -178,7 +177,6 @@ class TechActivityVectors(VectorManager):
         y = [self.perf_data[pt] for pt in pts]
         plt.plot(pts, y)
         plt.savefig(str(fout))
-
 
     def load_normals(self, normals: np.array):
         for vector in normals:
