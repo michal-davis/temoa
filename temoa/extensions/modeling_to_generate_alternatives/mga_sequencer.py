@@ -82,6 +82,8 @@ class MgaSequencer:
         elif self.config.solver_name == 'gurobi':
             self.opt = pyomo_appsi.solvers.Gurobi()
             self.std_opt = pyo.SolverFactory('gurobi')
+            self.options = {'LogFile': './my_gurobi_log.log', 'LPWarmStart': 2}
+            self.opt.gurobi_options = self.options
         elif self.config.solver_name == 'cbc':
             self.std_opt = pyo.SolverFactory('cbc')
 
