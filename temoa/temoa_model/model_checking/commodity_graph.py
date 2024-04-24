@@ -145,24 +145,36 @@ def _graph_connections(
     :param output_path: the output directory
     :return:
     """
-
-    fig = gv.d3(
-        directed_graph,
-        show_menu=True,
-        show_node_label=True,
-        node_label_data_source='label',
-        show_edge_label=True,
-        edge_label_data_source='label',
-        edge_curvature=0.4,
-        graph_height=1000,
-        zoom_factor=1.0,
-        node_drag_fix=True,
-        node_label_size_factor=0.5,
-        layout_algorithm_active=True,
-    )
+    try:
+        fig = gv.d3(
+            directed_graph,
+            show_menu=True,
+            show_node_label=True,
+            node_label_data_source='label',
+            show_edge_label=True,
+            edge_label_data_source='label',
+            edge_curvature=0.4,
+            graph_height=1000,
+            zoom_factor=1.0,
+            node_drag_fix=True,
+            node_label_size_factor=0.5,
+            layout_algorithm_active=True,
+        )
+    except Exception as e:
+        logger.error('Failed to create a figure for the network graph: %s', e)
+        return
     filename = f'Commodity_Graph_{file_label}.html'
     output_path = output_path / filename
-    fig.export_html(output_path, overwrite=True)
+    try:
+        fig.export_html(output_path, overwrite=True)
+    except UnicodeEncodeError as e:
+        logger.warning(
+            'Failed to export the network graph into HTML.  Bad character in names of commodities or '
+            'tech?\n  Error message: %s',
+            e,
+        )
+    except Exception as e:
+        logger.error('Failed to export the network graph into HTML.  Error message: %s', e)
 
 
 def make_nx_graph(connections, edge_colors, edge_weights, layer_map) -> nx.MultiDiGraph:
