@@ -119,4 +119,3 @@ def test_set_consistency(data_name, config_file, set_file, tmp_path):
         for k in cache_extra_sets:
             print(f'{k}: {cached_sets[k]}')
             assert False, '\nCache has extra sets (above)'
-

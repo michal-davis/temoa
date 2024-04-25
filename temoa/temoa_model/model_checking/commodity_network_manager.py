@@ -32,6 +32,7 @@ from typing import Iterable
 
 from temoa.temoa_model.model_checking.commodity_graph import generate_graph
 from temoa.temoa_model.model_checking.commodity_network import CommodityNetwork
+from temoa.temoa_model.model_checking.element_checker import ViableSet
 from temoa.temoa_model.model_checking.network_model_data import NetworkModelData, Tech
 from temoa.temoa_model.temoa_config import TemoaConfig
 
@@ -127,7 +128,7 @@ class CommodityNetworkManager:
             self._analyze_region(region, data=self.filtered_data)
         self.analyzed = True
 
-    def build_filters(self) -> dict:
+    def build_filters(self) -> dict[str, ViableSet]:
         """populate the filters from the data, after network analysis"""
         if not self.analyzed:
             raise RuntimeError('Trying to build filters before network analysis.  Code error')
@@ -147,14 +148,21 @@ class CommodityNetworkManager:
                 valid_input_commodities.add(tech.ic)
                 valid_output_commodities.add(tech.oc)
                 valid_vintages.add(tech.vintage)
+
         filts = {
-            'ritvo': valid_ritvo,
-            'rtv': valid_rtv,
-            'rt': valid_rt,
-            't': valid_t,
-            'v': valid_vintages,
-            'ic': valid_input_commodities,
-            'oc': valid_output_commodities,
+            'ritvo': ViableSet(
+                elements=valid_ritvo, exception_loc=0, exception_vals=ViableSet.REGION_REGEXES
+            ),
+            'rtv': ViableSet(
+                elements=valid_rtv, exception_loc=0, exception_vals=ViableSet.REGION_REGEXES
+            ),
+            'rt': ViableSet(
+                elements=valid_rt, exception_loc=0, exception_vals=ViableSet.REGION_REGEXES
+            ),
+            't': ViableSet(elements=valid_t),
+            'v': ViableSet(elements=valid_vintages),
+            'ic': ViableSet(elements=valid_input_commodities),
+            'oc': ViableSet(elements=valid_output_commodities),
         }
         return filts
 
