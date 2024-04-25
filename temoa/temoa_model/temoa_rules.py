@@ -1936,12 +1936,7 @@ output in separate terms.
 
     # if r == 'global', the constraint is system-wide
 
-    if r == 'global':
-        regions = M.regions
-    elif '+' in r:
-        regions = r.split('+')
-    else:
-        regions = (r,)
+    regions = gather_group_regions(M=M, region=r)
 
     # TODO:  REVIEW THIS:
     # ================= Emissions and Flex and Curtailment =================
@@ -2103,12 +2098,7 @@ def MaxActivity_Constraint(M: 'TemoaModel', r, p, t):
     # r can be an individual region (r='US'), or a combination of regions separated by
     # a + (r='Mexico+US+Canada'), or 'global'.
     # if r == 'global', the constraint is system-wide
-    if r == 'global':
-        reg = M.regions
-    elif '+' in r:
-        reg = r.split('+')
-    else:
-        reg = (r,)
+    reg = gather_group_regions(M=M, region=r)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
