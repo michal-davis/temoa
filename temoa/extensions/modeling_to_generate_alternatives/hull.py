@@ -37,6 +37,11 @@ logger = getLogger(__name__)
 
 class Hull:
     def __init__(self, points: np.ndarray, **kwargs):
+        """
+        Build the initial hull from array of points
+        :param points: an array of points [points, hull dimension]
+        :param kwargs:
+        """
         # the number of columns in the first volley of points sets the dimensions of the hull
         self.dim = points.shape[1]
         if self.dim > points.shape[0]:
