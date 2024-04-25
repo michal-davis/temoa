@@ -279,15 +279,19 @@ def solve_instance(
             solver_suffixes = []
         try:
             if solver_name == 'appsi_highs' and not solver_suffixes:
-                result = optimizer.solve(instance)
+                result: SolverResults = optimizer.solve(instance)
             else:  # we can try it...
-                result = optimizer.solve(instance, suffixes=solver_suffixes)
+                result: SolverResults = optimizer.solve(instance, suffixes=solver_suffixes)
         except RuntimeError as error:
             logger.error('Solver failed to solve and returned an error: %s', error)
             logger.error(
                 'This may be due to asking for suffixes (duals) for an incompatible solver.  '
                 "Try de-selecting 'save_duals' in the config.  (see note in run_actions.py code)"
             )
+            if result:
+                logger.error(
+                    'Solver reported termination condition (if any): %s', result['Solution'].Status
+                )
             SE.write('solver failure.  See log file.')
             sys.exit(-1)
 

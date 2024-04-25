@@ -9,13 +9,13 @@ from logging import getLogger
 from sqlite3 import Connection, OperationalError
 from typing import Sequence
 
-import deprecated
 from pyomo.core import Param, Set
 from pyomo.dataportal import DataPortal
 
 from temoa.extensions.myopic.myopic_index import MyopicIndex
-from temoa.temoa_model.model_checking import network_model_data
+from temoa.temoa_model.model_checking import network_model_data, element_checker
 from temoa.temoa_model.model_checking.commodity_network_manager import CommodityNetworkManager
+from temoa.temoa_model.model_checking.element_checker import ViableSet
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_model import TemoaModel
@@ -83,24 +83,24 @@ class HybridLoader:
         self.manager: CommodityNetworkManager | None = None
 
         # filters for myopic ops
-        self.viable_techs: set[str] = set()
-        self.viable_comms: set[str] = set()
-        self.viable_input_comms: set[str] = set()
-        self.viable_output_comms: set[str] = set()
-        self.viable_vintages: set[int] = set()
-        self.viable_ritvo = set()
-        self.viable_rtv: set[tuple[str, str, int]] = set()
-        self.viable_rt: set[tuple[str, str]] = set()
-        self.viable_rtt = set()  # to support scanning LinkedTech
+        self.viable_techs: ViableSet | None = None
+        self.viable_comms: ViableSet | None = None
+        self.viable_input_comms: ViableSet | None = None
+        self.viable_output_comms: ViableSet | None = None
+        self.viable_vintages: ViableSet | None = None
+        self.viable_ritvo: ViableSet | None = None
+        self.viable_rtv: ViableSet | None = None
+        self.viable_rt: ViableSet | None = None
+        self.viable_rtt: ViableSet | None = None  # to support scanning LinkedTech
         self.efficiency_values: list[tuple] = []
 
     def source_trace_only(self, make_plots: bool = False, myopic_index: MyopicIndex | None = None):
         if myopic_index and not isinstance(myopic_index, MyopicIndex):
             raise ValueError('myopic_index must be an instance of MyopicIndex')
-        self._source_trace(make_plots, myopic_index)
+        self._source_trace(myopic_index)
         self.manager = None  # to prevent possible out-of-synch build from stale data
 
-    def _source_trace(self, make_plots: bool, myopic_index: MyopicIndex = None):
+    def _source_trace(self, myopic_index: MyopicIndex = None):
         network_data = network_model_data.build(self.con, myopic_index=myopic_index)
         cur = self.con.cursor()
         # need periods to execute the source check by [r, p].  At this point, we can only pull from DB
@@ -116,8 +116,7 @@ class HybridLoader:
             }
         self.manager = CommodityNetworkManager(periods=periods, network_data=network_data)
         self.manager.analyze_network()
-        if make_plots:
-            self.manager.make_commodity_plots(self.config)
+        self.manager.analyze_graphs(self.config)
 
     def _build_efficiency_dataset(
         self, use_raw_data=False, myopic_index: MyopicIndex | None = None
@@ -148,28 +147,26 @@ class HybridLoader:
                 'SELECT region, input_comm, tech, vintage, output_comm, efficiency, NULL FROM main.Efficiency'
             ).fetchall()
 
-        # filter/don't filter.
+        # set up filters, if requested...
         if use_raw_data:
             efficiency_entries = [row for row in contents]
             # need to build filters to include everything in the raw efficiency data
             # this will still help filter anything spurious that is not covered by the data
             # in the efficiency table
-            self._clear_filters()
-            for row in contents:
-                r, i, t, v, o, _, _ = row
-                self.viable_ritvo.add((r, i, t, v, o))
-                self.viable_rtv.add((r, t, v))
-                self.viable_rt.add((r, t))
-                self.viable_techs.add(t)
-                self.viable_vintages.add(v)
-                self.viable_input_comms.add(i)
-                self.viable_output_comms.add(o)
-            self.viable_comms = self.viable_input_comms | self.viable_output_comms
-            self.viable_rtt = {(r, t1, t2) for r, t1 in self.viable_rt for t2 in self.viable_techs}
+
+            # for row in contents:
+            #     r, i, t, v, o, _, _ = row
+            #     self.viable_ritvo.add((r, i, t, v, o))
+            #     self.viable_rtv.add((r, t, v))
+            #     self.viable_rt.add((r, t))
+            #     self.viable_techs.add(t)
+            #     self.viable_vintages.add(v)
+            #     self.viable_input_comms.add(i)
+            #     self.viable_output_comms.add(o)
+            # self.viable_comms = self.viable_input_comms | self.viable_output_comms
+            # self.viable_rtt = {(r, t1, t2) for r, t1 in self.viable_rt for t2 in self.viable_techs}
 
         else:  # (always must when myopic)
-            self._clear_filters()
-            filts = {}
             if self.manager:
                 filts = self.manager.build_filters()
             else:
@@ -181,162 +178,27 @@ class HybridLoader:
             self.viable_input_comms = filts['ic']
             self.viable_vintages = filts['v']
             self.viable_output_comms = filts['oc']
-            self.viable_comms = self.viable_input_comms | self.viable_output_comms
-            self.viable_rtt = {(r, t1, t2) for r, t1 in self.viable_rt for t2 in self.viable_techs}
+            self.viable_comms = ViableSet(
+                elements=self.viable_input_comms.elements | self.viable_output_comms.elements
+            )
+            rtt = {
+                (r, t1, t2)
+                for r, t1 in self.viable_rt.elements
+                for t2 in self.viable_techs.elements
+            }
+            self.viable_rtt = ViableSet(
+                elements=rtt, exception_loc=0, exception_vals=ViableSet.REGION_REGEXES
+            )
             efficiency_entries = {
                 (r, i, t, v, o, eff)
                 for r, i, t, v, o, eff, lifetime in contents
-                if (r, i, t, v, o) in self.viable_ritvo
+                if (r, i, t, v, o) in self.viable_ritvo.elements
             }
         logger.debug('polled %d elements from MyopicEfficiency table', len(efficiency_entries))
 
         # book the EfficiencyTable
         # we should sort here for deterministic results after pulling from set
         self.efficiency_values = sorted(efficiency_entries)
-
-    @deprecated.deprecated('outdated...use source tracing approach')
-    def _build_myopic_eff_table(self, myopic_index: MyopicIndex):
-        """
-        refresh all the sets used for filtering from the current contents
-        of the MyopicEfficiency table.  This should normally be called
-        after a Myopic iteration where MyopicEfficiency is updated
-        :return:
-        """
-        cur = self.con.cursor()
-        self._clear_filters()
-        # the sequencer is responsible for updating the MyopicEfficiency table, so we should
-        # just be able to pull directly from it for things that are alive as of the base year
-        contents = cur.execute(
-            'SELECT region, input_comm, tech, vintage, output_comm, efficiency, lifetime  '
-            'FROM MyopicEfficiency '
-            'WHERE vintage + lifetime > ?',
-            (myopic_index.base_year,),
-        ).fetchall()
-        logger.debug('polled %d elements from MyopicEfficiency table', len(contents))
-
-        # We will need to ID the physical commodities for later filtering...
-        raw = cur.execute(
-            "SELECT name FROM main.Commodity WHERE flag = 'p' OR flag = 's'"
-        ).fetchall()
-        phys_commodities = {t[0] for t in raw}
-        assert len(phys_commodities) > 0, 'Failsafe...we should find some!  Did flag change?'
-
-        # We will need to iterate a bit here to:
-        # 1.  Screen all the input commodities to identify "viable" commodities
-        # 2.  Find any tech with PHYSICAL output commodity that is not in set of viable commodities
-        # 3.  Suppress that tech
-        # 4.  re-screen the input commodities
-        # 5.  quit when no more techs are suppressed
-        # 6.  publish viable commodities & viable techs
-
-        # we probably need to keep track of (r, t, v) tuples here because you *could*
-        # have a tech process different things in different vintages/regions based solely
-        # on differences in Efficiency Table
-
-        techs_by_production_output = defaultdict(set)  # {phys_output_comm: { techs } }
-        ok_techs = set()
-        existing_techs = set()
-        suppressed_techs = set()
-        input_commodities = set()
-        for r, c1, t, v, c2, eff, lifetime in contents:
-            row = (r, c1, t, v, c2, eff)
-            if c1 not in phys_commodities:
-                raise ValueError(f'Tech {t} has a non-physical input: {c1}')
-            input_commodities.add(c1)
-            # TODO:  think of alternatives here....
-            # we will add any already built (existing capacity) techs to "OK techs" because they are de-facto
-            # already in existence.  This *might* cause a model warning regarding unused outputs if there is no
-            # longer a receiver for their output.
-
-            # CHANGE HERE.  It is actually possible for an earlier vintage tech to be invalid/problematic
-            # if it produces an output that is not wanted by anything (all possible receivers have been
-            # suppressed).  In that case, the build will crash because the output commodity from that
-            # tech will not be in the legal physical commodities.  So, we do need to screen them too.
-            # will leave the code in case another alternative is discovered.
-
-            # if v < myopic_index.base_year:
-            #     existing_techs.add(row)
-
-            ok_techs.add(row)
-            # we screen here to not worry about demand/emission outputs
-            if c2 in phys_commodities:
-                techs_by_production_output[c2].add(row)
-
-        # identify the "illegal" outputs as any output that is not in demand by something else or a demand commodity
-        # itself
-        illegal_outputs = set(techs_by_production_output.keys()) - input_commodities
-
-        # we want to exclude any existing techs from this screening...  they should persist, even if no value ATT.
-        # removing them from ok_techs will give them a free pass and  enable the loop below to complete
-        ok_techs -= existing_techs
-        # this needs to be done iteratively because pulling 1 tech *might* make an output from another tech
-        # illegal
-        iter_count = 0
-        while illegal_outputs:
-            for output in illegal_outputs:
-                # mark all the techs that push that output as "suppressed", UNLESS they are existing capacity techs
-                # this should effectively suppress any NEW techs in this window, but still allow legacy/existing ones
-                # through
-                suppressed_techs.update(techs_by_production_output[output])
-            # remove from viable
-            ok_techs -= suppressed_techs
-            # re-capture tech by output
-            techs_by_production_output.clear()
-            for row in ok_techs:
-                r, c1, t, v, c2, eff = row
-                if c2 in phys_commodities:
-                    techs_by_production_output[c2].add(row)
-
-            # re-screen for a new list of viable commodities from inputs
-            input_commodities = {row[1] for row in ok_techs}
-            illegal_outputs = set(techs_by_production_output.keys()) - input_commodities
-            iter_count += 1
-            if iter_count % 10 == 0:
-                print(f'Iteration {iter_count}, suppressed techs: {len(suppressed_techs)}')
-
-        # log the deltas
-        if suppressed_techs:
-            logger.debug('Reduced techs in Efficiency from %d to %d', len(contents), len(ok_techs))
-            for tech in suppressed_techs:
-                logger.info(
-                    'Tech: %s\n'
-                    ' is SUPPRESSED as it has a Physical Commodity output that has no viable '
-                    'receiver',
-                    tech,
-                )
-        if len(input_commodities) < len(raw):
-            logger.debug(
-                'Reduced Input (Physical/Supply) Commodities from %d to %d by '
-                'dropping unused commodities: %s',
-                len(phys_commodities),
-                len(input_commodities),
-                phys_commodities - input_commodities,
-            )
-
-        # now, we want to use the existing techs unioned with the screened new techs to form our filter basis
-        for row in ok_techs | existing_techs:
-            r, c1, t, v, c2, _ = row
-            self.viable_techs.add(t)
-            self.viable_input_comms.add(c1)
-            self.viable_rtv.add((r, t, v))
-            self.viable_vintages.add(v)
-            self.viable_output_comms.add(c2)
-        self.viable_rt = {(r, t) for r, t, v in self.viable_rtv}
-        self.viable_comms = self.viable_input_comms | self.viable_output_comms
-
-        # book the EfficiencyTable
-        # we should sort here for deterministic results after pulling from set
-        self.efficiency_values = sorted(ok_techs | existing_techs)
-
-    def _clear_filters(self):
-        self.viable_techs.clear()
-        self.viable_input_comms.clear()
-        self.viable_output_comms.clear()
-        self.viable_comms.clear()
-        self.viable_rtv.clear()
-        self.viable_rt.clear()
-        self.viable_vintages.clear()
-        self.efficiency_values.clear()
 
     def table_exists(self, table_name: str) -> bool:
         """
@@ -387,9 +249,7 @@ class HybridLoader:
 
         if self.config.source_trace or self.config.scenario_mode == TemoaMode.MYOPIC:
             use_raw_data = False
-            self._source_trace(
-                make_plots=self.config.plot_commodity_network, myopic_index=myopic_index
-            )
+            self._source_trace(myopic_index=myopic_index)
         else:
             use_raw_data = True
 
@@ -406,15 +266,16 @@ class HybridLoader:
         def load_element(
             c: Set | Param,
             values: Sequence[tuple],
-            validation: set | None = None,
-            val_loc: tuple = None,
+            validation: ViableSet | None = None,
+            val_loc: tuple = (0,),
         ):
             """
             Helper to alleviate some typing!
             Expects that the values passed in are an iterable of tuples, like a standard
             query result.  Note that any filtering is disregarded if there is no myopic index in use
             :param c: the model component to load
-            :param values: the keys for param or the item values for set as tuples
+            :param values: the keys for param or the item values for set as tuples (should be Sequence to help
+            get deterministic results)
             :param validation: the set to validate the keys/set value against
             :param val_loc: tuple of the positions of r, t, v in the key for validation
             :return: None
@@ -425,94 +286,26 @@ class HybridLoader:
             if not isinstance(values[0], tuple):
                 raise ValueError('values must be an iterable of tuples')
 
+            if use_raw_data or validation is None:
+                screened = list(values)
+            else:
+                try:
+                    screened = element_checker.filter_elements(
+                        values=values, validation=validation, value_locations=val_loc
+                    )
+                except ValueError as e:
+                    raise ValueError(
+                        'Failed to validate members of %s.  Coding error likely.'
+                        '\n%s' % (c.name, e)
+                    )
             match c:
-                case Set():  # it is a pyomo Set
-                    # note:  we will put the set values into lists to establish order.  Passing a set into
-                    #        pyomo as an initializer will raise a warning about initializing from non-ordered...
-
-                    # check for multi-dim sets
-                    if len(values) > 0 and len(values[0]) > 1:  # this contains multi-dim values
-                        if validation and mi:
-                            if not val_loc:
-                                raise ValueError(
-                                    'Trying to use a validation but missing location field in call.'
-                                )
-                            elif validation is self.viable_rtv:
-                                data[c.name] = [
-                                    t
-                                    for t in values
-                                    if (t[val_loc[0]], t[val_loc[1]], t[val_loc[2]])
-                                    in self.viable_rtv
-                                ]
-                            elif validation is self.viable_rt:
-                                data[c.name] = [
-                                    t
-                                    for t in values
-                                    if (t[val_loc[0]], t[val_loc[1]]) in self.viable_rt
-                                ]
-                            elif validation is self.viable_vintages:
-                                data[c.name] = [
-                                    t for t in values if t[val_loc[0]] in self.viable_vintages
-                                ]
-                            elif validation is self.viable_output_comms:
-                                data[c.name] = [
-                                    t for t in values if t[val_loc[0]] in self.viable_output_comms
-                                ]
-                            else:
-                                raise NotImplementedError(
-                                    f'that validator is not yet incorporated for use in validating: {c.name}'
-                                )
-                        else:
-                            data[c.name] = [t for t in values]
-
-                    elif validation and mi:
-                        data[c.name] = [t[0] for t in values if t[0] in validation]
-                    else:
-                        data[c.name] = [t[0] for t in values]
-                case Param():  # c is a pyomo Param
-                    if validation and mi:
-                        if validation is self.viable_rtv:
-                            if not val_loc:
-                                raise ValueError(
-                                    'Trying to validate against r, t, v and got no locations'
-                                )
-                            data[c.name] = {
-                                t[:-1]: t[-1]
-                                for t in values
-                                if (t[val_loc[0]], t[val_loc[1]], t[val_loc[2]]) in self.viable_rtv
-                            }
-                            # quick check for region-groups which shouldn't show up here...
-                            regions_screened = {t[val_loc[0]] for t in values}
-                            groups_discovered = {t for t in regions_screened if '+' in t}
-                            if len(groups_discovered) > 0:
-                                logger.error(
-                                    'Region-Groups discovered during screen of:  %s.'
-                                    'likely error in loader / param description.',
-                                    c.name,
-                                )
-                        elif validation is self.viable_rt:
-                            if not val_loc:
-                                raise ValueError(
-                                    'Trying to validate against r, t and got no locations'
-                                )
-                            data[c.name] = {
-                                t[:-1]: t[-1]
-                                for t in values
-                                if (t[val_loc[0]], t[val_loc[1]]) in self.viable_rt
-                            }
-                        else:
-                            if val_loc:
-                                data[c.name] = {
-                                    t[:-1]: t[-1] for t in values if t[val_loc[0]] in validation
-                                }
-                            else:
-                                data[c.name] = {
-                                    t[:-1]: t[-1] for t in values if t[:-1] in validation
-                                }
-                    else:
-                        data[c.name] = {t[:-1]: t[-1] for t in values}
-                case _:
-                    raise ValueError(f'Component type unrecognized: {c}, {type(c)}')
+                case Set():
+                    if screened[0] == 1:  # set of individual values
+                        data[c.name] = [t[0] for t in screened]
+                    else:  # set of tuples, pass directly...
+                        data[c.name] = screened
+                case Param():
+                    data[c.name] = {t[:-1]: t[-1] for t in screened}
 
         def load_indexed_set(indexed_set: Set, index_value, element, element_validator):
             """
@@ -520,10 +313,10 @@ class HybridLoader:
             :param indexed_set: the name of the pyomo Set
             :param index_value: the index value to load into
             :param element: the value to add to the indexed set
-            :param element_validator: a set of legal elements for the element to be added
+            :param element_validator: a set of legal elements for the element to be added, or None for all elements
             :return: None
             """
-            if element not in element_validator:
+            if element_validator and element not in element_validator:
                 return
             data_store = data.get(indexed_set.name, defaultdict(list))
             data_store[index_value].append(element)
@@ -658,12 +451,13 @@ class HybridLoader:
 
         if self.table_exists('TechGroupMember'):
             raw = cur.execute('SELECT group_name, tech FROM main.TechGroupMember').fetchall()
+            validator = self.viable_techs.elements if self.viable_techs else None
             for row in raw:
                 load_indexed_set(
                     M.tech_group_members,
                     index_value=row[0],
                     element=row[1],
-                    element_validator=self.viable_techs,
+                    element_validator=validator,
                 )
 
         # tech_annual
@@ -1199,10 +993,6 @@ class HybridLoader:
             load_element(M.EmissionLimit, raw)
 
         # EmissionActivity
-        # this could be ugly too.  We can have region groups here, so for this to be valid:
-        # 1.  r-t-v combo must be valid
-        # 2.  The input/output commodities must be viable also
-        # 3.  The emission commodities are separate
         # The current emission constraint screens by valid inputs, so if it is NOT
         # built in a particular region, this should still be OK
         if self.table_exists('EmissionActivity'):
@@ -1211,18 +1001,12 @@ class HybridLoader:
                     'SELECT region, emis_comm, input_comm, tech, vintage, output_comm, activity '
                     'FROM main.EmissionActivity '
                 ).fetchall()
-                filtered = [
-                    (r, e, i, t, v, o, val)
-                    for r, e, i, t, v, o, val in raw
-                    if (r, i, t, v, o) in self.viable_ritvo
-                ]
-                load_element(M.EmissionActivity, filtered)
             else:
                 raw = cur.execute(
                     'SELECT region, emis_comm, input_comm, tech, vintage, output_comm, activity '
                     'FROM main.EmissionActivity '
                 ).fetchall()
-                load_element(M.EmissionActivity, raw)
+            load_element(M.EmissionActivity, raw, self.viable_ritvo, (0, 2, 3, 4, 5))
 
         # LinkedTechs
         # Note:  Both of the linked techs must be viable.  As this is non period/vintage

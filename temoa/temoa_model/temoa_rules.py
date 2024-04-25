@@ -1936,12 +1936,7 @@ output in separate terms.
 
     # if r == 'global', the constraint is system-wide
 
-    if r == 'global':
-        regions = M.regions
-    elif '+' in r:
-        regions = r.split('+')
-    else:
-        regions = (r,)
+    regions = gather_group_regions(M=M, region=r)
 
     # TODO:  REVIEW THIS:
     # ================= Emissions and Flex and Curtailment =================
@@ -2103,12 +2098,7 @@ def MaxActivity_Constraint(M: 'TemoaModel', r, p, t):
     # r can be an individual region (r='US'), or a combination of regions separated by
     # a + (r='Mexico+US+Canada'), or 'global'.
     # if r == 'global', the constraint is system-wide
-    if r == 'global':
-        reg = M.regions
-    elif '+' in r:
-        reg = r.split('+')
-    else:
-        reg = (r,)
+    reg = gather_group_regions(M=M, region=r)
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -2119,6 +2109,7 @@ def MaxActivity_Constraint(M: 'TemoaModel', r, p, t):
             for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
             for s in M.time_season
             for d in M.time_of_day
+            if (r, p, s, d, S_i, t, S_v, S_o) in M.V_FlowOut
         )
     else:
         activity_rpt = sum(
@@ -2127,6 +2118,7 @@ def MaxActivity_Constraint(M: 'TemoaModel', r, p, t):
             for S_v in M.processVintages.get((r, p, t), [])
             for S_i in M.processInputs[r, p, t, S_v]
             for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+            if (r, p, S_i, t, S_v, S_o) in M.V_FlowOutAnnual
         )
 
     max_act = value(M.MaxActivity[r, p, t])
@@ -2172,6 +2164,7 @@ def MinActivity_Constraint(M: 'TemoaModel', r, p, t):
             for S_o in M.ProcessOutputsByInput[_r, p, t, S_v, S_i]
             for s in M.time_season
             for d in M.time_of_day
+            if (_r, p, s, d, S_i, t, S_v, S_o) in M.V_FlowOut
         )
     else:
         activity_rpt = sum(
@@ -2180,6 +2173,7 @@ def MinActivity_Constraint(M: 'TemoaModel', r, p, t):
             for S_v in M.processVintages.get((_r, p, t), [])
             for S_i in M.processInputs[_r, p, t, S_v]
             for S_o in M.ProcessOutputsByInput[_r, p, t, S_v, S_i]
+            if (_r, p, S_i, t, S_v, S_o) in M.V_FlowOutAnnual
         )
 
     min_act = value(M.MinActivity[r, p, t])
@@ -2228,6 +2222,7 @@ def MinActivityGroup_Constraint(M: 'TemoaModel', r, p, g):
             for S_o in M.ProcessOutputsByInput[r_i, p, S_t, S_v, S_i]
             for s in M.time_season
             for d in M.time_of_day
+            if (r_i, p, s, d, S_i, S_t, S_v, S_o) in M.V_FlowOut
         )
 
         activity_p_annual += sum(
@@ -2237,6 +2232,7 @@ def MinActivityGroup_Constraint(M: 'TemoaModel', r, p, g):
             for S_v in M.processVintages[r_i, p, S_t]
             for S_i in M.processInputs[r_i, p, S_t, S_v]
             for S_o in M.ProcessOutputsByInput[r_i, p, S_t, S_v, S_i]
+            if (r_i, p, S_i, S_t, S_v, S_o) in M.V_FlowOutAnnual
         )
     min_act = value(M.MinActivityGroup[r, p, g])
     expr = activity_p + activity_p_annual >= min_act
@@ -2280,6 +2276,7 @@ def MaxActivityGroup_Constraint(M: 'TemoaModel', r, p, g):
             for S_o in M.ProcessOutputsByInput[r_i, p, S_t, S_v, S_i]
             for s in M.time_season
             for d in M.time_of_day
+            if (r_i, p, s, d, S_i, S_t, S_v, S_o) in M.V_FlowOut
         )
         activity_p_annual += sum(
             M.V_FlowOutAnnual[r_i, p, S_i, S_t, S_v, S_o]
@@ -2288,6 +2285,7 @@ def MaxActivityGroup_Constraint(M: 'TemoaModel', r, p, g):
             for S_v in M.processVintages[r_i, p, S_t]
             for S_i in M.processInputs[r_i, p, S_t, S_v]
             for S_o in M.ProcessOutputsByInput[r_i, p, S_t, S_v, S_i]
+            if (r_i, p, S_i, S_t, S_v, S_o) in M.V_FlowOutAnnual
         )
 
     max_act = value(M.MaxActivityGroup[r, p, g])
@@ -2585,6 +2583,7 @@ def MaxActivityShare_Constraint(M: 'TemoaModel', r, p, t, g):
             for S_o in M.ProcessOutputsByInput[_r, p, t, S_v, S_i]
             for s in M.time_season
             for d in M.time_of_day
+            if (_r, p, s, d, S_i, t, S_v, S_o) in M.V_FlowOut
         )
     else:
         activity_rpt = sum(
@@ -2593,6 +2592,7 @@ def MaxActivityShare_Constraint(M: 'TemoaModel', r, p, t, g):
             for S_v in M.processVintages.get((_r, p, t), [])
             for S_i in M.processInputs[_r, p, t, S_v]
             for S_o in M.ProcessOutputsByInput[_r, p, t, S_v, S_i]
+            if (_r, p, S_i, t, S_v, S_o) in M.V_FlowOutAnnual
         )
 
     activity_t = activity_rpt
@@ -2606,6 +2606,7 @@ def MaxActivityShare_Constraint(M: 'TemoaModel', r, p, t, g):
         for S_o in M.ProcessOutputsByInput[_r, p, S_t, S_v, S_i]
         for s in M.time_season
         for d in M.time_of_day
+        if (_r, p, s, d, S_i, S_t, S_v, S_o) in M.V_FlowOut
     )
 
     activity_p_annual = sum(
@@ -2616,6 +2617,7 @@ def MaxActivityShare_Constraint(M: 'TemoaModel', r, p, t, g):
         for S_v in M.processVintages[_r, p, S_t]
         for S_i in M.processInputs[_r, p, S_t, S_v]
         for S_o in M.ProcessOutputsByInput[_r, p, S_t, S_v, S_i]
+        if (_r, p, S_i, S_t, S_v, S_o) in M.V_FlowOutAnnual
     )
     activity_group = activity_p + activity_p_annual
     max_activity_share = value(M.MaxActivityShare[r, p, t, g])
@@ -2758,6 +2760,7 @@ def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
             for S_i in M.processInputs[_r, p, t, S_v]
             for s in M.time_season
             for d in M.time_of_day
+            if (_r, p, s, d, S_i, t, S_v, o) in M.V_FlowOut
         )
     else:
         activity_rpt = sum(
@@ -2765,6 +2768,7 @@ def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
             for _r in regions
             for S_v in M.processVintages.get((_r, p, t), [])
             for S_i in M.processInputs[_r, p, t, S_v]
+            if (_r, p, S_i, t, S_v, o) in M.V_FlowOutAnnual
         )
 
     max_possible_activity_rpt = (
@@ -2810,6 +2814,7 @@ def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
             for S_i in M.processInputs[_r, p, t, S_v]
             for s in M.time_season
             for d in M.time_of_day
+            if (_r, p, s, d, S_i, t, S_v, o) in M.V_FlowOut
         )
     else:
         activity_rpt = sum(
@@ -2817,6 +2822,7 @@ def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
             for _r in regions
             for S_v in M.processVintages.get((_r, p, t), [])
             for S_i in M.processInputs[_r, p, t, S_v]
+            if (_r, p, S_i, t, S_v, o) in M.V_FlowOutAnnual
         )
 
     max_possible_activity_rpt = (
