@@ -384,8 +384,10 @@ class HybridLoader:
             if self.table_exists(table):
                 raw = cur.execute(f'SELECT {field_name} from main.{table}').fetchall()
                 regions_and_groups.update({t[0] for t in raw})
+                if None in regions_and_groups:
+                    raise ValueError('Table %s appears to have an empty entry for region.' % table)
         # filter to those that contain "+" and sort (for deterministic pyomo behavior)
-        # TODO:  RN, this set contains all regular regions, inteconnects, AND groups, so we don't filter ... yet
+        # TODO:  RN, this set contains all regular regions, interconnects, AND groups, so we don't filter ... yet
         list_of_groups = sorted((t,) for t in regions_and_groups)  # if "+" in t or t=='global')
         load_element(M.RegionalGlobalIndices, list_of_groups)
 

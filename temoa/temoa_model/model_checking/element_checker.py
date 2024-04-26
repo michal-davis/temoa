@@ -156,8 +156,6 @@ def filter_elements(
     res = []
 
     for item in values:
-        if len(item) > 1 and item[0] == 'global':
-            pass
         # check the "base case" first:  it's in the fundamental elements
         element = itemgetter(*value_locations)(item)
         if not isinstance(element, tuple):
