@@ -179,12 +179,10 @@ class HybridLoader:
             self.viable_vintages = filts['v']
             self.viable_output_comms = filts['oc']
             self.viable_comms = ViableSet(
-                elements=self.viable_input_comms.elements | self.viable_output_comms.elements
+                elements=self.viable_input_comms.members | self.viable_output_comms.members
             )
             rtt = {
-                (r, t1, t2)
-                for r, t1 in self.viable_rt.elements
-                for t2 in self.viable_techs.elements
+                (r, t1, t2) for r, t1 in self.viable_rt.members for t2 in self.viable_techs.members
             }
             self.viable_rtt = ViableSet(
                 elements=rtt, exception_loc=0, exception_vals=ViableSet.REGION_REGEXES
@@ -192,7 +190,7 @@ class HybridLoader:
             efficiency_entries = {
                 (r, i, t, v, o, eff)
                 for r, i, t, v, o, eff, lifetime in contents
-                if (r, i, t, v, o) in self.viable_ritvo.elements
+                if (r, i, t, v, o) in self.viable_ritvo.members
             }
         logger.debug('polled %d elements from MyopicEfficiency table', len(efficiency_entries))
 
@@ -280,8 +278,6 @@ class HybridLoader:
             :param val_loc: tuple of the positions of r, t, v in the key for validation
             :return: None
             """
-            if c.name == 'MaxActivity':
-                pass
             if len(values) == 0:
                 logger.info('table, but no (usable) values for param or set: %s', c.name)
                 return
@@ -455,7 +451,7 @@ class HybridLoader:
 
         if self.table_exists('TechGroupMember'):
             raw = cur.execute('SELECT group_name, tech FROM main.TechGroupMember').fetchall()
-            validator = self.viable_techs.elements if self.viable_techs else None
+            validator = self.viable_techs.members if self.viable_techs else None
             for row in raw:
                 load_indexed_set(
                     M.tech_group_members,
@@ -1057,6 +1053,10 @@ class HybridLoader:
 
         # StorageInit
         # TODO:  DB table is busted / removed now... defer!
+
+        # For T/S:  dump the size of all data elements into the log
+        # temp = '\n'.join((f'{k} : {len(v)}' for k, v in data.items()))
+        # logger.info(temp)
 
         # pyomo namespace format has data[namespace][idx]=value
         # the default namespace is None, thus...

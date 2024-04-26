@@ -156,7 +156,10 @@ def test_dimension_measurement():
     assert ViableSet(elements).dim == 1
 
     elements = [2000, 2001]
-    assert ViableSet(elements).dim == 1
+    vs = ViableSet(elements)
+    assert vs.dim == 1
+    assert vs.members == {2000, 2001}
+    assert vs.member_tuples == {(2000,), (2001,)}
 
     elements = []
     assert ViableSet(elements).dim == 0
