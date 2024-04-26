@@ -280,6 +280,8 @@ class HybridLoader:
             :param val_loc: tuple of the positions of r, t, v in the key for validation
             :return: None
             """
+            if c.name == 'MaxActivity':
+                pass
             if len(values) == 0:
                 logger.info('table, but no (usable) values for param or set: %s', c.name)
                 return
@@ -951,7 +953,7 @@ class HybridLoader:
                 raw = cur.execute(
                     'SELECT region, period, tech, min_act FROM main.MinActivity '
                 ).fetchall()
-            load_element(M.MinActivity, raw, self.viable_rt, (1, 2))
+            load_element(M.MinActivity, raw, self.viable_rt, (0, 2))
 
         # MinAnnualCapacityFactor
         if self.table_exists('MinAnnualCapacityFactor'):

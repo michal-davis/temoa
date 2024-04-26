@@ -147,14 +147,17 @@ def filter_elements(
         raise ValueError("'validation' must be an instance of ViableSet")
     if len(value_locations) != validation.dim:
         raise ValueError('the value locations must have same dimensionality as the validation set')
-    # reduce the non-excepted elements and compare them, in case needed
+    # determine the location of the exempted items for comparison by removing the exempted location
+    locs = None
     if validation.val_exceptions:
-        locs = list(range(len(value_locations)))
+        locs = list(value_locations)
         locs.remove(validation.exception_loc)
 
     res = []
 
     for item in values:
+        if len(item) > 1 and item[0] == 'global':
+            pass
         # check the "base case" first:  it's in the fundamental elements
         element = itemgetter(*value_locations)(item)
         if not isinstance(element, tuple):

@@ -102,6 +102,31 @@ params = [
             ('horse+coat', 1, 99),
         ],
     },
+    {
+        'name': 'use of defaults with multi-dim params',
+        'filt': ViableSet(
+            [('a', 1), ('b', 2)],
+            exception_loc=0,
+            exception_vals=ViableSet.REGION_REGEXES,
+        ),
+        'testers': [
+            ('a', 'stuff', 1, 0.2),
+            ('b', 'stuff', 2, 1.5),
+            ('a', 'other', 3, 8.22),
+            ('global', 33, 1, 22),
+            ('global', 1, 77, 66),  # fail 77
+            ('a', 'zz top', 1, None),
+            ('horse+coat', 'ugly', 1, 99),  # pass, '+' in regexes, and '1' is OK too!
+        ],
+        'locs': (0, 2),
+        'expected': [
+            ('a', 'stuff', 1, 0.2),
+            ('b', 'stuff', 2, 1.5),
+            ('global', 33, 1, 22),
+            ('a', 'zz top', 1, None),
+            ('horse+coat', 'ugly', 1, 99),  # pass, '+' in regexes, and '1' is OK too!
+        ],
+    },
 ]
 
 
