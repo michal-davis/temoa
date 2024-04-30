@@ -169,6 +169,7 @@ class TechActivityVectors(VectorManager):
         if len(self.hull_points) > 10:
             hull = Hull(self.hull_points)
             volume = hull.volume
+            logger.info(f'Tracking hull at {volume}')
             self.perf_data.update({len(self.hull_points): volume})
 
     def finalize_tracker(self):
@@ -188,6 +189,7 @@ class TechActivityVectors(VectorManager):
     def next_input_vector(self) -> Expression | None:
         if self.vector_queue.qsize() <= 3:
             print('running low...refreshing the vectors')
+            logger.info('running low...refreshing the vectors')
             self.basis_runs_complete()
         if not self.vector_queue or self.input_vectors_available() == 0:
             return None
