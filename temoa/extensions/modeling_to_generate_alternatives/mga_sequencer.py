@@ -43,6 +43,7 @@ from temoa.extensions.modeling_to_generate_alternatives.mga_constants import Mga
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.hybrid_loader import HybridLoader
 from temoa.temoa_model.run_actions import build_instance
+from temoa.temoa_model.table_writer import TableWriter
 from temoa.temoa_model.temoa_config import TemoaConfig
 from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_rules import TotalCost_rule
@@ -99,12 +100,15 @@ class MgaSequencer:
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
         self.iteration_limit = config.mga_inputs.get('iteration_limit', 50)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
-        self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.01)
+        self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.05)
 
         # internal records
         self.solve_records: list[tuple[Expression, Sequence[float]]] = []
         """(solve vector, resulting axis vector)"""
         self.solve_count = 0
+
+        # output handling
+        self.writer = TableWriter(self.config)
 
         logger.info(
             'Initialized MGA sequencer with MGA Axis %s and weighting %s',
@@ -180,6 +184,7 @@ class MgaSequencer:
                     pts = vector_manager.notify()
                     self.solve_records.append((vector, pts))
                 self.process_solve_results(instance, vector)
+                self.solve_count += 1
             vector_manager.basis_runs_complete()  # notification...
 
         # 7. Execute re-solve loop until stopping conditions are met
@@ -257,7 +262,11 @@ class MgaSequencer:
         return res.termination_condition == pyomo_appsi.base.TerminationCondition.optimal
 
     def process_solve_results(self, instance, vector):
-        pass
+        # cheap label...
+        self.orig_label = self.config.scenario
+        self.config.scenario = self.orig_label + f'-{self.solve_count}'
+        self.writer._get_tech_sectors()
+        self.writer.write_capacity_tables(M=instance)
 
     def __del__(self):
         self.con.close()
