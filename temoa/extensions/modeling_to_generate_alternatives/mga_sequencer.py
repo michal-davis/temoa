@@ -85,11 +85,11 @@ class MgaSequencer:
             self.std_opt = pyo.SolverFactory('gurobi')
             self.options = {
                 'LogFile': './my_gurobi_log.log',
-                # 'LPWarmStart': 2,  # pass basis
+                'LPWarmStart': 1,  # pass basis
                 'TimeLimit': 1800,  # seconds = 30min
                 'FeasibilityTol': 1e-4,  # default = 1e-6, we only need 'rough' solutions
-                'Crossover': 0,  # disabled
-                'Method': 2,  # Barrier ONLY
+                # 'Crossover': 0,  # disabled
+                # 'Method': 2,  # Barrier ONLY
             }
             self.opt.gurobi_options = self.options
         elif self.config.solver_name == 'cbc':
