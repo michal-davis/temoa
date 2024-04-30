@@ -179,12 +179,10 @@ class HybridLoader:
             self.viable_vintages = filts['v']
             self.viable_output_comms = filts['oc']
             self.viable_comms = ViableSet(
-                elements=self.viable_input_comms.elements | self.viable_output_comms.elements
+                elements=self.viable_input_comms.members | self.viable_output_comms.members
             )
             rtt = {
-                (r, t1, t2)
-                for r, t1 in self.viable_rt.elements
-                for t2 in self.viable_techs.elements
+                (r, t1, t2) for r, t1 in self.viable_rt.members for t2 in self.viable_techs.members
             }
             self.viable_rtt = ViableSet(
                 elements=rtt, exception_loc=0, exception_vals=ViableSet.REGION_REGEXES
@@ -192,7 +190,7 @@ class HybridLoader:
             efficiency_entries = {
                 (r, i, t, v, o, eff)
                 for r, i, t, v, o, eff, lifetime in contents
-                if (r, i, t, v, o) in self.viable_ritvo.elements
+                if (r, i, t, v, o) in self.viable_ritvo.members
             }
         logger.debug('polled %d elements from MyopicEfficiency table', len(efficiency_entries))
 
@@ -382,8 +380,10 @@ class HybridLoader:
             if self.table_exists(table):
                 raw = cur.execute(f'SELECT {field_name} from main.{table}').fetchall()
                 regions_and_groups.update({t[0] for t in raw})
+                if None in regions_and_groups:
+                    raise ValueError('Table %s appears to have an empty entry for region.' % table)
         # filter to those that contain "+" and sort (for deterministic pyomo behavior)
-        # TODO:  RN, this set contains all regular regions, inteconnects, AND groups, so we don't filter ... yet
+        # TODO:  RN, this set contains all regular regions, interconnects, AND groups, so we don't filter ... yet
         list_of_groups = sorted((t,) for t in regions_and_groups)  # if "+" in t or t=='global')
         load_element(M.RegionalGlobalIndices, list_of_groups)
 
@@ -451,7 +451,7 @@ class HybridLoader:
 
         if self.table_exists('TechGroupMember'):
             raw = cur.execute('SELECT group_name, tech FROM main.TechGroupMember').fetchall()
-            validator = self.viable_techs.elements if self.viable_techs else None
+            validator = self.viable_techs.members if self.viable_techs else None
             for row in raw:
                 load_indexed_set(
                     M.tech_group_members,
@@ -951,7 +951,7 @@ class HybridLoader:
                 raw = cur.execute(
                     'SELECT region, period, tech, min_act FROM main.MinActivity '
                 ).fetchall()
-            load_element(M.MinActivity, raw, self.viable_rt, (1, 2))
+            load_element(M.MinActivity, raw, self.viable_rt, (0, 2))
 
         # MinAnnualCapacityFactor
         if self.table_exists('MinAnnualCapacityFactor'):
@@ -1053,6 +1053,10 @@ class HybridLoader:
 
         # StorageInit
         # TODO:  DB table is busted / removed now... defer!
+
+        # For T/S:  dump the size of all data elements into the log
+        # temp = '\n'.join((f'{k} : {len(v)}' for k, v in data.items()))
+        # logger.info(temp)
 
         # pyomo namespace format has data[namespace][idx]=value
         # the default namespace is None, thus...

@@ -107,18 +107,27 @@ class ViableSet:
         self._update()
 
     @property
-    def elements(self):
-        return self._elements.copy()
+    def member_tuples(self):
+        """the elements of the membership set AS TUPLES, including singleton tuples"""
+        return self._elements
 
     @staticmethod
     def tupleize(element):
         return element if isinstance(element, tuple) else (element,)
 
-    @elements.setter
-    def elements(self, elements):
+    @member_tuples.setter
+    def member_tuples(self, elements):
         self._elements = {self.tupleize(element) for element in elements}
         self.calc_dim()
         self._update()
+
+    @property
+    def members(self):
+        """the members of the validation set"""
+        if self.dim > 1:
+            return self.member_tuples
+        else:
+            return {t[0] for t in self.member_tuples}
 
 
 # dev note:  The reason for this filtering construct is to allow passage of items that either
@@ -147,9 +156,10 @@ def filter_elements(
         raise ValueError("'validation' must be an instance of ViableSet")
     if len(value_locations) != validation.dim:
         raise ValueError('the value locations must have same dimensionality as the validation set')
-    # reduce the non-excepted elements and compare them, in case needed
+    # determine the location of the exempted items for comparison by removing the exempted location
+    locs = None
     if validation.val_exceptions:
-        locs = list(range(len(value_locations)))
+        locs = list(value_locations)
         locs.remove(validation.exception_loc)
 
     res = []
@@ -159,7 +169,7 @@ def filter_elements(
         element = itemgetter(*value_locations)(item)
         if not isinstance(element, tuple):
             element = (element,)
-        if element in validation.elements:
+        if element in validation.member_tuples:
             res.append(item)
         elif validation.val_exceptions:  # check each of the exceptions
             if (
