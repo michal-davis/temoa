@@ -84,7 +84,7 @@ class MgaSequencer:
             self.opt = pyomo_appsi.solvers.Gurobi()
             self.std_opt = pyo.SolverFactory('gurobi')
             self.options = {
-                'LogFile': './my_gurobi_log.log',
+                # 'LogFile': './my_gurobi_log.log',
                 'LPWarmStart': 2,  # pass basis
                 'TimeLimit': 3600 * 4,  # seconds = 4hr
                 'FeasibilityTol': 1e-4,  # default = 1e-6, we only need 'rough' solutions
@@ -101,6 +101,7 @@ class MgaSequencer:
         if not self.mga_axis:
             logger.warning('No MGA Axis specified.  Using default:  Activity by Tech Category')
             self.mga_axis = MgaAxis.TECH_CATEGORY_ACTIVITY
+
         self.mga_weighting = config.mga_inputs.get('weighting')
         if not self.mga_weighting:
             logger.warning('No MGA Weighting specified.  Using default: Hull Expansion')
@@ -148,7 +149,6 @@ class MgaSequencer:
 
         # 3. Persistent solver setup
 
-        # self.opt.set_instance(instance)
         tic = datetime.now()
         # ============ First Solve ============
         res: Results = self.opt.solve(instance)
