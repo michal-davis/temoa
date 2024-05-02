@@ -158,6 +158,27 @@ class TableWriter:
         for table in all_output_tables:
             cur.execute(f'DELETE FROM {table} WHERE scenario = ?', (self.config.scenario,))
         self.con.commit()
+        self.clear_iterative_runs()
+
+    def clear_all_scenarios(self):
+        cur = self.con.cursor()
+        for table in all_output_tables:
+            cur.execute(
+                f'DELETE FROM {table} WHERE 1',
+            )
+        self.con.commit()
+
+    def clear_iterative_runs(self):
+        """
+        clear runs that are iterative extensions to the scenario name
+        Ex:  scenario = 'Red Monkey" ... will clear "Red Monkey-1, Red Monkey-2, Red Monkey-3, Red Monkey-4'
+        :return: None
+        """
+        target = self.config.scenario + '-%'  # the dash followed by wildcard for anything after
+        cur = self.con.cursor()
+        for table in all_output_tables:
+            cur.execute(f'DELETE FROM {table} WHERE scenario like ?', (target,))
+        self.con.commit()
 
     def write_objective(self, M: TemoaModel) -> None:
         """Write the value of all ACTIVE objectives to the DB"""
@@ -193,10 +214,13 @@ class TableWriter:
         self.con.executemany(qry, data)
         self.con.commit()
 
-    def write_capacity_tables(self, M: TemoaModel) -> None:
+    def write_capacity_tables(self, M: TemoaModel, iteration: int | None = None) -> None:
         """Write the capacity tables to the DB"""
         if not self.tech_sectors:
             raise RuntimeError('tech sectors not available... code error')
+        scenario = self.config.scenario
+        if iteration:
+            scenario = scenario + f'-{iteration}'
         # Built Capacity
         data = []
         for r, t, v in M.V_NewCapacity:
@@ -205,7 +229,7 @@ class TableWriter:
                 s = self.tech_sectors.get(t)
                 if abs(val) < self.epsilon:
                     continue
-                new_cap = (self.config.scenario, r, s, t, v, val)
+                new_cap = (scenario, r, s, t, v, val)
                 data.append(new_cap)
         qry = 'INSERT INTO OutputBuiltCapacity VALUES (?, ?, ?, ?, ?, ?)'
         self.con.executemany(qry, data)
@@ -217,7 +241,7 @@ class TableWriter:
             if abs(val) < self.epsilon:
                 continue
             s = self.tech_sectors.get(t)
-            new_net_cap = (self.config.scenario, r, s, p, t, v, val)
+            new_net_cap = (scenario, r, s, p, t, v, val)
             data.append(new_net_cap)
         qry = 'INSERT INTO OutputNetCapacity VALUES (?, ?, ?, ?, ?, ?, ?)'
         self.con.executemany(qry, data)
@@ -229,14 +253,14 @@ class TableWriter:
             if abs(val) < self.epsilon:
                 continue
             s = self.tech_sectors.get(t)
-            new_retired_cap = (self.config.scenario, r, s, p, t, v, val)
+            new_retired_cap = (scenario, r, s, p, t, v, val)
             data.append(new_retired_cap)
         qry = 'INSERT INTO OutputRetiredCapacity VALUES (?, ?, ?, ?, ?, ?, ?)'
         self.con.executemany(qry, data)
 
         self.con.commit()
 
-    def write_flow_tables(self) -> None:
+    def write_flow_tables(self, iteration: int | None = None) -> None:
         """Write the flow tables"""
         if not self.tech_sectors:
             raise RuntimeError('tech sectors not available... code error')
@@ -245,6 +269,8 @@ class TableWriter:
         # sort the flows
         flows_by_type: dict[FlowType, list[tuple]] = defaultdict(list)
         scenario = self.config.scenario
+        if iteration:
+            scenario = scenario + f'-{iteration}'
         for fi in self.flow_register:
             sector = self.tech_sectors.get(fi.t)
             for flow_type in self.flow_register[fi]:
