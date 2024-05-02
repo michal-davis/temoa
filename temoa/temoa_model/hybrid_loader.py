@@ -525,9 +525,10 @@ class HybridLoader:
             raw = cur.execute(
                 'SELECT region, tech, vintage, capacity FROM main.OutputNetCapacity '
                 ' WHERE period = ? '
+                ' AND scenario = ? '
                 'UNION '
                 '  SELECT region, tech, vintage, capacity FROM main.ExistingCapacity ',
-                (previous_period,),
+                (previous_period, self.config.scenario),
             ).fetchall()
         else:
             raw = cur.execute(
