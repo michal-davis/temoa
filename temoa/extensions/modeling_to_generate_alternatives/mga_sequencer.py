@@ -85,8 +85,8 @@ class MgaSequencer:
             self.std_opt = pyo.SolverFactory('gurobi')
             self.options = {
                 'LogFile': './my_gurobi_log.log',
-                'LPWarmStart': 1,  # pass basis
-                'TimeLimit': 1800,  # seconds = 30min
+                'LPWarmStart': 2,  # pass basis
+                'TimeLimit': 3600 * 4,  # seconds = 4hr
                 'FeasibilityTol': 1e-4,  # default = 1e-6, we only need 'rough' solutions
                 # 'Crossover': 0,  # disabled
                 # 'Method': 2,  # Barrier ONLY
@@ -113,9 +113,11 @@ class MgaSequencer:
         self.solve_records: list[tuple[Expression, Sequence[float]]] = []
         """(solve vector, resulting axis vector)"""
         self.solve_count = 0
+        self.orig_label = self.config.scenario
 
         # output handling
         self.writer = TableWriter(self.config)
+        self.writer.clear_all_scenarios()
 
         logger.info(
             'Initialized MGA sequencer with MGA Axis %s and weighting %s',
@@ -148,23 +150,22 @@ class MgaSequencer:
 
         # self.opt.set_instance(instance)
         tic = datetime.now()
+        # ============ First Solve ============
         res: Results = self.opt.solve(instance)
-        # TODO:  Experiment with this...  Not clear if it is needed to enable warm starts/persistent behavior
+
         toc = datetime.now()
         # load variables after first solve
         self.opt.load_vars()
         elapsed = toc - tic
         self.solve_count += 1
         logger.info(f'Initial solve time: {elapsed.total_seconds():.4f}')
-        # pts = np.array(
-        #     [pyo.value(instance.V_FlowOut[idx]) for idx in instance.V_FlowOut.index_set()]
-        # ).reshape((-1, 1))
-        # status = res['Solver'].termination_condition
         status = res.termination_condition
         logger.debug('Termination condition: %s', status.name)
         if status != pyomo_appsi.base.TerminationCondition.optimal:
-            logger.error('Abnormal termination condition')
+            logger.error('Abnormal termination condition on first MGA solve')
             sys.exit(-1)
+        # record the 0-solve in all tables
+        self.writer.write_results(instance)
 
         # 4. Capture cost and make it a constraint
         tot_cost = pyo.value(instance.TotalCost)
@@ -270,10 +271,7 @@ class MgaSequencer:
 
     def process_solve_results(self, instance, vector):
         # cheap label...
-        self.orig_label = self.config.scenario
-        self.config.scenario = self.orig_label + f'-{self.solve_count}'
-        self.writer._get_tech_sectors()
-        self.writer.write_capacity_tables(M=instance)
+        self.writer.write_capacity_tables(M=instance, iteration=self.solve_count)
 
     def __del__(self):
         self.con.close()
