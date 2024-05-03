@@ -112,7 +112,7 @@ class MgaSequencer:
         if not self.mga_weighting:
             logger.warning('No MGA Weighting specified.  Using default: Hull Expansion')
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
-        self.iteration_limit = config.mga_inputs.get('iteration_limit', 50)
+        self.iteration_limit = config.mga_inputs.get('iteration_limit', 500)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
         self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.05)
 
@@ -186,12 +186,16 @@ class MgaSequencer:
 
         # 4.  Instantiate the vector manager
         vector_manager: VectorManager = get_manager(
-            axis=self.mga_axis, model=instance, weighting=self.mga_weighting, con=self.con,
-            optimal_cost=tot_cost, cost_relaxation=self.cost_epsilon
+            axis=self.mga_axis,
+            model=instance,
+            weighting=self.mga_weighting,
+            con=self.con,
+            optimal_cost=tot_cost,
+            cost_relaxation=self.cost_epsilon,
         )
 
         # 5.  Start the iterative solve process and let the manager run the show
-        instance_generator = vector_manager.instance_generator()
+        instance_generator = vector_manager.instance_generator(self.config)
         while not vector_manager.stop_resolving() and not self.internal_stop:
             print(
                 f'iter {self.solve_count}:',
@@ -217,7 +221,7 @@ class MgaSequencer:
         # self.opt.set_objective(instance.obj)
         # instance.obj.display()
         tic = datetime.now()
-        res = self.opt.solve(instance, tee=True)
+        res = self.opt.solve(instance)
         toc = datetime.now()
         elapsed = toc - tic
         # status = res.termination_condition

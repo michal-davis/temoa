@@ -36,9 +36,14 @@ from temoa.temoa_model.temoa_model import TemoaModel
 
 
 class VectorManager(ABC):
-
     @abstractmethod
-    def __init__(self, conn: sqlite3.Connection, base_model: TemoaModel, optimal_cost: float, cost_relaxation: float):
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        base_model: TemoaModel,
+        optimal_cost: float,
+        cost_relaxation: float,
+    ):
         """
         Initialize a new manager
         :param conn: connection to the current database
@@ -47,7 +52,6 @@ class VectorManager(ABC):
         :param cost_relaxation: the proportion to relax the optimal cost
         """
         raise NotImplementedError
-
 
     @property
     @abstractmethod
@@ -62,7 +66,6 @@ class VectorManager(ABC):
     def group_variables(self, tech) -> list[Var]:
         """The variables associated with the individual group members"""
         raise NotImplementedError()
-
 
     def random_input_vector(self) -> Expression:
         """Random vector with proper dimensionality"""
@@ -87,4 +90,3 @@ class VectorManager(ABC):
     @abstractmethod
     def process_results(self, M: TemoaModel):
         raise NotImplementedError('the manager subclass must implement process_results')
-

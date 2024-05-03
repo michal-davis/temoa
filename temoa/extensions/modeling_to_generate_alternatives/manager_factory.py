@@ -36,7 +36,11 @@ from temoa.temoa_model.temoa_model import TemoaModel
 
 
 def get_manager(
-    axis: MgaAxis, weighting: MgaWeighting, model: TemoaModel, con: sqlite3.Connection | None, **kwargs
+    axis: MgaAxis,
+    weighting: MgaWeighting,
+    model: TemoaModel,
+    con: sqlite3.Connection | None,
+    **kwargs,
 ) -> VectorManager:
     match axis:
         case MgaAxis.TECH_CATEGORY_ACTIVITY:
