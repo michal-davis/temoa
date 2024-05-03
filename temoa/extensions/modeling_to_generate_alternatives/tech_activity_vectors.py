@@ -26,6 +26,7 @@ Created on:  4/16/24
 
 """
 import sqlite3
+import sys
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
@@ -34,8 +35,9 @@ from queue import Queue
 from typing import Iterable
 
 import numpy as np
+from deprecated.classic import deprecated
 from matplotlib import pyplot as plt
-from pyomo.core import Expression, Var, value
+from pyomo.core import Expression, Var, value, Objective
 
 from definitions import PROJECT_ROOT
 from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
@@ -60,23 +62,35 @@ default_cat = DefaultItem('DEFAULT')
 
 
 class TechActivityVectors(VectorManager):
-    def __init__(self, M: TemoaModel, con: sqlite3.Connection) -> None:
-        self.M = M
-        self.con = con
+    def __init__(self, conn: sqlite3.Connection, base_model: TemoaModel, optimal_cost: float, cost_relaxation: float):
+        self.conn = conn
+        self.base_model = base_model
+        self.optimal_cost = optimal_cost
+        self.cost_relaxation = cost_relaxation
+
         self.basis_coefficients: list[dict[tuple, float]] | None = None
 
         # {category : [technology, ...]}
+        # the number of keys in this are the dimension of the hull
         self.category_mapping: dict | None = None
 
         # {technology: [flow variables, ...]}
-        self.variable_mapping: dict[str, list[Var]] | None = None
+        # by unrolling this, we should get the variable vector
+        self.variable_mapping: dict[str, list[Var]] = defaultdict(list)
+        # in order to peel the data out of a solved model, we also need a rollup of the NAME
+        # of the variable and indices in order...
+        self.variable_name_mapping: dict[str, list] = defaultdict(list)
+
         self.vector_queue: Queue[np.ndarray] = Queue()
 
         self.hull_points: np.ndarray | None = None
         self.hull: Hull | None = None
 
         self.initialize()
-        self.monitor = True
+
+        # monitor/report the size of the hull for each new point.  May cause some slowdown due to
+        # hull re-computes, but it seems quite fast RN.
+        self.hull_monitor = True
         self.perf_data = {}
 
     def initialize(self) -> None:
@@ -85,9 +99,9 @@ class TechActivityVectors(VectorManager):
         :return:
         """
         self.basis_coefficients = []
-        techs_implemented = self.M.tech_all  # some may have been culled by source tracing
+        techs_implemented = self.base_model.tech_all  # some may have been culled by source tracing
         logger.debug('Initializing Technology Vectors data elements')
-        raw = self.con.execute('SELECT category, tech FROM Technology').fetchall()
+        raw = self.conn.execute('SELECT category, tech FROM Technology').fetchall()
         self.category_mapping = defaultdict(list)
         for row in raw:
             cat, tech = row
@@ -100,16 +114,81 @@ class TechActivityVectors(VectorManager):
             logger.debug('Category %s members: %d', cat, len(self.category_mapping[cat]))
 
         # now pull the flow variables and map them
-        self.variable_mapping = defaultdict(list)
-        for idx in self.M.activeFlow_rpsditvo:
+
+        for idx in self.base_model.activeFlow_rpsditvo:
             tech = idx[5]
-            self.variable_mapping[tech].append(self.M.V_FlowOut[idx])
-        for idx in self.M.activeFlow_rpitvo:
+            self.variable_mapping[tech].append(self.base_model.V_FlowOut[idx])
+            self.variable_name_mapping[self.base_model.V_FlowOut.name].append(idx)
+        for idx in self.base_model.activeFlow_rpitvo:
             tech = idx[3]
-            self.variable_mapping[tech].append(self.M.V_FlowOutAnnual[idx])
+            self.variable_mapping[tech].append(self.base_model.V_FlowOutAnnual[idx])
+            self.variable_name_mapping[self.base_model.V_FlowOutAnnual.name].append(idx)
         logger.debug(
             'Catalogued %d Technology Variables', len(list(chain(*self.variable_mapping.values())))
         )
+
+    def instance_generator(self) -> TemoaModel:
+        """
+        Generate instances to solve.  Start with the basis vectors, then ...
+        :return: a TemoaModel instance
+        """
+        # traverse the basis vectors first
+        yield self.base_model.clone()
+        for v in self.basis_vectors():
+            new_model = self.__stuff_new_model(v)
+            yield new_model
+
+        # if asking for more, we *should* have enough data to create a good hull now...
+        if len(self.hull_points) < 1.5 * len(self.category_mapping):
+            # we are at risk of not having enough solves to make a hull.  We should have 2x category_mapping
+            logger.error('Not enough successful initial solves to make a hull.  Pts: %d, categories: %d', len(self.hull_points), len(self.category_mapping))
+            sys.exit(-1)
+        logger.info('Generating hull points')
+        self.basis_runs_complete()
+        v = self._next_input_vector()
+        if v is None:
+            yield None
+        new_model = self.__stuff_new_model(v)
+        yield new_model
+
+    def __stuff_new_model(self, vec) -> TemoaModel:
+        """make a new model with the objective from the vec"""
+        new_model = self.base_model.clone()
+        # # remove the old objective...
+        # new_model.del_component(new_model.TotalCost)
+        # insert the new objective...
+        new_model.obj = Objective(expr=vec)
+        print('************ obj:')
+        new_model.obj.pprint()
+        # print('************ cost constraint:')
+        # new_model.cost_cap.pprint()
+        return new_model
+        
+    def process_results(self, M: TemoaModel):
+        """
+        retrieve the necessary variable values to make another hull point
+        :param M:
+        :return: None
+        """
+        res = []
+        for v_name in self.variable_name_mapping:
+            model_var = M.find_component(v_name)   # get the variable by name out of the model
+            if not isinstance(model_var, Var):
+                raise RuntimeError('Failed to retrieve a named variable from the model: %s', v_name)
+            for idx in self.variable_mapping[v_name]:
+                res.append(value(model_var[idx]))
+
+        # add it to the points
+        hull_point = np.array(res)
+        if self.hull_points is None:
+            self.hull_points = np.atleast_2d(hull_point)
+        else:
+            self.hull_points = np.vstack((self.hull_points, hull_point))
+        if self.hull_monitor:
+            self.tracker()
+        return res
+
+
 
     def stop_resolving(self) -> bool:
         pass
@@ -126,6 +205,7 @@ class TechActivityVectors(VectorManager):
 
     # noinspection PyTypeChecker
     def basis_vectors(self) -> Expression:
+        """generator for basis vectors which will be the objective expression in the basis solves"""
         if not self.basis_coefficients:
             self.basis_coefficients = self._generate_basis(
                 category_mapping=self.category_mapping, variable_mapping=self.variable_mapping
@@ -148,6 +228,7 @@ class TechActivityVectors(VectorManager):
         print(f'   rejection frac: {self.hull.norm_rejection_proportion}')
         self.load_normals(fresh_vecs)
 
+    @deprecated('no longer used')
     def notify(self) -> list[float]:
         # when notify is received, use the stored values in the variables to generate the point
         res = []
@@ -161,7 +242,7 @@ class TechActivityVectors(VectorManager):
             self.hull_points = np.atleast_2d(hull_point)
         else:
             self.hull_points = np.vstack((self.hull_points, hull_point))
-        if self.monitor:
+        if self.hull_monitor:
             self.tracker()
         return res
 
@@ -186,7 +267,7 @@ class TechActivityVectors(VectorManager):
     def input_vectors_available(self) -> int:
         return self.vector_queue.qsize()
 
-    def next_input_vector(self) -> Expression | None:
+    def _next_input_vector(self) -> Expression | None:
         if self.vector_queue.qsize() <= 3:
             print('running low...refreshing the vectors')
             logger.info('running low...refreshing the vectors')

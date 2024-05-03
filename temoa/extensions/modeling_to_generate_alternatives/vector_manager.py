@@ -25,15 +25,30 @@ https://westernspark.us
 Created on:  4/15/24
 
 """
+import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from typing import Iterable
+from collections.abc import Iterator, Iterable
 
 import numpy as np
 from pyomo.environ import Expression, Var, quicksum
 
+from temoa.temoa_model.temoa_model import TemoaModel
+
 
 class VectorManager(ABC):
+
+    @abstractmethod
+    def __init__(self, conn: sqlite3.Connection, base_model: TemoaModel, optimal_cost: float, cost_relaxation: float):
+        """
+        Initialize a new manager
+        :param conn: connection to the current database
+        :param base_model: the base model to clone for repetitive solves
+        :param optimal_cost: the optimal cost of the primal solve
+        :param cost_relaxation: the proportion to relax the optimal cost
+        """
+        raise NotImplementedError
+
+
     @property
     @abstractmethod
     def groups(self) -> Iterable[str]:
@@ -48,33 +63,6 @@ class VectorManager(ABC):
         """The variables associated with the individual group members"""
         raise NotImplementedError()
 
-    @abstractmethod
-    def variable_vector(self) -> list[Var]:
-        """All variables in a fixed order sequence by group, member, internal var index order"""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def basis_vectors(self) -> list[Expression] | None:
-        """The Initial Basis Vectors, likely to establish a hull, or None if n/a"""
-        return None
-
-    @abstractmethod
-    def basis_runs_complete(self):
-        """Simple notification that the requested basis runs are complete"""
-        pass
-
-    @abstractmethod
-    def input_vectors_available(self) -> int | bool:
-        """
-        Indicator whether manager can provide more input vectors.
-        Either an integer count, if available or True if an uncountable/arbitrary number are available
-        :return: an integer count if known or True if an uncountable/arbitrary number are available, else False/0
-        """
-
-    @abstractmethod
-    def next_input_vector(self) -> Expression:
-        """The next input vector"""
-        raise NotImplementedError()
 
     def random_input_vector(self) -> Expression:
         """Random vector with proper dimensionality"""
@@ -87,13 +75,16 @@ class VectorManager(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def notify(self) -> Sequence[float]:
-        """
-        Notify the manager that a solve has occurred.  It likely has access to the model...
-        :return: The solution Point in axis space
-        """
-
-    @abstractmethod
     def stop_resolving(self) -> bool:
         """Query to stop re-solve loop.  True => stop re-solving."""
         raise NotImplementedError('the manager subclass must implement stop_resolving')
+
+    @abstractmethod
+    def instance_generator(self) -> Iterator[TemoaModel]:
+        """generator for model instances to be solved"""
+        raise NotImplementedError('the manager subclass must implement instance_generator')
+
+    @abstractmethod
+    def process_results(self, M: TemoaModel):
+        raise NotImplementedError('the manager subclass must implement process_results')
+

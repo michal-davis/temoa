@@ -160,7 +160,7 @@ class TableWriter:
         self.con.commit()
         self.clear_iterative_runs()
 
-    def clear_all_scenarios(self):
+    def clear_indexed_scenarios(self):
         cur = self.con.cursor()
         for table in all_output_tables:
             cur.execute(

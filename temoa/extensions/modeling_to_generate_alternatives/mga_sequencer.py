@@ -27,7 +27,6 @@ Created on:  4/15/24
 The purpose of this module is to perform top-level control over an MGA model run
 """
 import sqlite3
-import sys
 from collections.abc import Sequence
 from datetime import datetime
 from logging import getLogger
@@ -83,17 +82,24 @@ class MgaSequencer:
         elif self.config.solver_name == 'gurobi':
             self.opt = pyomo_appsi.solvers.Gurobi()
             self.std_opt = pyo.SolverFactory('gurobi')
+            # self.options = {
+            #     # 'LogFile': './my_gurobi_log.log',
+            #     'LPWarmStart': 2,  # pass basis
+            #     'TimeLimit': 3600 * 4,  # seconds = 4hr
+            #     'FeasibilityTol': 1e-4,  # default = 1e-6, we only need 'rough' solutions
+            #     # 'Crossover': 0,  # disabled
+            #     # 'Method': 2,  # Barrier ONLY
+            # }
             self.options = {
-                # 'LogFile': './my_gurobi_log.log',
-                'LPWarmStart': 2,  # pass basis
-                'TimeLimit': 3600 * 4,  # seconds = 4hr
-                'FeasibilityTol': 1e-4,  # default = 1e-6, we only need 'rough' solutions
-                # 'Crossover': 0,  # disabled
                 # 'Method': 2,  # Barrier ONLY
+                'Threads': 4,
+                # 'FeasibilityTol': 1e-3,  # pretty 'loose'
+                # 'Crossover': 0,  # Disabled
+                'TimeLimit': 3600 * 2,  # 2 hrs
             }
             self.opt.gurobi_options = self.options
         elif self.config.solver_name == 'cbc':
-            self.std_opt = pyo.SolverFactory('cbc')
+            self.opt = pyo.SolverFactory('cbc')
 
         # some defaults, etc.
         self.internal_stop = False
@@ -118,7 +124,7 @@ class MgaSequencer:
 
         # output handling
         self.writer = TableWriter(self.config)
-        self.writer.clear_all_scenarios()
+        self.writer.clear_indexed_scenarios()
 
         logger.info(
             'Initialized MGA sequencer with MGA Axis %s and weighting %s',
@@ -130,9 +136,9 @@ class MgaSequencer:
         """Run the sequencer"""
         # ==== basic sequence ====
         # 1. Load the model data, which may involve filtering it down if source tracing
-        # 2. Instantiate a Vector Manager pull in extra data to build out data for axis
-        # 3. Solve the base model using persistent solver
-        # 4. Adjust the model
+        # 2. Solve the base model (using persistent solver...maybe)
+        # 3. Adjust the model
+        # 4. Instantiate a Vector Manager pull in extra data to build out data for axis
         # 5. Start the re-solve loop
 
         # 1. Load data
@@ -142,32 +148,26 @@ class MgaSequencer:
             loaded_portal=data_portal, model_name=self.config.scenario, silent=self.config.silent
         )
 
-        # 2.  Instantiate the vector manager
-        vector_manager: VectorManager = get_manager(
-            axis=self.mga_axis, model=instance, weighting=self.mga_weighting, con=self.con
-        )
-
-        # 3. Persistent solver setup
-
+        # 2. Base solve
         tic = datetime.now()
         # ============ First Solve ============
         res: Results = self.opt.solve(instance)
-
         toc = datetime.now()
         # load variables after first solve
-        self.opt.load_vars()
+        # self.opt.load_vars()
         elapsed = toc - tic
         self.solve_count += 1
         logger.info(f'Initial solve time: {elapsed.total_seconds():.4f}')
-        status = res.termination_condition
+        status = res.solver.termination_condition
+
         logger.debug('Termination condition: %s', status.name)
-        if status != pyomo_appsi.base.TerminationCondition.optimal:
-            logger.error('Abnormal termination condition on first MGA solve')
-            sys.exit(-1)
+        # if status != pyomo_appsi.base.TerminationCondition.optimal:
+        #     logger.error('Abnormal termination condition on baseline solve')
+        #     sys.exit(-1)
         # record the 0-solve in all tables
         self.writer.write_results(instance)
 
-        # 4. Capture cost and make it a constraint
+        # 3a. Capture cost and make it a constraint
         tot_cost = pyo.value(instance.TotalCost)
         logger.info('Completed initial solve with total cost:  %0.2f', tot_cost)
         logger.info('Relaxing cost by fraction:  %0.3f', self.cost_epsilon)
@@ -176,43 +176,33 @@ class MgaSequencer:
         instance.cost_cap = pyo.Constraint(
             expr=cost_expression <= (1 + self.cost_epsilon) * tot_cost
         )
-        self.opt.add_constraints([instance.cost_cap])
+        # self.opt.add_constraints([instance.cost_cap])
 
-        # 5. replace the objective and prep for iterative solving
+        # 3b. replace the objective and prep for iterative solving
         instance.del_component(instance.TotalCost)
-        self.opt.set_instance(instance)
-        self.opt.config.load_solution = False
+        # instance.TotalCost.deactivate()
+        # self.opt.set_instance(instance)
+        # self.opt.config.load_solution = False
 
-        # 6. solve the basis vectors, if provided by manager
-        basis_vectors = vector_manager.basis_vectors()
-        if basis_vectors:
-            for vector in basis_vectors:
-                success = self.solve_instance_appsi(instance, vector)
-                if success:
-                    pts = vector_manager.notify()
-                    self.solve_records.append((vector, pts))
-                self.process_solve_results(instance, vector)
-                self.solve_count += 1
-            vector_manager.basis_runs_complete()  # notification...
+        # 4.  Instantiate the vector manager
+        vector_manager: VectorManager = get_manager(
+            axis=self.mga_axis, model=instance, weighting=self.mga_weighting, con=self.con,
+            optimal_cost=tot_cost, cost_relaxation=self.cost_epsilon
+        )
 
-        # 7. Execute re-solve loop until stopping conditions are met
+        # 5.  Start the iterative solve process and let the manager run the show
+        instance_generator = vector_manager.instance_generator()
         while not vector_manager.stop_resolving() and not self.internal_stop:
             print(
                 f'iter {self.solve_count}:',
                 f'vecs_avail: {vector_manager.input_vectors_available()}',
             )
-            vector = vector_manager.next_input_vector()
-            # vector = vector_manager.random_input_vector()
-            if vector is None:
-                logger.warning(
-                    'During re-solve loop, a None vector was received.  Process terminated early.'
-                )
-                break
-            success = self.solve_instance_appsi(instance, vector)
+            instance = next(instance_generator)
+            success = self.solve_instance(instance)
             if success:
-                pts = vector_manager.notify()
-                self.solve_records.append((vector, pts))
-            self.process_solve_results(instance, vector)
+                vector_manager.process_results(M=instance)
+                # self.solve_records.append((vector, pts))
+            self.process_solve_results(instance)
 
             self.solve_count += 1
             if self.solve_count >= self.iteration_limit:
@@ -222,12 +212,12 @@ class MgaSequencer:
         vector_manager.finalize_tracker()
         pass
 
-    def solve_instance_warmstart(self, instance: TemoaModel, vector) -> bool:
-        instance.obj = pyo.Objective(expr=vector)
+    def solve_instance(self, instance: TemoaModel) -> bool:
+        # instance.obj = pyo.Objective(expr=vector)
         # self.opt.set_objective(instance.obj)
         # instance.obj.display()
         tic = datetime.now()
-        res = self.std_opt.solve(instance, warmstart=True)
+        res = self.opt.solve(instance, tee=True)
         toc = datetime.now()
         elapsed = toc - tic
         # status = res.termination_condition
@@ -239,20 +229,14 @@ class MgaSequencer:
             status.name,
         )
         # need to load vars here else we see repeated stale value of objective
-        # self.std_opt.load_vars()
-        instance.del_component(instance.obj)
         return status == pyo.TerminationCondition.optimal
 
-    def solve_instance_appsi(self, instance, vector) -> bool:
+    def solve_instance_appsi(self, instance) -> bool:
         """
         Solve the MGA instance
         :param instance: the model instance
-        :param vector: the objective vector to use
         :return: True if solve was successful, False otherwise
         """
-        instance.obj = pyo.Objective(expr=vector)
-        self.opt.set_objective(instance.obj)
-        # instance.obj.display()
         tic = datetime.now()
         res = self.opt.solve(instance)
         toc = datetime.now()
@@ -265,11 +249,11 @@ class MgaSequencer:
             status.name,
         )
         # need to load vars here else we see repeated stale value of objective
-        self.opt.load_vars()
-        instance.del_component(instance.obj)
+        if res.termination_condition == pyomo_appsi.base.TerminationCondition.optimal:
+            self.opt.load_vars()
         return res.termination_condition == pyomo_appsi.base.TerminationCondition.optimal
 
-    def process_solve_results(self, instance, vector):
+    def process_solve_results(self, instance):
         # cheap label...
         self.writer.write_capacity_tables(M=instance, iteration=self.solve_count)
 

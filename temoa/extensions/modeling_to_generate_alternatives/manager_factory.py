@@ -36,10 +36,10 @@ from temoa.temoa_model.temoa_model import TemoaModel
 
 
 def get_manager(
-    axis: MgaAxis, weighting: MgaWeighting, model: TemoaModel, con: sqlite3.Connection | None
+    axis: MgaAxis, weighting: MgaWeighting, model: TemoaModel, con: sqlite3.Connection | None, **kwargs
 ) -> VectorManager:
     match axis:
         case MgaAxis.TECH_CATEGORY_ACTIVITY:
-            return TechActivityVectors(model, con)
+            return TechActivityVectors(base_model=model, conn=con, **kwargs)
         case _:
             raise NotImplementedError('This axis is not yet supported')
