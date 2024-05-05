@@ -65,6 +65,8 @@ tables_with_regional_groups = {
 }
 
 
+
+
 class HybridLoader:
     """
     An instance of the HybridLoader
@@ -1059,6 +1061,10 @@ class HybridLoader:
         # temp = '\n'.join((f'{k} : {len(v)}' for k, v in data.items()))
         # logger.info(temp)
 
+        # capture the parameter indexing sets
+        set_data = self.load_param_idx_sets(data=data)
+        data.update(set_data)
+
         # pyomo namespace format has data[namespace][idx]=value
         # the default namespace is None, thus...
         namespace = {None: data}
@@ -1069,3 +1075,78 @@ class HybridLoader:
         toc = time.time()
         logger.debug('Data Portal Load time: %0.5f seconds', (toc - tic))
         return dp
+
+    def load_param_idx_sets(self, data: dict) -> dict:
+        M: TemoaModel = TemoaModel()  # for typing
+        param_idx_sets = {
+            M.EmissionLimit.name: M.EmissionLimitConstraint_rpe.name,
+            M.MaxActivity.name: M.MaxActivityConstraint_rpt.name,
+            M.MinActivity.name: M.MinActivityConstraint_rpt.name,
+            M.MinActivityGroup.name: M.MinActivityGroup_rpg.name,
+            M.MaxActivityGroup.name: M.MaxActivityGroup_rpg.name,
+            M.MaxCapacity.name: M.MaxCapacityConstraint_rpt.name,
+            M.MaxNewCapacity.name: M.MaxNewCapacityConstraint_rpt.name,
+M.MaxCapacityGroup.name:M.MaxCapacityGroupConstraint_rpg.name,
+            M.MinCapacityGroup.name: M.MinCapacityGroupConstraint_rpg.name,
+            M.MinNewCapacityGroup.name: M.MinNewCapacityGroupConstraint_rpg.name,
+            M.MaxNewCapacityGroup.name: M.MaxNewCapacityGroupConstraint_rpg.name,
+            M.MinCapacityShare.name: M.MinCapacityShareConstraint_rptg.name,
+            M.MaxCapacityShare.name: M.MaxCapacityShareConstraint_rptg.name,
+M.MinActivityShare.name: M.MinActivityShareConstraint_rptg.name,
+            M.MaxActivityShare.name: M.MaxActivityShareConstraint_rptg.name,
+            M.MinNewCapacityShare.name: M.MinNewCapacityShareConstraint_rptg.name,
+            M.MaxNewCapacityShare.name: M.MaxNewCapacityShareConstraint_rptg.name,
+            M.MaxResource.name: M.MaxResourceConstraint_rt.name,
+            M.MinCapacity.name: M.MinCapacityConstraint_rpt.name,
+            M.MinNewCapacity.name: M.MinNewCapacityConstraint_rpt.name,
+            M.MinAnnualCapacityFactor.name: M.MinAnnualCapacityFactorConstraint_rpto.name,
+            M.MaxAnnualCapacityFactor.name: M.MaxAnnualCapacityFactorConstraint_rpto.name,
+            M.RenewablePortfolioStandard.name: M.RenewablePortfolioStandardConstraint_rpg.name,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        }
+
+        res = {}
+        for p, s in param_idx_sets.items():
+            param_data = data.get(p)
+            if param_data is None:
+                # no data for this param... nothing to capture for idx set
+                continue
+            idxs = list(param_data.keys())
+            res[s] = idxs
+        return res
