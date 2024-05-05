@@ -65,8 +65,6 @@ tables_with_regional_groups = {
 }
 
 
-
-
 class HybridLoader:
     """
     An instance of the HybridLoader
@@ -1086,13 +1084,13 @@ class HybridLoader:
             M.MaxActivityGroup.name: M.MaxActivityGroup_rpg.name,
             M.MaxCapacity.name: M.MaxCapacityConstraint_rpt.name,
             M.MaxNewCapacity.name: M.MaxNewCapacityConstraint_rpt.name,
-M.MaxCapacityGroup.name:M.MaxCapacityGroupConstraint_rpg.name,
+            M.MaxCapacityGroup.name: M.MaxCapacityGroupConstraint_rpg.name,
             M.MinCapacityGroup.name: M.MinCapacityGroupConstraint_rpg.name,
             M.MinNewCapacityGroup.name: M.MinNewCapacityGroupConstraint_rpg.name,
             M.MaxNewCapacityGroup.name: M.MaxNewCapacityGroupConstraint_rpg.name,
             M.MinCapacityShare.name: M.MinCapacityShareConstraint_rptg.name,
             M.MaxCapacityShare.name: M.MaxCapacityShareConstraint_rptg.name,
-M.MinActivityShare.name: M.MinActivityShareConstraint_rptg.name,
+            M.MinActivityShare.name: M.MinActivityShareConstraint_rptg.name,
             M.MaxActivityShare.name: M.MaxActivityShareConstraint_rptg.name,
             M.MinNewCapacityShare.name: M.MinNewCapacityShareConstraint_rptg.name,
             M.MaxNewCapacityShare.name: M.MaxNewCapacityShareConstraint_rptg.name,
@@ -1102,43 +1100,7 @@ M.MinActivityShare.name: M.MinActivityShareConstraint_rptg.name,
             M.MinAnnualCapacityFactor.name: M.MinAnnualCapacityFactorConstraint_rpto.name,
             M.MaxAnnualCapacityFactor.name: M.MaxAnnualCapacityFactorConstraint_rpto.name,
             M.RenewablePortfolioStandard.name: M.RenewablePortfolioStandardConstraint_rpg.name,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            M.CostInvest.name: M.CostInvest_rtv.name,
         }
 
         res = {}
