@@ -19,12 +19,13 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 from collections import defaultdict
-from itertools import product as cross_product
+from itertools import product as cross_product, product
 from operator import itemgetter as iget
 from sys import stderr as SE
 from typing import TYPE_CHECKING
 
 from deprecated import deprecated
+from pyomo.core import Set
 
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
@@ -1348,3 +1349,15 @@ def TechOutputSplitAnnualConstraintIndices(M: 'TemoaModel'):
     )
 
     return indices
+
+
+def get_loan_life(M, r, t, _):
+    return M.LoanLifetimeTech[r, t]
+
+def GrowthRateMax_rtv_initializer(M: 'TemoaModel'):
+    # need to do this outside of the model because the elements are not initialized yet for 'product'
+    return set(product(M.time_optimize, M.GrowthRateMax.sparse_iterkeys()))
+
+def copy_from(other_set):
+    """a cheap reference function to replace the lambdas in orig temoa_model"""
+    return Set(other_set.sparse_iterkeys())

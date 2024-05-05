@@ -21,7 +21,6 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 import logging
-from itertools import product
 
 from pyomo.core import BuildCheck
 from pyomo.environ import (
@@ -30,10 +29,8 @@ from pyomo.environ import (
     AbstractModel,
     BuildAction,
     Param,
-    Set,
     Objective,
     minimize,
-    Reals,
 )
 
 from temoa.temoa_model.model_checking.validators import (
@@ -45,6 +42,7 @@ from temoa.temoa_model.model_checking.validators import (
     check_flex_curtail,
 )
 from temoa.temoa_model.temoa_initialize import *
+from temoa.temoa_model.temoa_initialize import get_loan_life
 from temoa.temoa_model.temoa_rules import *
 
 logger = logging.getLogger(__name__)
@@ -250,11 +248,7 @@ class TemoaModel(AbstractModel):
             within=NonNegativeReals,
             validate=validate_Efficiency,
         )
-        # TODO:  This doesn't work for myopic, where the Efficiency Param for a
-        #        particular myopic run may well exclude commodities, tech, etc.
-        #        for the myopic run in general.  Perhaps, make another version of
-        #        this that screens the full DB, instead of piecemeal, which is problem
-        # TODO:  Figure out a way to turn this back on for non-myopic runs
+
         M.validate_UsedEfficiencyIndices = BuildAction(rule=CheckEfficiencyIndices)
 
         M.CapacityFactor_rsdt = Set(dimen=4, initialize=CapacityFactorTechIndices)
@@ -287,8 +281,6 @@ class TemoaModel(AbstractModel):
         # Dev Note:  The LoanLifetimeProcess table *could* be removed.  There is no longer a supporting
         #            table in the database.  It is just a "passthrough" now to the default LoanLifetimeTech.
         #            It is already stitched in to the model, so will leave it for now.  Table may be revived.
-        def get_loan_life(M, r, t, _):
-            return M.LoanLifetimeTech[r, t]
 
         M.LoanLifetimeProcess = Param(M.LoanLifetimeProcess_rtv, default=get_loan_life)
 
@@ -320,12 +312,6 @@ class TemoaModel(AbstractModel):
         )  # read from data
         M.CostEmission = Param(M.CostEmission_rpe, domain=NonNegativeReals)
 
-        M.LoanRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
-        M.DefaultLoanRate = Param(domain=NonNegativeReals)
-        M.LoanRate = Param(M.LoanRate_rtv, domain=NonNegativeReals, default=get_default_loan_rate)
-
-        M.Loan_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
-        M.LoanAnnualize = Param(M.Loan_rtv, initialize=ParamLoanAnnualize_rule)
 
         M.ModelProcessLife_rptv = Set(dimen=4, initialize=ModelProcessLifeIndices)
         M.ModelProcessLife = Param(M.ModelProcessLife_rptv, initialize=ParamModelProcessLife_rule)
@@ -388,6 +374,12 @@ class TemoaModel(AbstractModel):
 
         M.MyopicBaseyear = Param(default=0)
 
+        M.LoanRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
+        M.DefaultLoanRate = Param(domain=NonNegativeReals)
+        M.LoanRate = Param(M.LoanRate_rtv, domain=NonNegativeReals, default=get_default_loan_rate)
+
+        M.Loan_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
+        M.LoanAnnualize = Param(M.Loan_rtv, initialize=ParamLoanAnnualize_rule)
         ################################################
         #                 Model Variables              #
         #               (assigned by solver)           #
@@ -403,108 +395,46 @@ class TemoaModel(AbstractModel):
         # ---------------------------------------------------------------
 
         M.progress_marker_3 = BuildAction(['Starting to build Variables'], rule=progress_check)
-        # USER NOTE:  Use of "M.troubleshooting = True" is for debugging models.  It introduces new
-        # variables sponge/sump that you can search for as needed.  It is NOT fully developed, and is
-        # just a framework right now.  NO GUARANTEES.  It is inteded to catch problems with demand or flow
-        # of a commodity.  It will make the model larger.  Future work might be to dump any
-        # non-negative values of these 2 variables into the log file for inspection.
-        M.troubleshooting = False
-
-        # dev note:  apparently with the changed process in run_actions to load the model results, some
-        #            initialization is needed.  The "old way" by letting the solver do it seems to load
-        #            fine without this...  perhaps it doesn't care as it just captures "last value".
-        #            Initializing everything to zero gets all tests to pass.  Will leave it in for now.
-        def zero_or_none(M, *idx):
-            # if M.troubleshooting:
-            #   return 0
-            # else:
-            #   return None
-            return 0
-
-        if M.troubleshooting:
-            ########################################
-            # introducing variables for T/S purposes
-            ########################################
-            M.sponge = Var(M.regions, M.time_optimize, M.commodity_demand, domain=Reals)
-            M.sponge_abs = Var(
-                M.regions, M.time_optimize, M.commodity_demand, domain=NonNegativeReals
-            )
-
-            @M.Constraint(M.regions, M.time_optimize, M.commodity_demand)
-            def pos_sponge(M, r, p, d):
-                return M.sponge_abs[r, p, d] >= M.sponge[r, p, d]
-
-            @M.Constraint(M.regions, M.time_optimize, M.commodity_demand)
-            def neg_sponge(M, r, p, d):
-                return M.sponge_abs[r, p, d] >= -M.sponge[r, p, d]
-
-            # and a flow sump...
-            M.sump = Var(
-                M.regions,
-                M.time_optimize,
-                M.time_season,
-                M.time_of_day,
-                M.commodity_all,
-                domain=Reals,
-                initialize=zero_or_none,
-            )
-            M.sump_abs = Var(
-                M.regions,
-                M.time_optimize,
-                M.time_season,
-                M.time_of_day,
-                M.commodity_all,
-                domain=NonNegativeReals,
-                initialize=zero_or_none,
-            )
-
-            @M.Constraint(M.sump.index_set())
-            def pos_sump(M, *idx):
-                return M.sump_abs[idx] >= M.sump[idx]
-
-            @M.Constraint(M.sump.index_set())
-            def neg_sump(M, *idx):
-                return M.sump_abs[idx] >= -M.sump[idx]
 
         # Define base decision variables
         M.FlowVar_rpsditvo = Set(dimen=8, initialize=FlowVariableIndices)
-        M.V_FlowOut = Var(M.FlowVar_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_FlowOut = Var(M.FlowVar_rpsditvo, domain=NonNegativeReals)
 
         M.FlowVarAnnual_rpitvo = Set(dimen=6, initialize=FlowVariableAnnualIndices)
         M.V_FlowOutAnnual = Var(
-            M.FlowVarAnnual_rpitvo, domain=NonNegativeReals, initialize=zero_or_none
+            M.FlowVarAnnual_rpitvo, domain=NonNegativeReals
         )
 
         M.FlexVar_rpsditvo = Set(dimen=8, initialize=FlexVariablelIndices)
-        M.V_Flex = Var(M.FlexVar_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_Flex = Var(M.FlexVar_rpsditvo, domain=NonNegativeReals)
 
         M.FlexVarAnnual_rpitvo = Set(dimen=6, initialize=FlexVariableAnnualIndices)
         M.V_FlexAnnual = Var(
-            M.FlexVarAnnual_rpitvo, domain=NonNegativeReals, initialize=zero_or_none
+            M.FlexVarAnnual_rpitvo, domain=NonNegativeReals
         )
 
         M.CurtailmentVar_rpsditvo = Set(dimen=8, initialize=CurtailmentVariableIndices)
         M.V_Curtailment = Var(
-            M.CurtailmentVar_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none
+            M.CurtailmentVar_rpsditvo, domain=NonNegativeReals
         )
 
         M.FlowInStorage_rpsditvo = Set(dimen=8, initialize=FlowInStorageVariableIndices)
-        M.V_FlowIn = Var(M.FlowInStorage_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_FlowIn = Var(M.FlowInStorage_rpsditvo, domain=NonNegativeReals)
 
         M.StorageLevel_rpsdtv = Set(dimen=6, initialize=StorageVariableIndices)
         M.V_StorageLevel = Var(
-            M.StorageLevel_rpsdtv, domain=NonNegativeReals, initialize=zero_or_none
+            M.StorageLevel_rpsdtv, domain=NonNegativeReals
         )
-        M.V_StorageInit = Var(M.StorageInit_rtv, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_StorageInit = Var(M.StorageInit_rtv, domain=NonNegativeReals)
 
         # Derived decision variables
 
         M.CapacityVar_rptv = Set(dimen=4, initialize=CostFixedIndices)
-        M.V_Capacity = Var(M.CapacityVar_rptv, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_Capacity = Var(M.CapacityVar_rptv, domain=NonNegativeReals)
 
         M.NewCapacityVar_rtv = Set(dimen=3, initialize=CapacityVariableIndices)
         M.V_NewCapacity = Var(
-            M.NewCapacityVar_rtv, domain=NonNegativeReals, initialize=zero_or_none
+            M.NewCapacityVar_rtv, domain=NonNegativeReals, initialize=0
         )
 
         M.RetiredCapacityVar_rptv = Set(dimen=4, initialize=RetiredCapacityVariableIndices)
@@ -512,7 +442,7 @@ class TemoaModel(AbstractModel):
 
         M.CapacityAvailableVar_rpt = Set(dimen=3, initialize=CapacityAvailableVariableIndices)
         M.V_CapacityAvailableByPeriodAndTech = Var(
-            M.CapacityAvailableVar_rpt, domain=NonNegativeReals, initialize=zero_or_none
+            M.CapacityAvailableVar_rpt, domain=NonNegativeReals
         )
 
         ################################################
@@ -585,7 +515,7 @@ class TemoaModel(AbstractModel):
         )
 
         M.ResourceConstraint_rpr = Set(
-            dimen=3, initialize=lambda M: M.ResourceBound.sparse_iterkeys()
+            dimen=3, initialize=copy_from(M.ResourceBound)
         )
         M.ResourceExtractionConstraint = Constraint(
             M.ResourceConstraint_rpr, rule=ResourceExtraction_Constraint
@@ -674,7 +604,7 @@ class TemoaModel(AbstractModel):
 
         M.GrowthRateMaxConstraint_rtv = Set(
             dimen=3,
-            initialize=lambda M: set(product(M.time_optimize, M.GrowthRateMax.sparse_iterkeys())),
+            initialize=GrowthRateMax_rtv_initializer,
         )
         M.GrowthRateConstraint = Constraint(
             M.GrowthRateMaxConstraint_rtv, rule=GrowthRateConstraint_rule
@@ -885,3 +815,5 @@ class TemoaModel(AbstractModel):
 def progress_check(M, checkpoint: str):
     """A quick widget which is called by BuildAction in order to log creation progress"""
     logger.debug('Model build progress: %s', checkpoint)
+
+def make_param_derived_sets(M: TemoaModel):

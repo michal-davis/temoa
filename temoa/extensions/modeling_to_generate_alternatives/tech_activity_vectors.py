@@ -27,24 +27,22 @@ Created on:  4/16/24
 """
 import queue
 import sqlite3
+import sys
 from collections import defaultdict
 from logging import getLogger
+from multiprocessing import Queue as mpQueue
 from pathlib import Path
 from queue import Queue
 from typing import Iterable
 
 import numpy as np
 from matplotlib import pyplot as plt
-from pyomo.core import Expression, Var, value, Objective, Constraint
-from pyomo.dataportal import DataPortal
+from pyomo.core import Expression, Var, value, Objective
 
 from definitions import PROJECT_ROOT
 from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
-from temoa.temoa_model.hybrid_loader import HybridLoader
-from temoa.temoa_model.run_actions import build_instance
 from temoa.temoa_model.temoa_model import TemoaModel
-from temoa.temoa_model.temoa_rules import TotalCost_rule
 
 logger = getLogger(__name__)
 
@@ -59,7 +57,7 @@ class DefaultItem:
     def __repr__(self):
         return self.name
 
-
+# just a convenience to have something other than a None item for placeholder
 default_cat = DefaultItem('DEFAULT')
 
 
@@ -93,12 +91,14 @@ class TechActivityVectors(VectorManager):
         self.hull: Hull | None = None
 
         self.initialize()
-        self.basis_coefficients: Queue[np.ndarray] = self._generate_basis_coefficients()
+        self.basis_coefficients: Queue[np.ndarray] = self._generate_basis_coefficients(self.category_mapping, self.technology_size)
 
         # monitor/report the size of the hull for each new point.  May cause some slowdown due to
         # hull re-computes, but it seems quite fast RN.
         self.hull_monitor = True
         self.perf_data = {}
+
+        self.model_queue = mpQueue()
 
     def initialize(self) -> None:
         """
@@ -122,7 +122,6 @@ class TechActivityVectors(VectorManager):
             logger.debug('Category %s members: %d', cat, len(self.category_mapping[cat]))
 
         # now pull the flow variables and map them
-
         for idx in self.base_model.activeFlow_rpsditvo:
             tech = idx[5]
             self.technology_size[tech] += 1
@@ -140,13 +139,14 @@ class TechActivityVectors(VectorManager):
         """
         # traverse the basis vectors first
         new_model = self.base_model.clone()
-        obj_vector = self.basis_vector(new_model)
+        obj_vector = self._make_basis_objective_vector(new_model)
         while obj_vector is not None:
             new_model.obj = Objective(expr=obj_vector)
             yield new_model
             new_model = self.base_model.clone()
-            obj_vector = self.basis_vector(new_model)
-
+            obj_vector = self._make_basis_objective_vector(new_model)
+            self.model_queue.put(new_model)
+        sys.exit(-1)
         # if asking for more, we *should* have enough data to create a good hull now...
         if len(self.hull_points) < 1.5 * len(self.category_mapping):
             # we are at risk of not having enough solves to make a hull.  We should have 2x category_mapping
@@ -155,47 +155,19 @@ class TechActivityVectors(VectorManager):
                 len(self.hull_points),
                 len(self.category_mapping),
             )
+            logger.error('We should have 2 points for each dimension.  Were some basis solves unsuccessful?')
+            raise RuntimeError('Not enough successful initial solves to make a hull.  See log.')
 
         logger.info('Generating hull points')
-        self.basis_runs_complete()
+        self.regenerate_hull()
+        # now we can run until told to quit or fail to make a new vector
         while True:
             new_model = self.base_model.clone()
-            v = self._next_input_vector(M=new_model)
+            v = self._next_objective_vector(M=new_model)
             if v is None:
                 yield None
             new_model.obj = Objective(expr=v)
             yield new_model
-
-    def __stuff_new_model(self, vec, config) -> TemoaModel:
-        """make a new model with the objective from the vec"""
-        new_model = self.base_model.clone()
-        # # remove the old objective...
-        # new_model.del_component(new_model.TotalCost)
-        # insert the new objective...
-        new_model.obj = Objective(expr=vec)
-        print('************ obj:')
-        # new_model.obj.pprint()
-        # print('************ cost constraint:')
-        # new_model.cost_cap.pprint()
-
-        # 1. Load data
-        hybrid_loader = HybridLoader(db_connection=self.conn, config=config)
-        data_portal: DataPortal = hybrid_loader.load_data_portal(myopic_index=None)
-        instance: TemoaModel = build_instance(
-            loaded_portal=data_portal, model_name=config.scenario, silent=config.silent
-        )
-        tot_cost = self.optimal_cost
-
-        cost_expression = TotalCost_rule(instance)
-        instance.cost_cap = Constraint(
-            expr=cost_expression <= (1 + self.cost_relaxation) * tot_cost
-        )
-        instance.del_component(instance.TotalCost)
-
-        instance.obj = Objective(expr=vec)
-        instance.obj.pprint()
-        # instance.cost_cap.pprint()
-        return instance
 
     def process_results(self, M: TemoaModel):
         """
@@ -237,7 +209,7 @@ class TechActivityVectors(VectorManager):
         return self.category_mapping.get(group, [])
 
     # noinspection PyTypeChecker
-    def basis_vector(self, M: TemoaModel) -> Iterable[Expression] | None:
+    def _make_basis_objective_vector(self, M: TemoaModel) -> Iterable[Expression] | None:
         """generator for basis vectors which will be the coefficients in the obj expression in the basis solves"""
         if self.basis_coefficients.empty():
             return None
@@ -256,44 +228,11 @@ class TechActivityVectors(VectorManager):
         expr = sum(c * v for v, c in zip(vars, coeffs) if c != 0)
         return expr
 
-    def var_vector(self, M: TemoaModel) -> list[Var]:
-        """Produce a properly sequenced array of variables from the current model for use in obj vector"""
-        res = []
-        for cat in self.category_mapping:
-            for tech in self.category_mapping[cat]:
-                for var_name in self.variable_index_mapping[tech]:
-                    var = M.find_component(var_name)
-                    if not isinstance(var, Var):
-                        raise RuntimeError(
-                            'Failed to retrieve a named variable from the model: %s', var_name
-                        )
-                    for idx in self.variable_index_mapping[tech][var_name]:
-                        res.append(var[idx])
-        return res
-
-    def basis_runs_complete(self):
-        """make the hull..."""
-        logger.debug('Generating the cvx hull from %d points', len(self.hull_points))
-        self.hull = Hull(self.hull_points)
-        fresh_vecs = self.hull.get_all_norms()
-        np.random.shuffle(fresh_vecs)
-        print(f'   made {len(fresh_vecs)} fresh vectors')
-        print('   huge at: ', self.hull.cv_hull.volume)
-        print(f'   rejection frac: {self.hull.norm_rejection_proportion}')
-        self.load_normals(fresh_vecs)
-
-    def load_normals(self, normals: np.array):
-        for vector in normals:
-            self.coefficient_vector_queue.put(vector)
-
-    def input_vectors_available(self) -> int:
-        return self.coefficient_vector_queue.qsize()
-
-    def _next_input_vector(self, M: TemoaModel) -> Expression | None:
+    def _next_objective_vector(self, M: TemoaModel) -> Expression | None:
         if self.coefficient_vector_queue.qsize() <= 3:
             print('running low...refreshing the vectors')
             logger.info('running low...refreshing the vectors')
-            self.basis_runs_complete()
+            self.regenerate_hull()
         if not self.coefficient_vector_queue or self.input_vectors_available() == 0:
             return None
         vector = self.coefficient_vector_queue.get()
@@ -315,19 +254,52 @@ class TechActivityVectors(VectorManager):
         assert len(obj_vars) == len(coeffs)
         return sum(c * v for v, c in zip(obj_vars, coeffs))
 
+    def var_vector(self, M: TemoaModel) -> list[Var]:
+        """Produce a properly sequenced array of variables from the current model for use in obj vector"""
+        res = []
+        for cat in self.category_mapping:
+            for tech in self.category_mapping[cat]:
+                for var_name in self.variable_index_mapping[tech]:
+                    var = M.find_component(var_name)
+                    if not isinstance(var, Var):
+                        raise RuntimeError(
+                            'Failed to retrieve a named variable from the model: %s', var_name
+                        )
+                    for idx in self.variable_index_mapping[tech][var_name]:
+                        res.append(var[idx])
+        return res
+
+    def regenerate_hull(self):
+        """make the hull..."""
+        logger.debug('Generating the cvx hull from %d points', len(self.hull_points))
+        self.hull = Hull(self.hull_points)
+        fresh_vecs = self.hull.get_all_norms()
+        np.random.shuffle(fresh_vecs)
+        print(f'   made {len(fresh_vecs)} fresh vectors')
+        print('   huge at: ', self.hull.cv_hull.volume)
+        print(f'   rejection frac: {self.hull.norm_rejection_proportion}')
+        self.load_normals(fresh_vecs)
+
+    def load_normals(self, normals: np.array):
+        for vector in normals:
+            self.coefficient_vector_queue.put(vector)
+
+    def input_vectors_available(self) -> int:
+        return self.coefficient_vector_queue.qsize()
+
     def tech_variables(self, tech) -> list[Var]:
         return self.technology_size.get(tech, [])
 
-    def _generate_basis_coefficients(self) -> Queue:
+    @staticmethod
+    def _generate_basis_coefficients(category_mapping: dict, technology_size: dict) -> Queue:
         # Sequentially build the coefficient vector in the order of the categories and associated techs
-
         q = Queue()
-        for selected_cat in self.category_mapping:
+        for selected_cat in category_mapping:
             res = []
             if selected_cat == default_cat:
                 continue
-            for cat in self.category_mapping:
-                num_marks = sum(self.technology_size[tech] for tech in self.category_mapping[cat])
+            for cat in category_mapping:
+                num_marks = sum(technology_size[tech] for tech in category_mapping[cat])
                 if cat == selected_cat:
                     marks = [
                         1,
@@ -350,7 +322,6 @@ class TechActivityVectors(VectorManager):
             hull = Hull(self.hull_points)
             volume = hull.volume
             logger.info(f'Tracking hull at {volume}')
-            print(f'Tracking hull at {volume}')
             self.perf_data.update({len(self.hull_points): volume})
 
     def finalize_tracker(self):

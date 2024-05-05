@@ -29,15 +29,12 @@ received this license file.  If not, see <http://www.gnu.org/licenses/>.
 import pathlib
 import pickle
 
-import pytest
-
 from definitions import PROJECT_ROOT
 from temoa.temoa_model.temoa_mode import TemoaMode
 from temoa.temoa_model.temoa_sequencer import TemoaSequencer
 
 
-@pytest.mark.skip('not yet clear if this is needed/required ATT, researching mpi4py options...')
-def test_pickle():
+def test_serialization():
     """
     Test to ensure the model pickles properly.  This is used when employing mpi4py which requires
     that jobs passed are pickle-able

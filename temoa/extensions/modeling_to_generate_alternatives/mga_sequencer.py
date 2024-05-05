@@ -80,8 +80,8 @@ class MgaSequencer:
             self.opt = pyomo_appsi.solvers.highs.Highs()
             self.std_opt = pyo.SolverFactory('appsi_highs')
         elif self.config.solver_name == 'gurobi':
-            self.opt = pyomo_appsi.solvers.Gurobi()
-            self.std_opt = pyo.SolverFactory('gurobi')
+            # self.opt = pyomo_appsi.solvers.Gurobi()
+            self.opt = pyo.SolverFactory('gurobi')
             # self.options = {
             #     # 'LogFile': './my_gurobi_log.log',
             #     'LPWarmStart': 2,  # pass basis
