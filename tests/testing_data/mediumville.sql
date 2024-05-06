@@ -140,6 +140,7 @@ CREATE TABLE CostEmission
     notes     TEXT,
     PRIMARY KEY (region, period, emis_comm)
 );
+INSERT INTO CostEmission VALUES ('A', 2025, 'co2', 1.99, 'dollars', 'none' );
 CREATE TABLE CostFixed
 (
     region  TEXT    NOT NULL,
