@@ -57,6 +57,7 @@ class DefaultItem:
     def __repr__(self):
         return self.name
 
+
 # just a convenience to have something other than a None item for placeholder
 default_cat = DefaultItem('DEFAULT')
 
@@ -91,7 +92,9 @@ class TechActivityVectors(VectorManager):
         self.hull: Hull | None = None
 
         self.initialize()
-        self.basis_coefficients: Queue[np.ndarray] = self._generate_basis_coefficients(self.category_mapping, self.technology_size)
+        self.basis_coefficients: Queue[np.ndarray] = self._generate_basis_coefficients(
+            self.category_mapping, self.technology_size
+        )
 
         # monitor/report the size of the hull for each new point.  May cause some slowdown due to
         # hull re-computes, but it seems quite fast RN.
@@ -155,7 +158,9 @@ class TechActivityVectors(VectorManager):
                 len(self.hull_points),
                 len(self.category_mapping),
             )
-            logger.error('We should have 2 points for each dimension.  Were some basis solves unsuccessful?')
+            logger.error(
+                'We should have 2 points for each dimension.  Were some basis solves unsuccessful?'
+            )
             raise RuntimeError('Not enough successful initial solves to make a hull.  See log.')
 
         logger.info('Generating hull points')

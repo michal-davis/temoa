@@ -26,10 +26,12 @@ Created on:  4/15/24
 
 The purpose of this module is to perform top-level control over an MGA model run
 """
+import logging
 import sqlite3
 from collections.abc import Sequence
 from datetime import datetime
 from logging import getLogger
+from multiprocessing import Queue, Process
 
 import pyomo.contrib.appsi as pyomo_appsi
 import pyomo.environ as pyo
@@ -37,6 +39,7 @@ from pyomo.contrib.appsi.base import Results
 from pyomo.core import Expression
 from pyomo.dataportal import DataPortal
 
+from temoa.extensions.modeling_to_generate_alternatives.Worker import Worker
 from temoa.extensions.modeling_to_generate_alternatives.manager_factory import get_manager
 from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaAxis, MgaWeighting
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
@@ -194,23 +197,46 @@ class MgaSequencer:
             cost_relaxation=self.cost_epsilon,
         )
 
-        # 5.  Start the iterative solve process and let the manager run the show
+        # 5.  Set up the Workers
+        work_queue = Queue(2)  # restrict the queue to hold just 2 models in it max
+        result_queue = Queue()
+        log_queue = Queue()
+        # start the logging listener
+        listener = Process(target=listener_process, args=(log_queue,))
+        listener.start()
+        # make workers
+        workers = []
+        for i in range(5):
+            w = Worker(work_queue, solver_name="cbc")
+            w.start()
+            workers.append(w)
+        # workers now running and waiting for jobs...
+
+        # 6.  Start the iterative solve process and let the manager run the show
         instance_generator = vector_manager.instance_generator(self.config)
         while not vector_manager.stop_resolving() and not self.internal_stop:
             print(
                 f'iter {self.solve_count}:',
                 f'vecs_avail: {vector_manager.input_vectors_available()}',
             )
+            logger.info('Putting an instance in the work queue')
             instance = next(instance_generator)
-            success = self.solve_instance(instance)
-            if success:
-                vector_manager.process_results(M=instance)
+            work_queue.put(instance, block=False )  # put a log on the fire, if room, if full, pass...
+            if result_queue.qsize() > 0:
+                solved_model = result_queue.get()
+                vector_manager.process_results(M=solved_model)
                 # self.solve_records.append((vector, pts))
-            self.process_solve_results(instance)
+                self.process_solve_results(solved_model)
 
-            self.solve_count += 1
-            if self.solve_count >= self.iteration_limit:
-                self.internal_stop = True
+                self.solve_count += 1
+                if self.solve_count >= self.iteration_limit:
+                    self.internal_stop = True
+
+
+        # 7. Shut down the workers and then the logging queue
+        for w in workers:
+            w.join()
+        log_queue.put_nowait(None)  # sentinel to shut down the log listener
 
         # 8. Wrap it up
         vector_manager.finalize_tracker()
@@ -263,3 +289,26 @@ class MgaSequencer:
 
     def __del__(self):
         self.con.close()
+# def listener_configurer():
+#     root = logging.getLogger()
+#     h = logging.handlers.RotatingFileHandler('mptest.log', 'a', 300, 10)
+#     f = logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s')
+#     h.setFormatter(f)
+#     root.addHandler(h)
+
+# This is the listener process top-level loop: wait for logging events
+# (LogRecords)on the queue and handle them, quit when you get a None for a
+# LogRecord.
+def listener_process(queue):
+    # configurer()
+    while True:
+        try:
+            record = queue.get()
+            if record is None:  # We send this as a sentinel to tell the listener to quit.
+                break
+            logger = logging.getLogger(record.name)
+            logger.handle(record)  # No level or filter logic applied - just do it!
+        except Exception:
+            import sys, traceback
+            print('Whoops! Problem:', file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)

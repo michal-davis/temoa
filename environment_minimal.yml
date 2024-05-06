@@ -10,8 +10,8 @@ channels:
 dependencies:
     # Requirements for core model functionality
     - python=3.11
-#    - pyomo=6.7
-#    - pyomo.extras
+    - pyomo=6.7
+    - pyomo.extras
     - xlwt
 #    - ipython
 #    - matplotlib

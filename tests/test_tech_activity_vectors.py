@@ -46,7 +46,7 @@ def test__vector_engine():
         ],
     }
     var_map = {'dog': ['red', 'blue'], 'pig': ['yellow', 'green'], 'cat': ['blue', 'gold']}
-    tech_sizes = {k:len(v) for k, v in var_map.items()}
+    tech_sizes = {k: len(v) for k, v in var_map.items()}
     # below is just to show the mapping back to variables.... test just want the coefficients from res_values
     # res = [
     #     {'red': 0.25, 'blue': 0.25, 'yellow': 0.25, 'green': 0.25},
@@ -58,12 +58,13 @@ def test__vector_engine():
         [0.25, 0.25, 0.25, 0.25, 0, 0],
         [-0.25, -0.25, -0.25, -0.25, 0, 0],
         [0.5, 0.5, 0, 0, 0, 0],
-        [-0.5, -0.5, 0, 0, 0, 0]
+        [-0.5, -0.5, 0, 0, 0, 0],
     ]
-    matrix = TechActivityVectors._generate_basis_coefficients(category_mapping=cat_map, technology_size=tech_sizes)
+    matrix = TechActivityVectors._generate_basis_coefficients(
+        category_mapping=cat_map, technology_size=tech_sizes
+    )
     rows = []
     if matrix.qsize() > 0:
         rows.append(matrix.get_nowait())
     for idx, row in enumerate(rows):
-
         assert row == pytest.approx(res_values[idx], abs=1e-2)
