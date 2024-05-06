@@ -930,7 +930,7 @@ def RegionalGlobalInitializedIndices(M: 'TemoaModel'):
     return indices
 
 
-def MinCapShareIndices(M: 'TemoaModel'):
+def GroupShareIndices(M: 'TemoaModel'):
     indices = set(
         (r, p, t, g)
         for g in M.tech_group_names

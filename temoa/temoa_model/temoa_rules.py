@@ -627,13 +627,8 @@ def PeriodCost_rule(M: 'TemoaModel', p):
         # + flex_annual_emissions
     )
 
-
     period_costs = (
-        loan_costs
-        + fixed_costs
-        + variable_costs
-        + variable_costs_annual
-        + period_emission_cost
+        loan_costs + fixed_costs + variable_costs + variable_costs_annual + period_emission_cost
     )
     return period_costs
 
@@ -686,8 +681,7 @@ def Demand_Constraint(M: 'TemoaModel', r, p, s, d, dem):
     DemandConstraintErrorCheck(supply + supply_annual, r, p, s, d, dem)
 
     expr = (
-        supply + supply_annual
-        == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
+        supply + supply_annual == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
     )
 
     return expr
@@ -899,7 +893,6 @@ reduces computational burden.
         d,
         c,
     )
-
 
     expr = (
         vflow_out + interregional_imports

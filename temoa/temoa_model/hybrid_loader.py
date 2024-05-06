@@ -702,24 +702,24 @@ class HybridLoader:
                     'WHERE period >= ? AND period <= ?',
                     (mi.base_year, mi.last_demand_year),
                 ).fetchall()
-                load_element(M.CostEmission_rpe, raw, self.viable_output_comms, (2,))
+                load_element(M.CostEmission_rpe, raw)
 
                 raw = cur.execute(
                     'SELECT region, period, emis_comm, cost from main.CostEmission '
                     'WHERE period >= ? AND period <= ?',
                     (mi.base_year, mi.last_demand_year),
                 ).fetchall()
-                load_element(M.CostEmission, raw, self.viable_output_comms, (2,))
+                load_element(M.CostEmission, raw)
             else:
                 raw = cur.execute(
                     'SELECT region, period, emis_comm from main.CostEmission '
                 ).fetchall()
-                load_element(M.CostEmission_rpe, raw, self.viable_output_comms, (2,))
+                load_element(M.CostEmission_rpe, raw)
 
                 raw = cur.execute(
                     'SELECT region, period, emis_comm, cost from main.CostEmission '
                 ).fetchall()
-                load_element(M.CostEmission, raw, self.viable_output_comms, (2,))
+                load_element(M.CostEmission, raw)
 
         # DefaultLoanRate
         raw = cur.execute(
@@ -1075,32 +1075,44 @@ class HybridLoader:
         return dp
 
     def load_param_idx_sets(self, data: dict) -> dict:
+        """
+        Build a dictionary of sparse sets that can be used for indexing the parameters.
+        :param data: The parameters to peel out index values from
+        :return: a dictionary of the set name: values
+
+        The purpose of this function is to use the data we have already captured for the parameters
+        to make indexing sets in the model.  This replaces all of the "lambda" functions to reverse
+        engineer the built parameters.
+
+        Having these sets allows quicker constraint builds becuase they are the basis of many constraints
+        """
+
         M: TemoaModel = TemoaModel()  # for typing
         param_idx_sets = {
+            M.CostInvest.name: M.CostInvest_rtv.name,
             M.EmissionLimit.name: M.EmissionLimitConstraint_rpe.name,
             M.MaxActivity.name: M.MaxActivityConstraint_rpt.name,
-            M.MinActivity.name: M.MinActivityConstraint_rpt.name,
-            M.MinActivityGroup.name: M.MinActivityGroup_rpg.name,
             M.MaxActivityGroup.name: M.MaxActivityGroup_rpg.name,
-            M.MaxCapacity.name: M.MaxCapacityConstraint_rpt.name,
-            M.MaxNewCapacity.name: M.MaxNewCapacityConstraint_rpt.name,
-            M.MaxCapacityGroup.name: M.MaxCapacityGroupConstraint_rpg.name,
-            M.MinCapacityGroup.name: M.MinCapacityGroupConstraint_rpg.name,
-            M.MinNewCapacityGroup.name: M.MinNewCapacityGroupConstraint_rpg.name,
-            M.MaxNewCapacityGroup.name: M.MaxNewCapacityGroupConstraint_rpg.name,
-            M.MinCapacityShare.name: M.MinCapacityShareConstraint_rptg.name,
-            M.MaxCapacityShare.name: M.MaxCapacityShareConstraint_rptg.name,
-            M.MinActivityShare.name: M.MinActivityShareConstraint_rptg.name,
             M.MaxActivityShare.name: M.MaxActivityShareConstraint_rptg.name,
-            M.MinNewCapacityShare.name: M.MinNewCapacityShareConstraint_rptg.name,
+            M.MaxAnnualCapacityFactor.name: M.MaxAnnualCapacityFactorConstraint_rpto.name,
+            M.MaxCapacity.name: M.MaxCapacityConstraint_rpt.name,
+            M.MaxCapacityGroup.name: M.MaxCapacityGroupConstraint_rpg.name,
+            M.MaxCapacityShare.name: M.MaxCapacityShareConstraint_rptg.name,
+            M.MaxNewCapacity.name: M.MaxNewCapacityConstraint_rpt.name,
+            M.MaxNewCapacityGroup.name: M.MaxNewCapacityGroupConstraint_rpg.name,
             M.MaxNewCapacityShare.name: M.MaxNewCapacityShareConstraint_rptg.name,
             M.MaxResource.name: M.MaxResourceConstraint_rt.name,
-            M.MinCapacity.name: M.MinCapacityConstraint_rpt.name,
-            M.MinNewCapacity.name: M.MinNewCapacityConstraint_rpt.name,
+            M.MinActivity.name: M.MinActivityConstraint_rpt.name,
+            M.MinActivityGroup.name: M.MinActivityGroup_rpg.name,
+            M.MinActivityShare.name: M.MinActivityShareConstraint_rptg.name,
             M.MinAnnualCapacityFactor.name: M.MinAnnualCapacityFactorConstraint_rpto.name,
-            M.MaxAnnualCapacityFactor.name: M.MaxAnnualCapacityFactorConstraint_rpto.name,
+            M.MinCapacity.name: M.MinCapacityConstraint_rpt.name,
+            M.MinCapacityGroup.name: M.MinCapacityGroupConstraint_rpg.name,
+            M.MinCapacityShare.name: M.MinCapacityShareConstraint_rptg.name,
+            M.MinNewCapacity.name: M.MinNewCapacityConstraint_rpt.name,
+            M.MinNewCapacityGroup.name: M.MinNewCapacityGroupConstraint_rpg.name,
+            M.MinNewCapacityShare.name: M.MinNewCapacityShareConstraint_rptg.name,
             M.RenewablePortfolioStandard.name: M.RenewablePortfolioStandardConstraint_rpg.name,
-            M.CostInvest.name: M.CostInvest_rtv.name,
         }
 
         res = {}

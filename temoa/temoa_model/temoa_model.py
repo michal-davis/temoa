@@ -412,25 +412,25 @@ class TemoaModel(AbstractModel):
             within=M.RegionalIndices * M.time_optimize * M.tech_group_names
         )
         M.MaxNewCapacityGroup = Param(M.MaxNewCapacityGroupConstraint_rpg)
-        M.MinCapShare_rptg = Set(dimen=4, initialize=MinCapShareIndices)
+        M.GroupShareIndices = Set(dimen=4, initialize=GroupShareIndices)
 
-        M.MinCapacityShareConstraint_rptg = Set(within=M.MinCapShare_rptg)
-        M.MinCapacityShare = Param(M.MinCapShare_rptg)
+        M.MinCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MinCapacityShare = Param(M.GroupShareIndices)
 
-        M.MaxCapacityShareConstraint_rptg = Set(within=M.MinCapShare_rptg)
-        M.MaxCapacityShare = Param(M.MinCapShare_rptg)
+        M.MaxCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MaxCapacityShare = Param(M.GroupShareIndices)
 
-        M.MinActivityShareConstraint_rptg = Set(within=M.MinCapShare_rptg)
-        M.MinActivityShare = Param(M.MinCapShare_rptg)
+        M.MinActivityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MinActivityShare = Param(M.GroupShareIndices)
 
-        M.MaxActivityShareConstraint_rptg = Set(within=M.MinCapShare_rptg)
-        M.MaxActivityShare = Param(M.MinCapShare_rptg)
+        M.MaxActivityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MaxActivityShare = Param(M.GroupShareIndices)
 
-        M.MinNewCapacityShareConstraint_rptg = Set(within=M.MinCapShare_rptg)
-        M.MinNewCapacityShare = Param(M.MinCapShare_rptg)
+        M.MinNewCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MinNewCapacityShare = Param(M.GroupShareIndices)
 
-        M.MaxNewCapacityShareConstraint_rptg = Set(within=M.MinCapShare_rptg)
-        M.MaxNewCapacityShare = Param(M.MinCapShare_rptg)
+        M.MaxNewCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MaxNewCapacityShare = Param(M.GroupShareIndices)
         M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions, within=Any)
         M.validate_LinkedTech_lifetimes = BuildCheck(rule=validate_linked_tech)
 
