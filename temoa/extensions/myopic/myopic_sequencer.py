@@ -281,6 +281,10 @@ class MyopicSequencer:
         create a new MyopicEfficiency table and pre-load it with all ExistingCapacity
         :return:
         """
+        # clear out everything from previous runs
+        self.cursor.execute('DELETE FROM MyopicEfficiency WHERE 1')
+        self.output_con.commit()
+
         # the -1 for base year is used to indicate "existing" for flag purposes
         # we will just use the "existing" flag in the orig db to set this up and capture
         # all values in those vintages as "existing"
@@ -367,7 +371,7 @@ class MyopicSequencer:
                 'DELETE FROM MyopicEfficiency '
                 'WHERE (SELECT region, tech, vintage) '
                 '  NOT IN (SELECT region, tech, vintage FROM OutputNetCapacity '
-                '    WHERE period = ?) '
+                '    WHERE period = ? AND scenario = ?) '
                 'AND tech not in (SELECT tech FROM Technology where unlim_cap > 0)'
             )
 
@@ -376,14 +380,14 @@ class MyopicSequencer:
                     'SELECT * FROM MyopicEfficiency '
                     'WHERE (SELECT region, tech, vintage) '
                     '  NOT IN (SELECT region, tech, vintage FROM OutputNetCapacity '
-                    '    WHERE period = ?) '
+                    '    WHERE period = ? AND scenario = ?) '
                     'AND tech not in (SELECT tech FROM Technology where unlim_cap > 0)'
                 )
                 print('\n\n **** Removing these unused region-tech-vintage combos ****')
                 removals = self.cursor.execute(debug_query, (last_interval_end,)).fetchall()
                 for i, removal in enumerate(removals):
                     print(f'{i}. Removing:  {removal}')
-            self.cursor.execute(delete_qry, (last_interval_end,))
+            self.cursor.execute(delete_qry, (last_interval_end, self.config.scenario))
             self.output_con.commit()
 
         # 2.  Add the new stuff now visible

@@ -71,18 +71,20 @@ def test_set_consistency(data_name, config_file, set_file, tmp_path):
         k: set(tuple(t) if isinstance(t, list) else t for t in v) for (k, v) in cached_sets.items()
     }
 
-    # compare sets where they exist in BOTH the cache and model.
+    # compare sets where they exist in the model.
     overage_in_model = dict()
     shortage_in_model = dict()
     for set_name, s in model_sets.items():
+        if set_name == 'CostEmission_rpe':
+            pass
         if cached_sets.get(set_name) != s:
-            if cached_sets.get(set_name):
-                overage_in_model[set_name] = s - cached_sets.get(set_name)
-                shortage_in_model[set_name] = cached_sets.get(set_name) - s
+            cached_set = cached_sets.get(set_name, set())
+            overage_in_model[set_name] = s - cached_set
+            shortage_in_model[set_name] = cached_set - s
     missing_in_model = cached_sets.keys() - model_sets.keys()
     # drop any set that has "_index" in the name as they are no longer reported by newer version of pyomo
     missing_in_model = {s for s in missing_in_model if '_index' not in s and '_domain' not in s}
-    assert not missing_in_model, f'one or more cached set not in model: {missing_in_model}'
+
     if overage_in_model:
         print('\nOverages compared to cache: ')
         for k, v in overage_in_model.items():
@@ -93,9 +95,6 @@ def test_set_consistency(data_name, config_file, set_file, tmp_path):
         for k, v in shortage_in_model.items():
             if len(v) > 0:
                 print(k, v)
-    assert (
-        not overage_in_model and not shortage_in_model
-    ), f'The {data_name} run-produced sets did not match cached values'
 
     # look for new or dropped sets in EITHER
     model_extra_sets = {
@@ -112,10 +111,17 @@ def test_set_consistency(data_name, config_file, set_file, tmp_path):
         print('\nModel extra sets compared to cache: ')
         for k in model_extra_sets:
             print(f'{k}: {model_sets[k]}')
-        assert False, '\nModel has extra sets (above)'
 
     if cache_extra_sets:
         print('\nCache extra sets compared to model: ')
         for k in cache_extra_sets:
             print(f'{k}: {cached_sets[k]}')
-            assert False, '\nCache has extra sets (above)'
+
+    assert not missing_in_model, f'one or more cached set not in model: {missing_in_model}'
+    assert (
+        not overage_in_model and not shortage_in_model
+    ), f'The {data_name} run-produced sets did not match cached values'
+    if cache_extra_sets:
+        assert False, 'Cache has extra sets'
+    if model_extra_sets:
+        assert False, 'Model has extra sets'
