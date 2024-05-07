@@ -69,7 +69,7 @@ class VectorManager(ABC):
 
     def random_input_vector(self) -> Expression:
         """Random vector with proper dimensionality"""
-        var_vec = self.variable_vector()
+        var_vec = self.var_vector()
         coeffs = np.random.random(len(var_vec))
         coeffs /= sum(coeffs)
         return quicksum(c * v for c, v in zip(coeffs, var_vec))

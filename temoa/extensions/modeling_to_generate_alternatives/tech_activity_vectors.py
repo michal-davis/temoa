@@ -27,17 +27,15 @@ Created on:  4/16/24
 """
 import queue
 import sqlite3
-import sys
 from collections import defaultdict
 from logging import getLogger
-from multiprocessing import Queue as mpQueue
 from pathlib import Path
 from queue import Queue
 from typing import Iterable
 
 import numpy as np
 from matplotlib import pyplot as plt
-from pyomo.core import Expression, Var, value, Objective
+from pyomo.core import Expression, Var, value, Objective, quicksum
 
 from definitions import PROJECT_ROOT
 from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
@@ -70,6 +68,7 @@ class TechActivityVectors(VectorManager):
         optimal_cost: float,
         cost_relaxation: float,
     ):
+        self.comleted_solves = 0
         self.conn = conn
         self.base_model = base_model
         self.optimal_cost = optimal_cost
@@ -100,8 +99,6 @@ class TechActivityVectors(VectorManager):
         # hull re-computes, but it seems quite fast RN.
         self.hull_monitor = True
         self.perf_data = {}
-
-        self.model_queue = mpQueue()
 
     def initialize(self) -> None:
         """
@@ -135,6 +132,15 @@ class TechActivityVectors(VectorManager):
             self.variable_index_mapping[tech][self.base_model.V_FlowOutAnnual.name].append(idx)
         logger.debug('Catalogued %d Technology Variables', sum(self.technology_size.values()))
 
+    def random_model(self):
+        new_model = self.base_model.clone()
+        var_vec = self.var_vector(new_model)
+        coeffs = np.random.random(len(var_vec))
+        coeffs /= sum(coeffs)
+        obj_expr = quicksum(c * v for c, v in zip(coeffs, var_vec))
+        new_model.obj = Objective(expr=obj_expr)
+        return new_model
+
     def instance_generator(self, config) -> TemoaModel:
         """
         Generate instances to solve.  Start with the basis vectors, then ...
@@ -148,9 +154,11 @@ class TechActivityVectors(VectorManager):
             yield new_model
             new_model = self.base_model.clone()
             obj_vector = self._make_basis_objective_vector(new_model)
-            self.model_queue.put(new_model)
-        sys.exit(-1)
         # if asking for more, we *should* have enough data to create a good hull now...
+
+        while self.comleted_solves <= 2 * len(self.category_mapping) * 0.9:
+            yield 'waiting'  # sentinel that there are no currently available instances
+
         if len(self.hull_points) < 1.5 * len(self.category_mapping):
             # we are at risk of not having enough solves to make a hull.  We should have 2x category_mapping
             logger.error(
@@ -180,6 +188,7 @@ class TechActivityVectors(VectorManager):
         :param M:
         :return: None
         """
+        self.comleted_solves += 1
         res = []
         for cat in self.category_mapping:
             element = 0

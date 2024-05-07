@@ -56,4 +56,4 @@ def test_serialization():
     assert pickled_model, 'model should have pickled successfully, but did not.'
 
     recovered_model = pickle.loads(pickled_model)
-    assert recovered_model , 'unable to recover model.'
+    assert recovered_model, 'unable to recover model.'

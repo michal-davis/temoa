@@ -227,7 +227,9 @@ class TemoaModel(AbstractModel):
         M.initialize_Demands = BuildAction(rule=CreateDemands)
 
         # TODO:  Revive this with the DB schema and refactor the associated constraint
-        M.ResourceBound = Param(M.regions, M.time_optimize, M.commodity_physical)
+        M.ResourceConstraint_rpr = Set(within=M.regions * M.time_optimize * M.commodity_physical)
+
+        M.ResourceBound = Param(M.ResourceConstraint_rpr)
 
         # Define technology performance parameters
         M.CapacityToActivity = Param(M.RegionalIndices, M.tech_all, default=1)
@@ -480,7 +482,7 @@ class TemoaModel(AbstractModel):
         M.V_FlexAnnual = Var(M.FlexVarAnnual_rpitvo, domain=NonNegativeReals)
 
         M.CurtailmentVar_rpsditvo = Set(dimen=8, initialize=CurtailmentVariableIndices)
-        M.V_Curtailment = Var(M.CurtailmentVar_rpsditvo, domain=NonNegativeReals)
+        M.V_Curtailment = Var(M.CurtailmentVar_rpsditvo, domain=NonNegativeReals, initialize=0)
 
         M.FlowInStorage_rpsditvo = Set(dimen=8, initialize=FlowInStorageVariableIndices)
         M.V_FlowIn = Var(M.FlowInStorage_rpsditvo, domain=NonNegativeReals)
@@ -574,7 +576,6 @@ class TemoaModel(AbstractModel):
             M.CommodityBalanceAnnualConstraint_rpc, rule=CommodityBalanceAnnual_Constraint
         )
 
-        M.ResourceConstraint_rpr = Set(dimen=3, initialize=copy_from(M.ResourceBound))
         M.ResourceExtractionConstraint = Constraint(
             M.ResourceConstraint_rpr, rule=ResourceExtraction_Constraint
         )

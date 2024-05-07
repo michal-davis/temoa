@@ -27,11 +27,13 @@ Created on:  4/15/24
 The purpose of this module is to perform top-level control over an MGA model run
 """
 import logging
+import queue
 import sqlite3
 from collections.abc import Sequence
 from datetime import datetime
 from logging import getLogger
-from multiprocessing import Queue, Process
+from multiprocessing import Queue
+from queue import Empty
 
 import pyomo.contrib.appsi as pyomo_appsi
 import pyomo.environ as pyo
@@ -39,10 +41,11 @@ from pyomo.contrib.appsi.base import Results
 from pyomo.core import Expression
 from pyomo.dataportal import DataPortal
 
-from temoa.extensions.modeling_to_generate_alternatives.Worker import Worker
+# from temoa.extensions.modeling_to_generate_alternatives.worker import Worker
 from temoa.extensions.modeling_to_generate_alternatives.manager_factory import get_manager
 from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaAxis, MgaWeighting
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
+from temoa.extensions.modeling_to_generate_alternatives.worker import Worker
 from temoa.temoa_model.hybrid_loader import HybridLoader
 from temoa.temoa_model.run_actions import build_instance
 from temoa.temoa_model.table_writer import TableWriter
@@ -103,6 +106,7 @@ class MgaSequencer:
             self.opt.gurobi_options = self.options
         elif self.config.solver_name == 'cbc':
             self.opt = pyo.SolverFactory('cbc')
+            self.options = {}
 
         # some defaults, etc.
         self.internal_stop = False
@@ -115,7 +119,7 @@ class MgaSequencer:
         if not self.mga_weighting:
             logger.warning('No MGA Weighting specified.  Using default: Hull Expansion')
             self.mga_weighting = MgaWeighting.HULL_EXPANSION
-        self.iteration_limit = config.mga_inputs.get('iteration_limit', 500)
+        self.iteration_limit = config.mga_inputs.get('iteration_limit', 20)
         self.time_limit_hrs = config.mga_inputs.get('time_limit_hrs', 12)
         self.cost_epsilon = config.mga_inputs.get('cost_epsilon', 0.05)
 
@@ -198,49 +202,107 @@ class MgaSequencer:
         )
 
         # 5.  Set up the Workers
-        work_queue = Queue(2)  # restrict the queue to hold just 2 models in it max
-        result_queue = Queue()
-        log_queue = Queue()
+
+        work_queue = Queue(5)  # restrict the queue to hold just 2 models in it max
+        result_queue = Queue(5)
+        log_queue = Queue(50)
         # start the logging listener
-        listener = Process(target=listener_process, args=(log_queue,))
-        listener.start()
+        # listener = Process(target=listener_process, args=(log_queue,))
+        # listener.start()
         # make workers
         workers = []
-        for i in range(5):
-            w = Worker(work_queue, solver_name="cbc")
+        kwargs = {'solver_name': self.config.solver_name, 'solver_options': self.options}
+        num_workers = 6
+        for i in range(num_workers):
+            w = Worker(
+                model_queue=work_queue,
+                results_queue=result_queue,
+                configurer=None,  # worker.worker_configurer,
+                log_root_name=__name__,
+                log_queue=log_queue,
+                log_level=logging.INFO,
+                **kwargs,
+            )
             w.start()
             workers.append(w)
         # workers now running and waiting for jobs...
 
         # 6.  Start the iterative solve process and let the manager run the show
         instance_generator = vector_manager.instance_generator(self.config)
+        instance = next(instance_generator)
         while not vector_manager.stop_resolving() and not self.internal_stop:
-            print(
-                f'iter {self.solve_count}:',
-                f'vecs_avail: {vector_manager.input_vectors_available()}',
-            )
+            # print(
+            #     f'iter {self.solve_count}:',
+            #     f'vecs_avail: {vector_manager.input_vectors_available()}',
+            # )
             logger.info('Putting an instance in the work queue')
-            instance = next(instance_generator)
-            work_queue.put(instance, block=False )  # put a log on the fire, if room, if full, pass...
-            if result_queue.qsize() > 0:
-                solved_model = result_queue.get()
-                vector_manager.process_results(M=solved_model)
-                # self.solve_records.append((vector, pts))
-                self.process_solve_results(solved_model)
+            try:
+                if instance != 'waiting':  # sentinel for waiting for more solves to be done
+                    # print('trying to load work queue')
+                    work_queue.put(instance, block=False)  # put a log on the fire, if room
+                    instance = next(instance_generator)
+            except queue.Full:
+                print('work queue is full')
+                pass
+            try:
+                next_result = result_queue.get()
+            except Empty:
+                next_result = None
+            if next_result is not None:
+                vector_manager.process_results(M=next_result)
+                self.process_solve_results(next_result)
 
                 self.solve_count += 1
+                print(self.solve_count)
                 if self.solve_count >= self.iteration_limit:
                     self.internal_stop = True
 
-
         # 7. Shut down the workers and then the logging queue
+        print('shutting it down')
+        for w in workers:
+            work_queue.put(None)
+        # print(f'work queue: {work_queue.qsize()}')
+        # print(f'result queue size: {result_queue.qsize()}')
+        # try flushing queues
+        # try:
+        #     while True:
+        #         work_queue.get_nowait()
+        #         print('popped work queue')
+        # except queue.Empty:
+        #     pass
+        # try:
+        #     while True:
+        #         result_queue.get_nowait()
+        #         print('popped result queue')
+        # except queue.Empty:
+        #     pass
+        # try:
+        #     while True:
+        #         log_queue.get_nowait()
+        # except queue.Empty:
+        #     log_queue.close()
+
+        for w in workers:
+            print(w.worker_number, w.is_alive())
         for w in workers:
             w.join()
-        log_queue.put_nowait(None)  # sentinel to shut down the log listener
+            print('worker wrapped up...')
+        for w in workers:
+            print(w.worker_number, w.is_alive())
+        # log_queue.put_nowait(None)  # sentinel to shut down the log listener
+        log_queue.close()
+        # log_queue.join_thread()
+        print('log queue closed')
+        work_queue.close()
+        # work_queue.join_thread()
+        print('work queue joined')
+        result_queue.close()
+        # result_queue.join_thread()
+        print('result queue joined')
+        # listener.join()
 
         # 8. Wrap it up
         vector_manager.finalize_tracker()
-        pass
 
     def solve_instance(self, instance: TemoaModel) -> bool:
         # instance.obj = pyo.Objective(expr=vector)
@@ -289,12 +351,15 @@ class MgaSequencer:
 
     def __del__(self):
         self.con.close()
+
+
 # def listener_configurer():
 #     root = logging.getLogger()
 #     h = logging.handlers.RotatingFileHandler('mptest.log', 'a', 300, 10)
 #     f = logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s')
 #     h.setFormatter(f)
 #     root.addHandler(h)
+
 
 # This is the listener process top-level loop: wait for logging events
 # (LogRecords)on the queue and handle them, quit when you get a None for a
@@ -303,12 +368,16 @@ def listener_process(queue):
     # configurer()
     while True:
         try:
-            record = queue.get()
+            record = queue.get(timeout=5)
+            print('bagged a message from the queue')
             if record is None:  # We send this as a sentinel to tell the listener to quit.
                 break
             logger = logging.getLogger(record.name)
             logger.handle(record)  # No level or filter logic applied - just do it!
+        except Empty:
+            pass
         except Exception:
             import sys, traceback
+
             print('Whoops! Problem:', file=sys.stderr)
             traceback.print_exc(file=sys.stderr)

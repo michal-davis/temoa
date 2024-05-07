@@ -27,9 +27,7 @@ Created on:  5/5/24
 Class to contain Workers that execute solves in separate processes
 
 """
-import logging
 from datetime import datetime
-from logging import getLogger, handlers
 from multiprocessing import Process, Queue
 
 from pyomo.opt import SolverFactory, SolverResults, check_optimal_termination
@@ -37,44 +35,65 @@ from pyomo.opt import SolverFactory, SolverResults, check_optimal_termination
 from temoa.temoa_model.temoa_model import TemoaModel
 
 
-def worker_configurer(log_queue, log_level):
-    h = handlers.QueueHandler(log_queue)
-    root = logging.getLogger()
-    root.addHandler(h)
-    root.setLevel(log_level)
+# logger = getLogger(__name__)
+
+
+# def worker_configurer(log_root_name, log_queue, log_level):
+#     logger = logging.getLogger('.'.join((log_root_name, 'worker')))
+#     h = handlers.QueueHandler(log_queue)
+#     logger.addHandler(h)
+#     logger.setLevel(log_level)
+#     print(logger.name)
+#     return logger
+
+
 class Worker(Process):
     worker_idx = 1
 
-    def __init__(self, model_queue: Queue, results_queue: Queue,
-                 configurer, log_queue, log_level, **kwargs):
+    def __init__(
+        self,
+        model_queue: Queue,
+        results_queue: Queue,
+        configurer,
+        log_root_name,
+        log_queue,
+        log_level,
+        **kwargs,
+    ):
         super(Worker, self).__init__()
-        configurer(log_queue, log_level)
-        self.logger = getLogger(__name__)
+        # self.logger = configurer(log_root_name, log_queue, log_level)
         self.worker_number = Worker.worker_idx
         Worker.worker_idx += 1
         self.model_queue: Queue = model_queue
         self.results_queue: Queue = results_queue
-        self.solver_name = kwargs["solver_name"]
-        self.solver_options = kwargs["solver_options"]
-        self.opt = SolverFactory(self.solver_name, options=self.solver_options)
+        self.solver_name = kwargs['solver_name']
+        # self.solver_options = kwargs["solver_options"]
+        self.opt = SolverFactory(self.solver_name)  # , options=self.solver_options)
 
     def run(self):
-        self.logger.info('Worker %d spun up', self.worker_number)
+        # self.logger.info('Worker %d spun up', self.worker_number)
         while True:
             model: TemoaModel = self.model_queue.get()
+            if model is None:
+                print('received shutdown signal')
+                break
             tic = datetime.now()
             try:
+                # sleep(model)
                 res: SolverResults = self.opt.solve(model)
             except Exception as e:
-                self.logger.warning('Failed to solve model: %s... skipping', model.name)
-                self.logger.warning('Exception: %s', e)
+                # self.logger.warning('Failed to solve model: %s... skipping', model.name)
+                # self.logger.warning('Exception: %s', e)
+                pass
             toc = datetime.now()
 
             good_solve = check_optimal_termination(res)
             if good_solve:
                 self.results_queue.put(model)
-                self.logger.info('Worker %d solved a model in %0.2f minutes', self.worker_number, (toc - tic).minutes)
-            else:
-                status = res['Solver'].termination_condition
-                self.logger.info('Worker %d did not solve.  Results status: %s', self.worker_number, status)
+                # self.logger.info('Worker %d solved a model in %0.2f minutes', self.worker_number, (toc - tic).total_seconds() / 60)
+                print(f'victory for worker {self.worker_number}')
+            # else:
+            #     status = res['Solver'].termination_condition
+            #     # self.logger.info('Worker %d did not solve.  Results status: %s', self.worker_number, status)
 
+        print('should be dying now...')
