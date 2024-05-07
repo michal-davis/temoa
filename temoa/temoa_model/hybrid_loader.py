@@ -1115,6 +1115,7 @@ class HybridLoader:
             M.MinNewCapacityGroup.name: M.MinNewCapacityGroupConstraint_rpg.name,
             M.MinNewCapacityShare.name: M.MinNewCapacityShareConstraint_rptg.name,
             M.RenewablePortfolioStandard.name: M.RenewablePortfolioStandardConstraint_rpg.name,
+            M.ResourceBound.name: M.ResourceConstraint_rpr.name,
         }
 
         res = {}

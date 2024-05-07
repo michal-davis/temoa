@@ -627,22 +627,8 @@ def PeriodCost_rule(M: 'TemoaModel', p):
         # + flex_annual_emissions
     )
 
-    sponge_cost = 0
-    # see the notes for this in temoa_model... it is optional/troubleshooting technique
-    if M.troubleshooting:
-        sponge_cost = 10000 * sum(
-            M.sponge_abs[r, p, c] for r in M.regions for c in M.commodity_demand
-        )
-        # and add in the excess flows...
-        sponge_cost += 10000 * sum(M.sump_abs[rpsdc] for rpsdc in M.sump if rpsdc[1] == p)
-
     period_costs = (
-        loan_costs
-        + fixed_costs
-        + variable_costs
-        + variable_costs_annual
-        + period_emission_cost
-        + sponge_cost
+        loan_costs + fixed_costs + variable_costs + variable_costs_annual + period_emission_cost
     )
     return period_costs
 
@@ -694,12 +680,8 @@ def Demand_Constraint(M: 'TemoaModel', r, p, s, d, dem):
 
     DemandConstraintErrorCheck(supply + supply_annual, r, p, s, d, dem)
 
-    sponge = 0
-    if M.troubleshooting:
-        sponge = M.sponge[r, p, dem]
     expr = (
-        supply + supply_annual + sponge
-        == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
+        supply + supply_annual == M.Demand[r, p, dem] * M.DemandSpecificDistribution[r, s, d, dem]
     )
 
     return expr
@@ -912,10 +894,6 @@ reduces computational burden.
         c,
     )
 
-    sump = 0
-    if M.troubleshooting:
-        sump = M.sump[r, p, s, d, c]
-
     expr = (
         vflow_out + interregional_imports
         == vflow_in_ToStorage
@@ -923,7 +901,6 @@ reduces computational burden.
         + vflow_in_ToNonStorageAnnual
         + interregional_exports
         + v_out_excess
-        + sump
     )
 
     return expr

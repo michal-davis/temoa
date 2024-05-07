@@ -21,7 +21,6 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 import logging
-from itertools import product
 
 from pyomo.core import BuildCheck
 from pyomo.environ import (
@@ -30,10 +29,8 @@ from pyomo.environ import (
     AbstractModel,
     BuildAction,
     Param,
-    Set,
     Objective,
     minimize,
-    Reals,
 )
 
 from temoa.temoa_model.model_checking.validators import (
@@ -45,6 +42,7 @@ from temoa.temoa_model.model_checking.validators import (
     check_flex_curtail,
 )
 from temoa.temoa_model.temoa_initialize import *
+from temoa.temoa_model.temoa_initialize import get_loan_life
 from temoa.temoa_model.temoa_rules import *
 
 logger = logging.getLogger(__name__)
@@ -229,7 +227,9 @@ class TemoaModel(AbstractModel):
         M.initialize_Demands = BuildAction(rule=CreateDemands)
 
         # TODO:  Revive this with the DB schema and refactor the associated constraint
-        M.ResourceBound = Param(M.regions, M.time_optimize, M.commodity_physical)
+        M.ResourceConstraint_rpr = Set(within=M.regions * M.time_optimize * M.commodity_physical)
+
+        M.ResourceBound = Param(M.ResourceConstraint_rpr)
 
         # Define technology performance parameters
         M.CapacityToActivity = Param(M.RegionalIndices, M.tech_all, default=1)
@@ -250,11 +250,7 @@ class TemoaModel(AbstractModel):
             within=NonNegativeReals,
             validate=validate_Efficiency,
         )
-        # TODO:  This doesn't work for myopic, where the Efficiency Param for a
-        #        particular myopic run may well exclude commodities, tech, etc.
-        #        for the myopic run in general.  Perhaps, make another version of
-        #        this that screens the full DB, instead of piecemeal, which is problem
-        # TODO:  Figure out a way to turn this back on for non-myopic runs
+
         M.validate_UsedEfficiencyIndices = BuildAction(rule=CheckEfficiencyIndices)
 
         M.CapacityFactor_rsdt = Set(dimen=4, initialize=CapacityFactorTechIndices)
@@ -287,8 +283,6 @@ class TemoaModel(AbstractModel):
         # Dev Note:  The LoanLifetimeProcess table *could* be removed.  There is no longer a supporting
         #            table in the database.  It is just a "passthrough" now to the default LoanLifetimeTech.
         #            It is already stitched in to the model, so will leave it for now.  Table may be revived.
-        def get_loan_life(M, r, t, _):
-            return M.LoanLifetimeTech[r, t]
 
         M.LoanLifetimeProcess = Param(M.LoanLifetimeProcess_rtv, default=get_loan_life)
 
@@ -298,7 +292,10 @@ class TemoaModel(AbstractModel):
         )
         M.TechOutputSplit = Param(M.regions, M.time_optimize, M.tech_all, M.commodity_carrier)
 
-        M.RenewablePortfolioStandard = Param(M.regions, M.time_optimize, M.tech_group_names)
+        M.RenewablePortfolioStandardConstraint_rpg = Set(
+            within=M.regions * M.time_optimize * M.tech_group_names
+        )
+        M.RenewablePortfolioStandard = Param(M.RenewablePortfolioStandardConstraint_rpg)
 
         # The method below creates a series of helper functions that are used to
         # perform the sparse matrix of indexing for the parameters, variables, and
@@ -306,11 +303,17 @@ class TemoaModel(AbstractModel):
         M.Create_SparseDicts = BuildAction(rule=CreateSparseDicts)
 
         # Define technology cost parameters
+        # dev note:  the CostFixed_rptv isn't truly needed, but it is included in a constraint, so
+        #            let it go for now
         M.CostFixed_rptv = Set(dimen=4, initialize=CostFixedIndices)
         M.CostFixed = Param(M.CostFixed_rptv)
 
-        M.CostInvest_rtv = Set(dimen=3, initialize=CostInvestIndices)
+        M.CostInvest_rtv = Set(within=M.RegionalIndices * M.tech_all * M.time_optimize)
         M.CostInvest = Param(M.CostInvest_rtv)
+
+        M.DefaultLoanRate = Param(domain=NonNegativeReals)
+        M.LoanRate = Param(M.CostInvest_rtv, domain=NonNegativeReals, default=get_default_loan_rate)
+        M.LoanAnnualize = Param(M.CostInvest_rtv, initialize=ParamLoanAnnualize_rule)
 
         M.CostVariable_rptv = Set(dimen=4, initialize=CostVariableIndices)
         M.CostVariable = Param(M.CostVariable_rptv)
@@ -320,55 +323,116 @@ class TemoaModel(AbstractModel):
         )  # read from data
         M.CostEmission = Param(M.CostEmission_rpe, domain=NonNegativeReals)
 
-        M.LoanRate_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
-        M.DefaultLoanRate = Param(domain=NonNegativeReals)
-        M.LoanRate = Param(M.LoanRate_rtv, domain=NonNegativeReals, default=get_default_loan_rate)
-
-        M.Loan_rtv = Set(dimen=3, initialize=lambda M: M.CostInvest.keys())
-        M.LoanAnnualize = Param(M.Loan_rtv, initialize=ParamLoanAnnualize_rule)
-
         M.ModelProcessLife_rptv = Set(dimen=4, initialize=ModelProcessLifeIndices)
         M.ModelProcessLife = Param(M.ModelProcessLife_rptv, initialize=ParamModelProcessLife_rule)
 
         M.ProcessLifeFrac_rptv = Set(dimen=4, initialize=ModelProcessLifeIndices)
         M.ProcessLifeFrac = Param(M.ProcessLifeFrac_rptv, initialize=ParamProcessLifeFraction_rule)
 
-        M.MinCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
-        M.MaxCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
-        M.MinNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
-        M.MaxNewCapacity = Param(M.RegionalIndices, M.time_optimize, M.tech_with_capacity)
-        M.MaxResource = Param(M.RegionalIndices, M.tech_all)
+        M.MinCapacityConstraint_rpt = Set(
+            within=M.RegionalIndices * M.time_optimize * M.tech_with_capacity
+        )
+
+        M.MinCapacity = Param(M.MinCapacityConstraint_rpt)
+
+        M.MaxCapacityConstraint_rpt = Set(
+            within=M.RegionalIndices * M.time_optimize * M.tech_with_capacity
+        )
+        M.MaxCapacity = Param(M.MaxCapacityConstraint_rpt)
+
+        M.MinNewCapacityConstraint_rpt = Set(
+            within=M.RegionalIndices * M.time_optimize * M.tech_with_capacity
+        )
+        M.MinNewCapacity = Param(M.MinNewCapacityConstraint_rpt)
+
+        M.MaxNewCapacityConstraint_rpt = Set(
+            within=M.RegionalIndices * M.time_optimize * M.tech_with_capacity
+        )
+        M.MaxNewCapacity = Param(M.MaxNewCapacityConstraint_rpt)
+
+        M.MaxResourceConstraint_rt = Set(within=M.RegionalIndices * M.tech_all)
+        M.MaxResource = Param(M.MaxResourceConstraint_rt)
         # TODO:  Both of the below sets are obsolete and can be removed w/ tests updated
         # M.MinCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
         # M.MaxCapacitySum = Param(M.time_optimize)  # for techs in tech_capacity
-        M.MaxActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
-        M.MinActivity = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_all)
-        M.MinAnnualCapacityFactor = Param(
-            M.RegionalGlobalIndices, M.time_optimize, M.tech_all, M.commodity_carrier
+        M.MaxActivityConstraint_rpt = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_all
         )
-        M.MaxAnnualCapacityFactor = Param(
-            M.RegionalGlobalIndices, M.time_optimize, M.tech_all, M.commodity_carrier
+        M.MaxActivity = Param(M.MaxActivityConstraint_rpt)
+
+        M.MinActivityConstraint_rpt = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_all
         )
+        M.MinActivity = Param(M.MinActivityConstraint_rpt)
+
+        M.MinAnnualCapacityFactorConstraint_rpto = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_all * M.commodity_carrier
+        )
+        M.MinAnnualCapacityFactor = Param(M.MinAnnualCapacityFactorConstraint_rpto)
+
+        M.MaxAnnualCapacityFactorConstraint_rpto = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_all * M.commodity_carrier
+        )
+        M.MaxAnnualCapacityFactor = Param(M.MaxAnnualCapacityFactorConstraint_rpto)
         M.GrowthRateMax = Param(M.RegionalIndices, M.tech_all)
         M.GrowthRateSeed = Param(M.RegionalIndices, M.tech_all)
-        M.EmissionLimit = Param(M.RegionalGlobalIndices, M.time_optimize, M.commodity_emissions)
+
+        M.EmissionLimitConstraint_rpe = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.commodity_emissions
+        )
+        M.EmissionLimit = Param(M.EmissionLimitConstraint_rpe)
         M.EmissionActivity_reitvo = Set(dimen=6, initialize=EmissionActivityIndices)
         M.EmissionActivity = Param(M.EmissionActivity_reitvo)
-        M.MinActivityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
-        M.MaxActivityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
-        M.MinCapacityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
-        M.MaxCapacityGroup = Param(M.RegionalGlobalIndices, M.time_optimize, M.tech_group_names)
-        M.MinNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.tech_group_names)
-        M.MaxNewCapacityGroup = Param(M.RegionalIndices, M.time_optimize, M.tech_group_names)
-        M.MinCapShare_rptg = Set(dimen=4, initialize=MinCapShareIndices)
-        M.MinCapacityShare = Param(M.MinCapShare_rptg)
-        M.MaxCapacityShare = Param(M.MinCapShare_rptg)
-        M.MinActivityShare = Param(
-            M.MinCapShare_rptg
-        )  # MinMaxActivityShare parameter has the same index as the MinCapacityShare
-        M.MaxActivityShare = Param(M.MinCapShare_rptg)
-        M.MinNewCapacityShare = Param(M.MinCapShare_rptg)
-        M.MaxNewCapacityShare = Param(M.MinCapShare_rptg)
+
+        M.MinActivityGroup_rpg = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_group_names
+        )
+        M.MinActivityGroup = Param(M.MinActivityGroup_rpg)
+
+        M.MaxActivityGroup_rpg = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_group_names
+        )
+
+        M.MaxActivityGroup = Param(M.MaxActivityGroup_rpg)
+
+        M.MinCapacityGroupConstraint_rpg = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_group_names
+        )
+        M.MinCapacityGroup = Param(M.MinCapacityGroupConstraint_rpg)
+
+        M.MaxCapacityGroupConstraint_rpg = Set(
+            within=M.RegionalGlobalIndices * M.time_optimize * M.tech_group_names
+        )
+        M.MaxCapacityGroup = Param(M.MaxCapacityGroupConstraint_rpg)
+
+        M.MinNewCapacityGroupConstraint_rpg = Set(
+            within=M.RegionalIndices * M.time_optimize * M.tech_group_names
+        )
+        M.MinNewCapacityGroup = Param(M.MinNewCapacityGroupConstraint_rpg)
+
+        M.MaxNewCapacityGroupConstraint_rpg = Set(
+            within=M.RegionalIndices * M.time_optimize * M.tech_group_names
+        )
+        M.MaxNewCapacityGroup = Param(M.MaxNewCapacityGroupConstraint_rpg)
+        M.GroupShareIndices = Set(dimen=4, initialize=GroupShareIndices)
+
+        M.MinCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MinCapacityShare = Param(M.GroupShareIndices)
+
+        M.MaxCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MaxCapacityShare = Param(M.GroupShareIndices)
+
+        M.MinActivityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MinActivityShare = Param(M.GroupShareIndices)
+
+        M.MaxActivityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MaxActivityShare = Param(M.GroupShareIndices)
+
+        M.MinNewCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MinNewCapacityShare = Param(M.GroupShareIndices)
+
+        M.MaxNewCapacityShareConstraint_rptg = Set(within=M.GroupShareIndices)
+        M.MaxNewCapacityShare = Param(M.GroupShareIndices)
         M.LinkedTechs = Param(M.RegionalIndices, M.tech_all, M.commodity_emissions, within=Any)
         M.validate_LinkedTech_lifetimes = BuildCheck(rule=validate_linked_tech)
 
@@ -403,116 +467,44 @@ class TemoaModel(AbstractModel):
         # ---------------------------------------------------------------
 
         M.progress_marker_3 = BuildAction(['Starting to build Variables'], rule=progress_check)
-        # USER NOTE:  Use of "M.troubleshooting = True" is for debugging models.  It introduces new
-        # variables sponge/sump that you can search for as needed.  It is NOT fully developed, and is
-        # just a framework right now.  NO GUARANTEES.  It is inteded to catch problems with demand or flow
-        # of a commodity.  It will make the model larger.  Future work might be to dump any
-        # non-negative values of these 2 variables into the log file for inspection.
-        M.troubleshooting = False
-
-        # dev note:  apparently with the changed process in run_actions to load the model results, some
-        #            initialization is needed.  The "old way" by letting the solver do it seems to load
-        #            fine without this...  perhaps it doesn't care as it just captures "last value".
-        #            Initializing everything to zero gets all tests to pass.  Will leave it in for now.
-        def zero_or_none(M, *idx):
-            # if M.troubleshooting:
-            #   return 0
-            # else:
-            #   return None
-            return 0
-
-        if M.troubleshooting:
-            ########################################
-            # introducing variables for T/S purposes
-            ########################################
-            M.sponge = Var(M.regions, M.time_optimize, M.commodity_demand, domain=Reals)
-            M.sponge_abs = Var(
-                M.regions, M.time_optimize, M.commodity_demand, domain=NonNegativeReals
-            )
-
-            @M.Constraint(M.regions, M.time_optimize, M.commodity_demand)
-            def pos_sponge(M, r, p, d):
-                return M.sponge_abs[r, p, d] >= M.sponge[r, p, d]
-
-            @M.Constraint(M.regions, M.time_optimize, M.commodity_demand)
-            def neg_sponge(M, r, p, d):
-                return M.sponge_abs[r, p, d] >= -M.sponge[r, p, d]
-
-            # and a flow sump...
-            M.sump = Var(
-                M.regions,
-                M.time_optimize,
-                M.time_season,
-                M.time_of_day,
-                M.commodity_all,
-                domain=Reals,
-                initialize=zero_or_none,
-            )
-            M.sump_abs = Var(
-                M.regions,
-                M.time_optimize,
-                M.time_season,
-                M.time_of_day,
-                M.commodity_all,
-                domain=NonNegativeReals,
-                initialize=zero_or_none,
-            )
-
-            @M.Constraint(M.sump.index_set())
-            def pos_sump(M, *idx):
-                return M.sump_abs[idx] >= M.sump[idx]
-
-            @M.Constraint(M.sump.index_set())
-            def neg_sump(M, *idx):
-                return M.sump_abs[idx] >= -M.sump[idx]
 
         # Define base decision variables
         M.FlowVar_rpsditvo = Set(dimen=8, initialize=FlowVariableIndices)
-        M.V_FlowOut = Var(M.FlowVar_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_FlowOut = Var(M.FlowVar_rpsditvo, domain=NonNegativeReals)
 
         M.FlowVarAnnual_rpitvo = Set(dimen=6, initialize=FlowVariableAnnualIndices)
-        M.V_FlowOutAnnual = Var(
-            M.FlowVarAnnual_rpitvo, domain=NonNegativeReals, initialize=zero_or_none
-        )
+        M.V_FlowOutAnnual = Var(M.FlowVarAnnual_rpitvo, domain=NonNegativeReals)
 
         M.FlexVar_rpsditvo = Set(dimen=8, initialize=FlexVariablelIndices)
-        M.V_Flex = Var(M.FlexVar_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_Flex = Var(M.FlexVar_rpsditvo, domain=NonNegativeReals)
 
         M.FlexVarAnnual_rpitvo = Set(dimen=6, initialize=FlexVariableAnnualIndices)
-        M.V_FlexAnnual = Var(
-            M.FlexVarAnnual_rpitvo, domain=NonNegativeReals, initialize=zero_or_none
-        )
+        M.V_FlexAnnual = Var(M.FlexVarAnnual_rpitvo, domain=NonNegativeReals)
 
         M.CurtailmentVar_rpsditvo = Set(dimen=8, initialize=CurtailmentVariableIndices)
-        M.V_Curtailment = Var(
-            M.CurtailmentVar_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none
-        )
+        M.V_Curtailment = Var(M.CurtailmentVar_rpsditvo, domain=NonNegativeReals, initialize=0)
 
         M.FlowInStorage_rpsditvo = Set(dimen=8, initialize=FlowInStorageVariableIndices)
-        M.V_FlowIn = Var(M.FlowInStorage_rpsditvo, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_FlowIn = Var(M.FlowInStorage_rpsditvo, domain=NonNegativeReals)
 
         M.StorageLevel_rpsdtv = Set(dimen=6, initialize=StorageVariableIndices)
-        M.V_StorageLevel = Var(
-            M.StorageLevel_rpsdtv, domain=NonNegativeReals, initialize=zero_or_none
-        )
-        M.V_StorageInit = Var(M.StorageInit_rtv, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_StorageLevel = Var(M.StorageLevel_rpsdtv, domain=NonNegativeReals)
+        M.V_StorageInit = Var(M.StorageInit_rtv, domain=NonNegativeReals)
 
         # Derived decision variables
 
         M.CapacityVar_rptv = Set(dimen=4, initialize=CostFixedIndices)
-        M.V_Capacity = Var(M.CapacityVar_rptv, domain=NonNegativeReals, initialize=zero_or_none)
+        M.V_Capacity = Var(M.CapacityVar_rptv, domain=NonNegativeReals)
 
         M.NewCapacityVar_rtv = Set(dimen=3, initialize=CapacityVariableIndices)
-        M.V_NewCapacity = Var(
-            M.NewCapacityVar_rtv, domain=NonNegativeReals, initialize=zero_or_none
-        )
+        M.V_NewCapacity = Var(M.NewCapacityVar_rtv, domain=NonNegativeReals, initialize=0)
 
         M.RetiredCapacityVar_rptv = Set(dimen=4, initialize=RetiredCapacityVariableIndices)
         M.V_RetiredCapacity = Var(M.RetiredCapacityVar_rptv, domain=NonNegativeReals, initialize=0)
 
         M.CapacityAvailableVar_rpt = Set(dimen=3, initialize=CapacityAvailableVariableIndices)
         M.V_CapacityAvailableByPeriodAndTech = Var(
-            M.CapacityAvailableVar_rpt, domain=NonNegativeReals, initialize=zero_or_none
+            M.CapacityAvailableVar_rpt, domain=NonNegativeReals
         )
 
         ################################################
@@ -584,9 +576,6 @@ class TemoaModel(AbstractModel):
             M.CommodityBalanceAnnualConstraint_rpc, rule=CommodityBalanceAnnual_Constraint
         )
 
-        M.ResourceConstraint_rpr = Set(
-            dimen=3, initialize=lambda M: M.ResourceBound.sparse_iterkeys()
-        )
         M.ResourceExtractionConstraint = Constraint(
             M.ResourceConstraint_rpr, rule=ResourceExtraction_Constraint
         )
@@ -662,9 +651,6 @@ class TemoaModel(AbstractModel):
         M.ReserveMargin_rpsd = Set(dimen=4, initialize=ReserveMarginIndices)
         M.ReserveMarginConstraint = Constraint(M.ReserveMargin_rpsd, rule=ReserveMargin_Constraint)
 
-        M.EmissionLimitConstraint_rpe = Set(
-            dimen=3, initialize=lambda M: M.EmissionLimit.sparse_iterkeys()
-        )
         M.EmissionLimitConstraint = Constraint(
             M.EmissionLimitConstraint_rpe, rule=EmissionLimit_Constraint
         )
@@ -674,120 +660,72 @@ class TemoaModel(AbstractModel):
 
         M.GrowthRateMaxConstraint_rtv = Set(
             dimen=3,
-            initialize=lambda M: set(product(M.time_optimize, M.GrowthRateMax.sparse_iterkeys())),
+            initialize=GrowthRateMax_rtv_initializer,
         )
         M.GrowthRateConstraint = Constraint(
             M.GrowthRateMaxConstraint_rtv, rule=GrowthRateConstraint_rule
         )
 
-        M.MaxActivityConstraint_rpt = Set(
-            dimen=3, initialize=lambda M: M.MaxActivity.sparse_iterkeys()
-        )
         M.MaxActivityConstraint = Constraint(
             M.MaxActivityConstraint_rpt, rule=MaxActivity_Constraint
         )
 
-        M.MinActivityConstraint_rpt = Set(
-            dimen=3, initialize=lambda M: M.MinActivity.sparse_iterkeys()
-        )
         M.MinActivityConstraint = Constraint(
             M.MinActivityConstraint_rpt, rule=MinActivity_Constraint
         )
 
-        M.MinActivityGroup_rpg = Set(
-            dimen=3, initialize=lambda M: M.MinActivityGroup.sparse_iterkeys()
-        )
         M.MinActivityGroupConstraint = Constraint(
             M.MinActivityGroup_rpg, rule=MinActivityGroup_Constraint
         )
 
-        M.MaxActivityGroup_rpg = Set(
-            dimen=3, initialize=lambda M: M.MaxActivityGroup.sparse_iterkeys()
-        )
         M.MaxActivityGroupConstraint = Constraint(
             M.MaxActivityGroup_rpg, rule=MaxActivityGroup_Constraint
         )
 
-        M.MaxCapacityConstraint_rpt = Set(
-            dimen=3, initialize=lambda M: M.MaxCapacity.sparse_iterkeys()
-        )
         M.MaxCapacityConstraint = Constraint(
             M.MaxCapacityConstraint_rpt, rule=MaxCapacity_Constraint
         )
 
-        M.MaxNewCapacityConstraint_rpt = Set(
-            dimen=3, initialize=lambda M: M.MaxNewCapacity.sparse_iterkeys()
-        )
         M.MaxNewCapacityConstraint = Constraint(
             M.MaxNewCapacityConstraint_rpt, rule=MaxNewCapacity_Constraint
         )
 
-        M.MaxCapacityGroupConstraint_rpg = Set(
-            dimen=3, initialize=lambda M: M.MaxCapacityGroup.sparse_iterkeys()
-        )
         M.MaxCapacityGroupConstraint = Constraint(
             M.MaxCapacityGroupConstraint_rpg, rule=MaxCapacityGroup_Constraint
         )
 
-        M.MinCapacityGroupConstraint_rpg = Set(
-            dimen=3, initialize=lambda M: M.MinCapacityGroup.sparse_iterkeys()
-        )
         M.MinCapacityGroupConstraint = Constraint(
             M.MinCapacityGroupConstraint_rpg, rule=MinCapacityGroup_Constraint
         )
 
-        M.MinNewCapacityGroupConstraint_rpg = Set(
-            dimen=3, initialize=lambda M: M.MinNewCapacityGroup.sparse_iterkeys()
-        )
         M.MinNewCapacityGroupConstraint = Constraint(
             M.MinNewCapacityGroupConstraint_rpg, rule=MinNewCapacityGroup_Constraint
         )
 
-        M.MaxNewCapacityGroupConstraint_rpg = Set(
-            dimen=3, initialize=lambda M: M.MaxNewCapacityGroup.sparse_iterkeys()
-        )
         M.MaxNewCapacityGroupConstraint = Constraint(
             M.MinNewCapacityGroupConstraint_rpg, rule=MaxNewCapacityGroup_Constraint
         )
 
-        M.MinCapacityShareConstraint_rptg = Set(
-            dimen=4, initialize=lambda M: M.MinCapacityShare.sparse_iterkeys()
-        )
         M.MinCapacityShareConstraint = Constraint(
             M.MinCapacityShareConstraint_rptg, rule=MinCapacityShare_Constraint
         )
 
-        M.MaxCapacityShareConstraint_rptg = Set(
-            dimen=4, initialize=lambda M: M.MaxCapacityShare.sparse_iterkeys()
-        )
         M.MaxCapacityShareConstraint = Constraint(
             M.MaxCapacityShareConstraint_rptg, rule=MaxCapacityShare_Constraint
         )
 
-        M.MinActivityShareConstraint_rptg = Set(
-            dimen=4, initialize=lambda M: M.MinActivityShare.sparse_iterkeys()
-        )
         M.MinActivityShareConstraint = Constraint(
             M.MinActivityShareConstraint_rptg, rule=MinActivityShare_Constraint
         )
 
-        M.MaxActivityShareConstraint_rptg = Set(
-            dimen=4, initialize=lambda M: M.MaxActivityShare.sparse_iterkeys()
-        )
         M.MaxActivityShareConstraint = Constraint(
             M.MaxActivityShareConstraint_rptg, rule=MaxActivityShare_Constraint
         )
 
-        M.MinNewCapacityShareConstraint_rptg = Set(
-            dimen=4, initialize=lambda M: M.MinNewCapacityShare.sparse_iterkeys()
-        )
         M.MinNewCapacityShareConstraint = Constraint(
             M.MinNewCapacityShareConstraint_rptg, rule=MinNewCapacityShare_Constraint
         )
 
-        M.MaxNewCapacityShareConstraint_rptg = Set(
-            dimen=4, initialize=lambda M: M.MaxNewCapacityShare.sparse_iterkeys()
-        )
         M.MaxNewCapacityShareConstraint = Constraint(
             M.MaxNewCapacityShareConstraint_rptg, rule=MaxNewCapacityShare_Constraint
         )
@@ -795,37 +733,23 @@ class TemoaModel(AbstractModel):
         M.progress_marker_8 = BuildAction(
             ['Starting Max/Min Capacity and Tech Split ' 'Constraints'], rule=progress_check
         )
-        M.MaxResourceConstraint_rt = Set(
-            dimen=2, initialize=lambda M: M.MaxResource.sparse_iterkeys()
-        )
+
         M.MaxResourceConstraint = Constraint(
             M.MaxResourceConstraint_rt, rule=MaxResource_Constraint
         )
 
-        M.MinCapacityConstraint_rpt = Set(
-            dimen=3, initialize=lambda M: M.MinCapacity.sparse_iterkeys()
-        )
         M.MinCapacityConstraint = Constraint(
             M.MinCapacityConstraint_rpt, rule=MinCapacity_Constraint
         )
 
-        M.MinNewCapacityConstraint_rpt = Set(
-            dimen=3, initialize=lambda M: M.MinNewCapacity.sparse_iterkeys()
-        )
         M.MinNewCapacityConstraint = Constraint(
             M.MinNewCapacityConstraint_rpt, rule=MinNewCapacity_Constraint
         )
 
-        M.MinAnnualCapacityFactorConstraint_rpto = Set(
-            dimen=4, initialize=lambda M: M.MinAnnualCapacityFactor.sparse_iterkeys()
-        )
         M.MinAnnualCapacityFactorConstraint = Constraint(
             M.MinAnnualCapacityFactorConstraint_rpto, rule=MinAnnualCapacityFactor_Constraint
         )
 
-        M.MaxAnnualCapacityFactorConstraint_rpto = Set(
-            dimen=4, initialize=lambda M: M.MaxAnnualCapacityFactor.sparse_iterkeys()
-        )
         M.MaxAnnualCapacityFactorConstraint = Constraint(
             M.MaxAnnualCapacityFactorConstraint_rpto, rule=MaxAnnualCapacityFactor_Constraint
         )
@@ -865,9 +789,6 @@ class TemoaModel(AbstractModel):
             M.TechOutputSplitAnnualConstraint_rptvo, rule=TechOutputSplitAnnual_Constraint
         )
 
-        M.RenewablePortfolioStandardConstraint_rpg = Set(
-            dimen=3, initialize=lambda M: M.RenewablePortfolioStandard.sparse_iterkeys()
-        )
         M.RenewablePortfolioStandardConstraint = Constraint(
             M.RenewablePortfolioStandardConstraint_rpg, rule=RenewablePortfolioStandard_Constraint
         )

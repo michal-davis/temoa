@@ -19,12 +19,13 @@ in LICENSE.txt.  Users uncompressing this from an archive may not have
 received this license file.  If not, see <http://www.gnu.org/licenses/>.
 """
 from collections import defaultdict
-from itertools import product as cross_product
+from itertools import product as cross_product, product
 from operator import itemgetter as iget
 from sys import stderr as SE
 from typing import TYPE_CHECKING
 
 from deprecated import deprecated
+from pyomo.core import Set
 
 if TYPE_CHECKING:
     from temoa.temoa_model.temoa_model import TemoaModel
@@ -637,10 +638,12 @@ def CreateSparseDicts(M: 'TemoaModel'):
 
             pindex = (r, p, t, v)
 
-            if v in M.time_optimize:
-                l_loan_life = value(M.LoanLifetimeProcess[l_process])
-                if v + l_loan_life >= p:
-                    M.processLoans[pindex] = True
+            # dev note:  this gathering of processLoans appears to be unused in any meaningful way
+            #            it is just plucked later for (r, t, v) combos which aren't needed anyhow.
+            # if v in M.time_optimize:
+            #     l_loan_life = value(M.LoanLifetimeProcess[l_process])
+            #     if v + l_loan_life >= p:
+            #         M.processLoans[pindex] = True
 
             # if tech is no longer active, don't include it
             if v + l_lifetime <= p:
@@ -905,10 +908,11 @@ def CostVariableIndices(M: 'TemoaModel'):
     return M.activeActivity_rptv
 
 
-def CostInvestIndices(M: 'TemoaModel'):
-    indices = set((r, t, v) for r, p, t, v in M.processLoans)
-
-    return indices
+# dev note:  appears superfluous...
+# def CostInvestIndices(M: 'TemoaModel'):
+#     indices = set((r, t, v) for r, p, t, v in M.processLoans)
+#
+#     return indices
 
 
 @deprecated('No longer used.  See the region_group_check in validators.py')
@@ -926,7 +930,7 @@ def RegionalGlobalInitializedIndices(M: 'TemoaModel'):
     return indices
 
 
-def MinCapShareIndices(M: 'TemoaModel'):
+def GroupShareIndices(M: 'TemoaModel'):
     indices = set(
         (r, p, t, g)
         for g in M.tech_group_names
@@ -1348,3 +1352,17 @@ def TechOutputSplitAnnualConstraintIndices(M: 'TemoaModel'):
     )
 
     return indices
+
+
+def get_loan_life(M, r, t, _):
+    return M.LoanLifetimeTech[r, t]
+
+
+def GrowthRateMax_rtv_initializer(M: 'TemoaModel'):
+    # need to do this outside of the model because the elements are not initialized yet for 'product'
+    return set(product(M.time_optimize, M.GrowthRateMax.sparse_iterkeys()))
+
+
+def copy_from(other_set):
+    """a cheap reference function to replace the lambdas in orig temoa_model"""
+    return Set(other_set.sparse_iterkeys())
