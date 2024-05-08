@@ -384,7 +384,9 @@ class MyopicSequencer:
                     'AND tech not in (SELECT tech FROM Technology where unlim_cap > 0)'
                 )
                 print('\n\n **** Removing these unused region-tech-vintage combos ****')
-                removals = self.cursor.execute(debug_query, (last_interval_end,)).fetchall()
+                removals = self.cursor.execute(
+                    debug_query, (last_interval_end, self.config.scenario)
+                ).fetchall()
                 for i, removal in enumerate(removals):
                     print(f'{i}. Removing:  {removal}')
             self.cursor.execute(delete_qry, (last_interval_end, self.config.scenario))

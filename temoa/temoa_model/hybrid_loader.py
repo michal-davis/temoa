@@ -149,22 +149,7 @@ class HybridLoader:
 
         # set up filters, if requested...
         if use_raw_data:
-            efficiency_entries = [row for row in contents]
-            # need to build filters to include everything in the raw efficiency data
-            # this will still help filter anything spurious that is not covered by the data
-            # in the efficiency table
-
-            # for row in contents:
-            #     r, i, t, v, o, _, _ = row
-            #     self.viable_ritvo.add((r, i, t, v, o))
-            #     self.viable_rtv.add((r, t, v))
-            #     self.viable_rt.add((r, t))
-            #     self.viable_techs.add(t)
-            #     self.viable_vintages.add(v)
-            #     self.viable_input_comms.add(i)
-            #     self.viable_output_comms.add(o)
-            # self.viable_comms = self.viable_input_comms | self.viable_output_comms
-            # self.viable_rtt = {(r, t1, t2) for r, t1 in self.viable_rt for t2 in self.viable_techs}
+            efficiency_entries = [row[:-1] for row in contents]
 
         else:  # (always must when myopic)
             if self.manager:
@@ -500,15 +485,16 @@ class HybridLoader:
         #  === PARAMS ===
 
         # Efficiency
-        if mi:
-            # use what we have already computed
-            raw = self.efficiency_values
-        else:
-            raw = cur.execute(
-                'SELECT region, input_comm, tech, vintage, output_comm, efficiency '
-                'FROM main.Efficiency',
-            ).fetchall()
-
+        # if mi:
+        #     # use what we have already computed
+        #     raw = self.efficiency_values
+        # else:
+        #     raw = cur.execute(
+        #         'SELECT region, input_comm, tech, vintage, output_comm, efficiency '
+        #         'FROM main.Efficiency',
+        #     ).fetchall()
+        # we have already computed/filtered this... no need for another data pull
+        raw = self.efficiency_values
         load_element(M.Efficiency, raw)
 
         # ExistingCapacity
