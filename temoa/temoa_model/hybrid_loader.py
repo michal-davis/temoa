@@ -945,16 +945,16 @@ class HybridLoader:
         # MinAnnualCapacityFactor
         if self.table_exists('MinAnnualCapacityFactor'):
             raw = cur.execute(
-                'SELECT region, tech, output_comm, factor FROM main.MinAnnualCapacityFactor'
+                'SELECT region, period, tech, output_comm, factor FROM main.MinAnnualCapacityFactor'
             ).fetchall()
-            load_element(M.MinAnnualCapacityFactor, raw, self.viable_rt, (0, 1))
+            load_element(M.MinAnnualCapacityFactor, raw, self.viable_rt, (0, 2))
 
         # MaxAnnualCapacityFactor
         if self.table_exists('MaxAnnualCapacityFactor'):
             raw = cur.execute(
-                'SELECT region, tech, output_comm, factor FROM main.MaxAnnualCapacityFactor'
+                'SELECT region, period, tech, output_comm, factor FROM main.MaxAnnualCapacityFactor'
             ).fetchall()
-            load_element(M.MaxAnnualCapacityFactor, raw, self.viable_rt, (0, 1))
+            load_element(M.MaxAnnualCapacityFactor, raw, self.viable_rt, (0, 2))
 
         # GrowthRateMax
         if self.table_exists('GrowthRateMax'):

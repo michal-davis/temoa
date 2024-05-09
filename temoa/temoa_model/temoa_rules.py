@@ -2728,6 +2728,10 @@ def MinAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     # r can be an individual region (r='US'), or a combination of regions separated by plus (r='Mexico+US+Canada'), or 'global'.
     # if r == 'global', the constraint is system-wide
     regions = gather_group_regions(M, r)
+    # we need to screen here because it is possible that the restriction extends beyond the
+    # lifetime of any vintage of the tech...
+    if (r, p, t) not in M.V_CapacityAvailableByPeriodAndTech:
+        return Constraint.Skip
 
     if t not in M.tech_annual:
         activity_rpt = sum(
@@ -2782,6 +2786,10 @@ def MaxAnnualCapacityFactor_Constraint(M: 'TemoaModel', r, p, t, o):
     # r can be an individual region (r='US'), or a combination of regions separated by plus (r='Mexico+US+Canada'), or 'global'.
     # if r == 'global', the constraint is system-wide
     regions = gather_group_regions(M, r)
+    # we need to screen here because it is possible that the restriction extends beyond the
+    # lifetime of any vintage of the tech...
+    if (r, p, t) not in M.V_CapacityAvailableByPeriodAndTech:
+        return Constraint.Skip
 
     if t not in M.tech_annual:
         activity_rpt = sum(
