@@ -504,7 +504,7 @@ class TemoaModel(AbstractModel):
 
         M.CapacityAvailableVar_rpt = Set(dimen=3, initialize=CapacityAvailableVariableIndices)
         M.V_CapacityAvailableByPeriodAndTech = Var(
-            M.CapacityAvailableVar_rpt, domain=NonNegativeReals
+            M.CapacityAvailableVar_rpt, domain=NonNegativeReals, initialize=0
         )
 
         ################################################

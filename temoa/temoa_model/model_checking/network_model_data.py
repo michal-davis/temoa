@@ -214,7 +214,9 @@ def _build_from_db(
         )
     raw = cur.execute(query).fetchall()
     periods = cur.execute('SELECT period FROM TimePeriod').fetchall()
-    periods = {t[0] for t in periods}
+    # need to exclude the final year which is a non-demand year and should have no tech data
+    # This ensures that the periods in this will match the periods in the hybrid loader.
+    periods = [t[0] for t in sorted(periods)[:-1]]
     # filter further if myopic
     if myopic_index:
         periods = {

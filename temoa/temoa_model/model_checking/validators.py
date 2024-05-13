@@ -296,11 +296,12 @@ def validate_Efficiency(M: 'TemoaModel', val, r, si, t, v, so) -> bool:
         )
     ):
         return True
-    print('r', r in M.RegionalIndices)
-    print('si', si in M.commodity_physical)
-    print('t', t in M.tech_all)
-    print('v', v in M.vintage_all)
-    print('so', so in M.commodity_carrier)
+    print('Element Validations:')
+    print('region', r in M.RegionalIndices)
+    print('input_commodity', si in M.commodity_physical)
+    print('tech', t in M.tech_all)
+    print('vintage', v in M.vintage_all)
+    print('output_commodity', so in M.commodity_carrier)
     return False
 
 

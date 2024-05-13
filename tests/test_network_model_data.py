@@ -67,7 +67,10 @@ params = [
                 ('R1', 'p2', 't3', 2000, 'd1', 100),
                 ('R1', 'p2', 't5', 2000, 'd2', 100),
             ],  # techs
-            [(2020,)],  # periods
+            [
+                (2020,),
+                (2025,),
+            ],  # periods
             [],  # no linked techs
             [],  # no negative cost techs
         ],
@@ -103,7 +106,10 @@ params = [
                 ('R1', 'p1', 'driven', 1990, 'd2', 100),
                 ('R1', 's1', 't1', 2000, 'd1', 100),
             ],  # techs
-            [(2020,)],  # periods
+            [
+                (2020,),
+                (2025,),
+            ],  # periods
             [('R1', 't4', 'nox', 'driven')],  # t4 drives 'driven' with 'nox' emission
             [],  # no negative cost techs
         ],
@@ -136,7 +142,10 @@ params = [
                 ('R1', 's2', 'driven', 1990, 'd2', 100),
                 ('R1', 's1', 't1', 2000, 'd1', 100),
             ],  # techs
-            [(2020,)],  # periods
+            [
+                (2020,),
+                (2025,),
+            ],  # periods
             [('R1', 't4', 'nox', 'driven')],  # t4 drives 'driven' with 'nox' emission
             [],  # no negative cost techs
         ],

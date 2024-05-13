@@ -106,8 +106,15 @@ class CommodityNetwork:
         # self.input_sockets: ...
 
     def remove_tech_by_name(self, tech_name: str) -> None:
+        """
+        Remove a tech by name from the network
+        :param tech_name: The string name of the tech
+        :return:
+        """
+        # remove from data sources
         self.tech_inputs.pop(tech_name, None)
         self.tech_outputs.pop(tech_name, None)
+
         removed = set()
         for oc, s in self.connections.items():
             removals = set()
@@ -116,6 +123,7 @@ class CommodityNetwork:
                     removals.add((ic, name))
                     removed.add((ic, tech_name, oc))
             s -= removals  # take out all the removals from the connection
+        # add every removed tech to the orphan list, so it can be processed by the manager
         for r in removed:
             self.other_orphans.add(r)
             logger.debug('removed %s with a by-name removal', r)
