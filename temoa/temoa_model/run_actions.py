@@ -257,6 +257,13 @@ def solve_instance(
             optimizer.options['barrier convergetol'] = 1.0e-5
             optimizer.options['feasopt tolerance'] = 1.0e-6
 
+        elif solver_name == 'gurobi':
+            # Note: these parameter values are taken to be the same as those in PyPSA (see: https://pypsa-eur.readthedocs.io/en/latest/configuration.html)
+            optimizer.options["Method"] = 2 # barrier
+            optimizer.options["Crossover"] = 0 # non basic solution, ie no crossover
+            optimizer.options["BarConvTol"] = 1.e-5
+            optimizer.options["FeasibilityTol"] = 1.e-6
+
         elif solver_name == 'appsi_highs':
             pass
 
@@ -280,9 +287,9 @@ def solve_instance(
             solver_suffixes = []
         try:
             if solver_name == 'appsi_highs' and not solver_suffixes:
-                result: SolverResults = optimizer.solve(instance)
+                result: SolverResults = optimizer.solve(instance, tee=True)
             else:  # we can try it...
-                result: SolverResults = optimizer.solve(instance, suffixes=solver_suffixes)
+                result: SolverResults = optimizer.solve(instance, suffixes=solver_suffixes, tee=True)
         except RuntimeError as error:
             logger.error('Solver failed to solve and returned an error: %s', error)
             logger.error(
@@ -328,35 +335,40 @@ def check_solve_status(result: SolverResults) -> tuple[bool, str]:
         return False, f'{soln.Status} was returned from solve'
 
 
-def handle_results(instance: TemoaModel, results, config: TemoaConfig):
+def handle_results(instance: TemoaModel, results, options: TemoaConfig):
     hack = time()
-    if not config.silent:
+    if not options.silent:
         msg = '[        ] Calculating reporting variables and formatting results.'
         # yield 'Calculating reporting variables and formatting results.'
         SE.write(msg)
         SE.flush()
 
-    # output_stream = pformat_results(instance, results, config)
-    table_writer = TableWriter(config=config)
-    if config.save_duals:
+    # output_stream = pformat_results(instance, results, options)
+    table_writer = TableWriter(config=options)
+    if options.save_duals:
         table_writer.write_results(M=instance, results=results)
     else:
         table_writer.write_results(M=instance)
 
-    if not config.silent:
+    if options.save_excel:
+        temp_scenario = set()
+        temp_scenario.add(options.scenario)
+        # make_excel function imported near the top
+        excel_filename = options.output_path / options.scenario
+        make_excel(str(options.output_database), excel_filename, temp_scenario)
+
+    if not options.silent:
         SE.write('\r[%8.2f] Results processed.\n' % (time() - hack))
         SE.flush()
 
-    if config.save_excel:
-        temp_scenario = set()
-        temp_scenario.add(config.scenario)
-        # make_excel function imported near the top
-        excel_filename = config.output_path / config.scenario
-        make_excel(str(config.output_database), excel_filename, temp_scenario)
-
-    # if config.stream_output:
+    # if options.stream_output:
     #     print(output_stream.getvalue())
     # normal (non-MGA) run will have a TotalCost as the OBJ:
     if hasattr(instance, 'TotalCost'):
         logger.info('TotalCost value: %0.2f', value(instance.TotalCost))
+    # MGA runs should have either a FirstObj or SecondObj
+    if hasattr(instance, 'FirstObj'):
+        logger.info('MGA First Obj value: %0.2f', value(instance.FirstObj))
+    elif hasattr(instance, 'SecondObj'):
+        logger.info('MGA Second Obj value: %0.2f', value(instance.SecondObj))
     return
