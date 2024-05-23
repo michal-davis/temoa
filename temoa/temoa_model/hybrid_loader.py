@@ -537,7 +537,7 @@ class HybridLoader:
 
         # DemandSpecificDistribution
         raw = cur.execute(
-            'SELECT region, season, tod, demand_name, dds FROM main.DemandSpecificDistribution'
+            'SELECT region, season, tod, demand_name, dsd FROM main.DemandSpecificDistribution'
         ).fetchall()
         load_element(M.DemandSpecificDistribution, raw)
 
@@ -942,6 +942,34 @@ class HybridLoader:
                 ).fetchall()
             load_element(M.MinActivity, raw, self.viable_rt, (0, 2))
 
+        # MaxSeasonalActivity
+        if self.table_exists('MaxSeasonalActivity'):
+            if mi:
+                raw = cur.execute(
+                    'SELECT region, period, season, tech, max_act FROM main.MaxSeasonalActivity '
+                    'WHERE period >= ? AND period <= ?',
+                    (mi.base_year, mi.last_demand_year),
+                ).fetchall()
+            else:
+                raw = cur.execute(
+                    'SELECT region, period, season, tech, max_act FROM main.MaxSeasonalActivity '
+                ).fetchall()
+            load_element(M.MaxSeasonalActivity, raw, self.viable_rt, (0, 3))
+
+        # MinSeasonalActivity
+        if self.table_exists('MinSeasonalActivity'):
+            if mi:
+                raw = cur.execute(
+                    'SELECT region, period, season, tech, min_act FROM main.MinSeasonalActivity '
+                    'WHERE period >= ? AND period <= ?',
+                    (mi.base_year, mi.last_demand_year),
+                ).fetchall()
+            else:
+                raw = cur.execute(
+                    'SELECT region, period, season, tech, min_act FROM main.MinSeasonalActivity '
+                ).fetchall()
+            load_element(M.MinSeasonalActivity, raw, self.viable_rt, (0, 3))
+
         # MinAnnualCapacityFactor
         if self.table_exists('MinAnnualCapacityFactor'):
             raw = cur.execute(
@@ -1080,6 +1108,7 @@ class HybridLoader:
             M.CostInvest.name: M.CostInvest_rtv.name,
             M.EmissionLimit.name: M.EmissionLimitConstraint_rpe.name,
             M.MaxActivity.name: M.MaxActivityConstraint_rpt.name,
+            M.MaxSeasonalActivity.name: M.MaxSeasonalActivityConstraint_rpst.name,
             M.MaxActivityGroup.name: M.MaxActivityGroup_rpg.name,
             M.MaxActivityShare.name: M.MaxActivityShareConstraint_rptg.name,
             M.MaxAnnualCapacityFactor.name: M.MaxAnnualCapacityFactorConstraint_rpto.name,
@@ -1091,6 +1120,7 @@ class HybridLoader:
             M.MaxNewCapacityShare.name: M.MaxNewCapacityShareConstraint_rptg.name,
             M.MaxResource.name: M.MaxResourceConstraint_rt.name,
             M.MinActivity.name: M.MinActivityConstraint_rpt.name,
+            M.MinSeasonalActivity.name: M.MinSeasonalActivityConstraint_rpst.name,
             M.MinActivityGroup.name: M.MinActivityGroup_rpg.name,
             M.MinActivityShare.name: M.MinActivityShareConstraint_rptg.name,
             M.MinAnnualCapacityFactor.name: M.MinAnnualCapacityFactorConstraint_rpto.name,

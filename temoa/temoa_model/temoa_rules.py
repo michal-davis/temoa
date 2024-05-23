@@ -2106,6 +2106,60 @@ def MaxActivity_Constraint(M: 'TemoaModel', r, p, t):
     return expr
 
 
+def MaxSeasonalActivity_Constraint(M: 'TemoaModel', r, p, s, t):
+
+    r"""
+    The MaxSeasonalActivity sets an upper bound on the activity from a specific technology.
+    Note that the indices for these constraints are region, period, season, and tech.
+    The first component of the constraint pertains to technologies with
+    variable output at the time slice level, and the second component pertains to
+    technologies with constant annual output belonging to the :code:`tech_annual`
+    set.
+    .. math::
+        :label: MaxSeasonalActivity
+        \sum_{S,D,I,V,O} \textbf{FO}_{r, p, s, d, i, t, v, o}  \le MAXSSNACT_{r, p, s, t}
+        \forall \{r, p, s, t\} \in \Theta_{\text{MaxSeasonalActivity}}
+        \sum_{I,V,O} \textbf{FOA}_{r, p, i, t, v, o}  \le MAXSSNACT_{r, p, s, t}
+        \forall \{r, p, s, t \in T^{a}\} \in \Theta_{\text{MaxSeasonalActivity}}
+    """
+
+    # Notice that this constraint follows the implementation of the
+    # MaxActivity_Constraint(). The difference is that this function is defined
+    # over each representative day, or "season", as opposed to the entire
+    # year, or "period".
+
+    # The V_FlowOut variable is scaled by the weights of each representative day.
+    # In order to determine the daily, or "seasonal", flow, the V_FLowOut variable
+    # must be converted back to its un-scaled value. We do this by dividing the
+    # V_FlowOut value by M.SegFrac[s, d]*365*24.
+
+    try:
+        activity_rpst = sum(
+            M.V_FlowOut[r, p, s, d, S_i, t, S_v, S_o] / (M.SegFrac[s, d]*365*24)
+            for S_v in M.processVintages[r, p, t]
+            for S_i in M.processInputs[r, p, t, S_v]
+            for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+            for d in M.time_of_day
+        )
+    except:
+        msg = (
+        "\nWarning: MaxSeasonalActivity constraint can not be defined for "
+        "technologies in \"tech_annual\". Continuing by ignoring the constraint "
+        "for '%s'.\n "
+        )
+        SE.write(msg % (t))
+        return Constraint.Skip
+    
+    max_act = value(M.MaxSeasonalActivity[r, p, s, t])
+    expr = activity_rpst <= max_act
+
+    # in the case that there is nothing to sum, skip
+    if isinstance(expr, bool):  # an empty list was generated
+        return Constraint.Skip
+    
+    return expr
+
+
 def MinActivity_Constraint(M: 'TemoaModel', r, p, t):
     r"""
 
@@ -2165,6 +2219,60 @@ def MinActivity_Constraint(M: 'TemoaModel', r, p, t):
             t,
         )
         return Constraint.Skip
+    return expr
+
+
+def MinSeasonalActivity_Constraint(M: 'TemoaModel', r, p, s, t):
+
+    r"""
+    The MinSeasonalActivity sets a lower bound on the activity from a specific technology
+    over a specific season. Note that the indices for these constraints are region,
+    period, season and tech, not tech and vintage. The first version of the constraint
+    pertains to technologies with variable output at the time slice level, and the
+    second version pertains to technologies with constant annual output belonging to
+    the :code:`tech_annual` set.
+    .. math::
+        :label: MinSeasonalActivity
+        \sum_{S,D,I,V,O} \textbf{FO}_{r, p, s, d, i, t, v, o} \ge MINSSNACT_{r, p, t}
+        \forall \{r, p, s, t\} \in \Theta_{\text{MinSeasonalActivity}}
+        \sum_{I,V,O} \textbf{FOA}_{r, p, s, i, t, v, o} \ge MINSSNACT_{r, p, s, t}
+        \forall \{r, p, s, t \in T^{a}\} \in \Theta_{\text{MinSeasonalActivity}}
+    """
+
+    # Notice that this constraint follows the implementation of the
+    # MinActivity_Constraint(). The difference is that this function is defined
+    # over each representative day, or "season", as opposed to the entire
+    # year, or "period".
+
+    # The V_FlowOut variable is scaled by the weights of each representative day.
+    # In order to determine the daily, or "seasonal", flow, the V_FLowOut variable
+    # must be converted back to its un-scaled value. We do this using the
+    # weighting_factor below:
+
+    try:
+        activity_rpst = sum(
+            M.V_FlowOut[r, p, s, d, S_i, t, S_v, S_o] / (M.SegFrac[s, d]*365*24)
+            for S_v in M.processVintages[r, p, t]
+            for S_i in M.processInputs[r, p, t, S_v]
+            for S_o in M.ProcessOutputsByInput[r, p, t, S_v, S_i]
+            for d in M.time_of_day
+        )
+    except:
+        msg = (
+        "\nWarning: MinSeasonalActivity constraint can not be defined for "
+        "technologies in \"tech_annual\". Continuing by ignoring the constraint "
+        "for '%s'.\n "
+        )
+        SE.write(msg % (t))
+        return Constraint.Skip
+
+    min_act = value(M.MinSeasonalActivity[r, p, s, t])
+    expr = activity_rpst >= min_act
+
+    # in the case that there is nothing to sum, skip
+    if isinstance(expr, bool):  # an empty list was generated
+        return Constraint.Skip
+    
     return expr
 
 

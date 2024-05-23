@@ -41,6 +41,7 @@ Created on:  2/14/24
 """
 
 logger = logging.getLogger(__name__)
+import traceback
 
 
 def generate_graph(
@@ -173,6 +174,7 @@ def _graph_connections(
             'tech?\n  Error message: %s',
             e,
         )
+        print(traceback.format_exc())
     except Exception as e:
         logger.error('Failed to export the network graph into HTML.  Error message: %s', e)
 
