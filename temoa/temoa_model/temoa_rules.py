@@ -379,6 +379,7 @@ def loan_cost(
     invest_cost: float,
     loan_annualize: float,
     lifetime_loan_process: float | int,
+    lifetime_process: int,
     P_0: int,
     P_e: int,
     GDR: float,
@@ -398,9 +399,9 @@ def loan_cost(
     :return: fixed number or pyomo expression based on input types
     """
     if GDR == 0:  # return the non-discounted result
-        regular_payment = capacity * invest_cost * loan_annualize
-        payments_made = min(lifetime_loan_process, P_e - vintage)
-        return regular_payment * payments_made
+        annuity = capacity * invest_cost * loan_annualize * lifetime_loan_process / lifetime_process
+        payments_made = min(lifetime_process, P_e - vintage)
+        return annuity * payments_made
     x = 1 + GDR  # a convenience
     res = (
         capacity
@@ -414,8 +415,8 @@ def loan_cost(
             )
         )
         * (
-            (1 - x ** (-min(lifetime_loan_process, P_e - vintage)))
-            / (1 - x ** (-lifetime_loan_process))
+            (1 - x ** (-min(lifetime_process, P_e - vintage)))
+            / (1 - x ** (-lifetime_process))
         )
     )
     return res
@@ -467,6 +468,7 @@ def PeriodCost_rule(M: 'TemoaModel', p):
             M.CostInvest[r, S_t, S_v],
             M.LoanAnnualize[r, S_t, S_v],
             value(M.LoanLifetimeProcess[r, S_t, S_v]),
+            value(M.LifetimeProcess[r, S_t, S_v]),
             P_0,
             P_e,
             GDR,
@@ -623,7 +625,7 @@ def PeriodCost_rule(M: 'TemoaModel', p):
         var_emissions
         # + flex_emissions
         # + curtail_emissions
-        # + var_annual_emissions
+        + var_annual_emissions
         # + flex_annual_emissions
     )
 

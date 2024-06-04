@@ -450,6 +450,7 @@ class TableWriter:
             invest_cost,
             loan_annualize=loan_ar,
             lifetime_loan_process=loan_life,
+            lifetime_process=process_life,
             P_0=p_0,
             P_e=p_e,
             GDR=global_discount_rate,
@@ -462,6 +463,7 @@ class TableWriter:
             invest_cost,
             loan_annualize=loan_ar,
             lifetime_loan_process=loan_life,
+            lifetime_process=process_life,
             P_0=p_0,
             P_e=p_e,
             GDR=global_discount_rate,
@@ -652,30 +654,13 @@ class TableWriter:
         flows: dict[EI, float] = defaultdict(float)
         # iterate through the normal and annual and accumulate flow values
         for r, p, e, s, d, i, t, v, o in normal:
-            if t in M.tech_curtailment:
-                flows[EI(r, p, t, v, e)] += (
-                    value(M.V_Curtailment[r, p, s, d, i, t, v, o])
-                    * M.EmissionActivity[r, e, i, t, v, o]
-                )
-            elif t in M.tech_flex:
-                flows[EI(r, p, t, v, e)] += (
-                    value(M.V_Flex[r, p, s, d, i, t, v, o]) * M.EmissionActivity[r, e, i, t, v, o]
-                )
-            else:
-                flows[EI(r, p, t, v, e)] += (
-                    value(M.V_FlowOut[r, p, s, d, i, t, v, o])
-                    * M.EmissionActivity[r, e, i, t, v, o]
-                )
+            flows[EI(r, p, t, v, e)] += (
+                value(M.V_FlowOut[r, p, s, d, i, t, v, o]) * M.EmissionActivity[r, e, i, t, v, o]
+            )
         for r, p, e, i, t, v, o in annual:
-            if t in M.tech_flex and o in M.flex_commodities:
-                flows[EI(r, p, t, v, e)] += (
-                    value(M.V_FlexAnnual[r, p, i, t, v, o]) * M.EmissionActivity[r, e, i, t, v, o]
-                )
-            else:
-                flows[EI(r, p, t, v, e)] += (
-                    value(M.V_FlowOutAnnual[r, p, i, t, v, o])
-                    * M.EmissionActivity[r, e, i, t, v, o]
-                )
+            flows[EI(r, p, t, v, e)] += (
+                value(M.V_FlexAnnual[r, p, i, t, v, o]) * M.EmissionActivity[r, e, i, t, v, o]
+            )
 
         # gather costs
         ud_costs = defaultdict(float)
