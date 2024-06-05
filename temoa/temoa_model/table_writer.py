@@ -659,7 +659,7 @@ class TableWriter:
             )
         for r, p, e, i, t, v, o in annual:
             flows[EI(r, p, t, v, e)] += (
-                value(M.V_FlexAnnual[r, p, i, t, v, o]) * M.EmissionActivity[r, e, i, t, v, o]
+                value(M.V_FlowOutAnnual[r, p, i, t, v, o]) * M.EmissionActivity[r, e, i, t, v, o]
             )
 
         # gather costs
