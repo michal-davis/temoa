@@ -1,0 +1,2 @@
+Based on default “canoe_sva_reduced_conditioned”
+Replication of trial 24 of summer research
