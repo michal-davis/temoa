@@ -25,24 +25,9 @@ def find_sqlite_file(directory):
     else:
         return None
 
-# Define the file paths for the source and target SQLite databases
-
-source_db_path = find_sqlite_file('input_sqlite')
-target_db_path = find_sqlite_file('output_sqlite')
-
-if source_db_path:
-    print(f"Found SQLite file: {source_db_path}")
-else:
-    print("No SQLite file found in the directory.")
-
-if target_db_path:
-    print(f"Found SQLite file: {source_db_path}")
-else:
-    print("No SQLite file found in the directory.")
 
 
-
-def transfer_data():
+def transfer_data(source_db_path, target_db_path):
     # Connect to the source SQLite database
     source_conn = sqlite3.connect(source_db_path)
     source_cursor = source_conn.cursor()
@@ -111,4 +96,18 @@ def transfer_data():
 
 # Run the data transfer function
 if __name__ == "__main__":
-    transfer_data()
+    # Define the file paths for the source and target SQLite databases
+
+    source_db_path = find_sqlite_file('input_sqlite')
+    target_db_path = find_sqlite_file('output_sqlite')
+
+    if source_db_path:
+        print(f"Found SQLite file: {source_db_path}")
+    else:
+        print("No SQLite file found in the directory.")
+
+    if target_db_path:
+        print(f"Found SQLite file: {source_db_path}")
+    else:
+        print("No SQLite file found in the directory.")
+    transfer_data(source_db_path, target_db_path)
