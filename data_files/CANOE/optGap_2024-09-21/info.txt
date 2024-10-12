@@ -1,2 +1,7 @@
 Based on default “canoe_sva_reduced_conditioned”
 Replication of trial 24 of summer research
+
+
+all inputs have been solved
+transferred to "outputs" 
+run outputs 5, 8, 10, and 12 days. no more. 
