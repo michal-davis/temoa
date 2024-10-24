@@ -1,5 +1,5 @@
-source_path = "../data_files/CANOE/optGap_2024-09-21/" # string
-target_path = "../data_files/CANOE/optGap_2024-09-21/outputs/" # string
+source_path = "../data_files/CANOE/optGap_2024-10-21/" # string
+target_path = "../data_files/CANOE/optGap_2024-10-21/outputs/" # string
 
 # toggle to determine whether all files are in form (#)days.sqlite, where # is one of the integers in days
 # If True, expects numbers in days array
@@ -8,7 +8,12 @@ simple_db_names = true
 
 # Set number of rep days for simple db names
 # Must be ordered in increasing # of days
-days = [5, 8, 10, 12, 16, 20, 24]
+days = [5, 8, 10, 12, 16, 20]
+
+# Either -1 or 1
+# -1: move inputs from higher # to lower # of periods
+# 1: move inputs from lower # to higher # of periods
+direction = 1
 
 # If not using custom names, set to False as a filler value
 # Must be ordered in increasing # of days
