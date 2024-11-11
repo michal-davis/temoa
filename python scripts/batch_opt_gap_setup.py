@@ -25,10 +25,10 @@ def check_config(data):
     # first, check what style of naming is used
     if data["simple_db_names"]:
         for day in data.get("days"):
-            if not os.path.isfile(data.get("source_path")  + str(day) + "days.sqlite"):
+            if not os.path.isfile(data.get("source_path")  + str(day) + "_periods.sqlite"):
                 logger.error('Cannot find .sqlite file for day ' + str(day))
                 raise FileNotFoundError('Missing .sqlite source file')
-            if not os.path.isfile(data.get("target_path")  + str(day) + "days.sqlite"):
+            if not os.path.isfile(data.get("target_path")  + str(day) + "_periods.sqlite"):
                 logger.error('Cannot find .sqlite file for day ' + str(day))
                 raise FileNotFoundError('Missing .sqlite target file')
     else:
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     data = get_config()
     check_config(data)
     if data["simple_db_names"]:
-        dbs = [str(day) + "days.sqlite" for day in data.get("days")]
+        dbs = [str(day) + "_periods.sqlite" for day in data.get("days")]
     else:
         dbs = [db + ".sqlite" for db in data.get("custom_db_names")]
     batch_transfer(data.get("source_path"), data.get("target_path"), data.get("direction"),dbs)
