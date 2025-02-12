@@ -37,7 +37,7 @@ def transfer_data(source_db_path, target_db_path):
     target_cursor = target_conn.cursor()
 
     #set technologies to include in transfer
-    keep_techs = ('E_BIO_M-NEW', 'E_NG_CCS-NEW', 'E_NG_CT-NEW', 'E_NUC_PWR-NEW', 
+    keep_techs = ('E_BIO_M-NEW', 'E_NG_CCS-NEW', 'E_NG_CT-NEW', 'E_NG_CC-NEW','E_NUC_PWR-NEW', 
                'E_NUC_SMR-NEW', 'E_SOL_PV-NEW-1', 'E_SOL_PV-NEW-2', 'E_SOL_PV-NEW-3', 'E_SOL_PV-NEW-4', 'E_SOL_PV-NEW-5', 'E_SOL_PV-NEW-6', 
                'E_SOL_PV-NEW-7', 'E_SOL_PV-NEW-8', 'E_SOL_PV-NEW-9', 'E_SOL_PV-NEW-10', 
                'E_WND_ON-NEW-1', 'E_WND_ON-NEW-2', 'E_WND_ON-NEW-3', 'E_WND_ON-NEW-4', 
